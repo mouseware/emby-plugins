@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RollForward>Major</RollForward>
+    <!-- Native sqlite3 from an Emby install (not committed). Override: /p:SqliteDll=... -->
+    <SqliteDll Condition="'$(SqliteDll)' == ''">$(APPDATA)\Emby-Server\system\sqlite3.dll</SqliteDll>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\Core\*.cs" Link="Core\%(Filename)%(Extension)" />
+    <None Include="$(SqliteDll)" Condition="Exists('$(SqliteDll)')" CopyToOutputDirectory="PreserveNewest" Link="sqlite3.dll" />
+  </ItemGroup>
+</Project>

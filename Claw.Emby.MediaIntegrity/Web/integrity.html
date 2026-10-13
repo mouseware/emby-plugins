@@ -1,0 +1,214 @@
+<div id="clawMediaIntegrityPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-button,emby-checkbox,emby-input,emby-select" data-controller="__plugin/ClawMediaIntegrity.js">
+<style>
+#clawMediaIntegrityPage .mi-tabs{display:flex;gap:.3em;border-bottom:1px solid rgba(128,128,128,.3);margin:.4em 0 1em;flex-wrap:wrap}
+#clawMediaIntegrityPage .mi-tab{font:inherit;color:inherit;background:none;border:0;border-bottom:2px solid transparent;padding:.6em 1.1em;cursor:pointer;opacity:.7}
+#clawMediaIntegrityPage .mi-tab.mi-on{opacity:1;border-bottom-color:#52b54b}
+#clawMediaIntegrityPage .mi-badge{display:inline-block;min-width:1.2em;text-align:center;background:rgba(128,128,128,.3);border-radius:1em;padding:0 .45em;margin-left:.35em;font-size:.82em}
+#clawMediaIntegrityPage .mi-badge.mi-red{background:#8a2a2a}
+#clawMediaIntegrityPage .mi-panel{display:none}#clawMediaIntegrityPage .mi-panel.mi-on{display:block}
+#clawMediaIntegrityPage .mi-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(11em,1fr));gap:.8em;margin-bottom:1em}
+#clawMediaIntegrityPage .mi-card{background:rgba(128,128,128,.1);border-radius:.4em;padding:.7em 1em}
+#clawMediaIntegrityPage .mi-card b{display:block;font-size:1.6em;font-weight:600}
+#clawMediaIntegrityPage .mi-card small{opacity:.65}
+#clawMediaIntegrityPage .mi-scan{background:rgba(128,128,128,.08);border:1px solid rgba(128,128,128,.25);border-radius:.45em;padding:.8em 1em;margin-bottom:1em}
+#clawMediaIntegrityPage .mi-scan-head{display:flex;align-items:center;gap:.7em;flex-wrap:wrap}
+#clawMediaIntegrityPage .mi-scan-title{font-weight:600;font-size:1.05em;display:flex;align-items:center;gap:.4em}
+#clawMediaIntegrityPage .mi-scan-btns{margin-left:auto;display:flex;gap:.45em;flex-wrap:wrap}
+#clawMediaIntegrityPage .mi-bar{height:.55em;background:rgba(128,128,128,.22);border-radius:1em;overflow:hidden;margin:.7em 0 .5em}
+#clawMediaIntegrityPage .mi-bar i{display:block;height:100%;background:#52b54b;width:0;transition:width .4s}
+#clawMediaIntegrityPage .mi-bar.mi-paused i{background:#e0a030}
+#clawMediaIntegrityPage .mi-scan-meta{display:flex;gap:1.4em;flex-wrap:wrap;font-size:.92em;opacity:.85}
+#clawMediaIntegrityPage .mi-cur{font-size:.88em;opacity:.7;margin-top:.35em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:ui-monospace,Consolas,monospace}
+#clawMediaIntegrityPage .mi-chips{display:flex;gap:.45em;flex-wrap:wrap;margin-top:.6em}
+#clawMediaIntegrityPage .mi-chip{font-size:.85em;padding:.12em .6em;border-radius:1em;background:rgba(128,128,128,.2)}
+#clawMediaIntegrityPage .mi-chip b{font-weight:600;margin-left:.25em}
+#clawMediaIntegrityPage .mi-bar2{display:flex;gap:.6em;align-items:center;flex-wrap:wrap;margin-bottom:.7em}
+#clawMediaIntegrityPage .mi-bar2 input[type=text],#clawMediaIntegrityPage .mi-bar2 select,#clawMediaIntegrityPage .mi-in{font:inherit;color:inherit;background:rgba(0,0,0,.3);border:1px solid rgba(128,128,128,.4);border-radius:.25em;padding:.35em .5em}
+#clawMediaIntegrityPage .mi-seg{display:inline-flex;border:1px solid rgba(128,128,128,.4);border-radius:.3em;overflow:hidden}
+#clawMediaIntegrityPage .mi-seg button{font:inherit;color:inherit;background:none;border:0;padding:.35em .9em;cursor:pointer;opacity:.75}
+#clawMediaIntegrityPage .mi-seg button.mi-on{background:#52b54b;color:#fff;opacity:1}
+#clawMediaIntegrityPage table.mi-t{width:100%;border-collapse:collapse;font-size:.92em}
+#clawMediaIntegrityPage .mi-t th{text-align:left;font-weight:500;opacity:.7;padding:.45em .5em;border-bottom:1px solid rgba(128,128,128,.4);white-space:nowrap;cursor:pointer;user-select:none}
+#clawMediaIntegrityPage .mi-t th.mi-ns{cursor:default}
+#clawMediaIntegrityPage .mi-t td{padding:.42em .5em;border-bottom:1px solid rgba(128,128,128,.15);vertical-align:middle}
+#clawMediaIntegrityPage .mi-t tbody.mi-click tr{cursor:pointer}#clawMediaIntegrityPage .mi-t tbody.mi-click tr:hover{background:rgba(128,128,128,.12)}
+#clawMediaIntegrityPage .mi-t td.mi-num,#clawMediaIntegrityPage .mi-t th.mi-num{text-align:right;font-variant-numeric:tabular-nums}
+#clawMediaIntegrityPage .mi-t .md-icon{font-size:1.2em}
+#clawMediaIntegrityPage .mi-t tr.mi-grp td{font-weight:500}
+#clawMediaIntegrityPage .mi-t tr.mi-grp.mi-open{background:rgba(82,181,75,.08)}
+#clawMediaIntegrityPage .mi-t tr.mi-sub>td{padding:.6em .6em 1em 2em;background:rgba(0,0,0,.12);cursor:default}
+#clawMediaIntegrityPage .mi-caret{display:inline-block;transition:transform .15s;opacity:.7}
+#clawMediaIntegrityPage tr.mi-open .mi-caret{transform:rotate(90deg)}
+#clawMediaIntegrityPage .mi-mono{font-family:ui-monospace,Consolas,monospace;font-size:.92em}
+#clawMediaIntegrityPage .mi-ell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:26em}
+#clawMediaIntegrityPage .mi-err{display:inline-block;vertical-align:bottom;max-width:16em}
+#clawMediaIntegrityPage .mi-nowrap{white-space:nowrap}
+#clawMediaIntegrityPage .mi-dim{opacity:.6}
+#clawMediaIntegrityPage .mi-f{color:#e05050}#clawMediaIntegrityPage .mi-ok{color:#52b54b}#clawMediaIntegrityPage .mi-w{color:#e0a030}
+#clawMediaIntegrityPage .mi-pill{display:inline-block;font-size:.8em;padding:.08em .5em;border-radius:.3em;white-space:nowrap;background:rgba(128,128,128,.22)}
+#clawMediaIntegrityPage .mi-pill.mi-p-ok{background:rgba(82,181,75,.2);color:#9ad895}
+#clawMediaIntegrityPage .mi-pill.mi-p-changed,#clawMediaIntegrityPage .mi-pill.mi-p-unreadable{background:rgba(224,80,80,.22);color:#f0a0a0}
+#clawMediaIntegrityPage .mi-pill.mi-p-missing,#clawMediaIntegrityPage .mi-pill.mi-p-modified{background:rgba(224,160,48,.2);color:#f0c070}
+#clawMediaIntegrityPage .mi-pill.mi-p-pending,#clawMediaIntegrityPage .mi-pill.mi-p-never_hashed{background:rgba(90,140,220,.2);color:#a8c4f0}
+#clawMediaIntegrityPage .mi-btn{font:inherit;color:inherit;cursor:pointer;background:rgba(128,128,128,.2);border:1px solid rgba(128,128,128,.4);border-radius:.3em;padding:.4em .9em;display:inline-flex;align-items:center;gap:.35em}
+#clawMediaIntegrityPage .mi-btn .md-icon{font-size:1.15em}
+#clawMediaIntegrityPage .mi-btn.mi-pri{background:#52b54b;border-color:#52b54b;color:#fff}
+#clawMediaIntegrityPage .mi-btn.mi-dan{background:#b33a3a;border-color:#b33a3a;color:#fff}
+#clawMediaIntegrityPage .mi-btn.mi-mini{padding:.12em .5em;font-size:.86em}
+#clawMediaIntegrityPage .mi-btn[disabled]{opacity:.4;cursor:default}
+#clawMediaIntegrityPage .mi-acts{display:flex;gap:.3em;flex-wrap:nowrap}
+#clawMediaIntegrityPage .mi-note{background:rgba(82,181,75,.08);border:1px solid rgba(82,181,75,.35);border-radius:.35em;padding:.6em .9em;margin:.6em 0 1em;font-size:.92em}
+#clawMediaIntegrityPage .mi-warn{background:rgba(224,160,48,.1);border-color:rgba(224,160,48,.5)}
+#clawMediaIntegrityPage .mi-empty{opacity:.6;padding:1em .3em}
+#clawMediaIntegrityPage .mi-pager{display:flex;gap:.6em;align-items:center;margin-top:.6em;font-size:.9em}
+#clawMediaIntegrityPage .mi-modal{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10001;display:none;align-items:center;justify-content:center}
+#clawMediaIntegrityPage .mi-modal.mi-on{display:flex}
+#clawMediaIntegrityPage .mi-dlg{background:#202020;color:#eee;border-radius:.5em;padding:1.2em 1.4em;max-width:min(64em,94vw);max-height:88vh;overflow:auto;box-shadow:0 1em 3em rgba(0,0,0,.6)}
+#clawMediaIntegrityPage .mi-dlg h3{margin:.1em 0 .6em;word-break:break-all}
+#clawMediaIntegrityPage .mi-dlg .mi-btns{display:flex;justify-content:flex-end;gap:.5em;margin-top:1.1em}
+#clawMediaIntegrityPage .mi-kv td{padding:.2em 1.2em .2em 0;vertical-align:top}#clawMediaIntegrityPage .mi-kv td:first-child{opacity:.65;white-space:nowrap}
+#clawMediaIntegrityPage .mi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(20em,1fr));gap:.2em 1.8em}
+#clawMediaIntegrityPage textarea.mi-in{width:100%;box-sizing:border-box;min-height:5.5em;font-family:ui-monospace,Consolas,monospace;font-size:.9em}
+#clawMediaIntegrityPage h3.mi-h{margin:1.2em 0 .4em;font-weight:500}
+#clawMediaIntegrityPage .mi-libs label{display:flex;gap:.5em;align-items:baseline;margin:.3em 0}
+#clawMediaIntegrityPage .mi-libs small{opacity:.6}
+</style>
+  <div data-role="content">
+    <div class="content-primary">
+      <div class="sectionTitleContainer flex align-items-center">
+        <h2 class="sectionTitle"><i class="md-icon" style="vertical-align:-.15em">health_and_safety</i> Media Integrity</h2>
+      </div>
+      <p class="secondaryText">Finds silent corruption (bit rot), missing and unreadable files by comparing each file's MD5 with its stored baseline.</p>
+
+      <div class="mi-cards">
+        <div class="mi-card"><small>Files tracked</small><b class="mi-c-files">–</b><small class="mi-c-size"></small></div>
+        <div class="mi-card"><small>Need attention</small><b class="mi-c-problems">–</b><small class="mi-c-problems-sub"></small></div>
+        <div class="mi-card"><small>Last full verification</small><b class="mi-c-last">–</b><small class="mi-c-last-sub"></small></div>
+        <div class="mi-card"><small>Waiting for first hash</small><b class="mi-c-pending">–</b><small class="mi-c-queue"></small></div>
+      </div>
+
+      <div class="mi-scan">
+        <div class="mi-scan-head">
+          <div class="mi-scan-title"><i class="md-icon mi-scan-icon">radar</i><span class="mi-scan-state">Full integrity scan</span></div>
+          <div class="mi-scan-btns">
+            <button type="button" class="mi-btn mi-pri mi-act-start"><i class="md-icon">play_arrow</i><span>Start scan</span></button>
+            <button type="button" class="mi-btn mi-act-fresh" style="display:none"><i class="md-icon">restart_alt</i>Start over</button>
+            <button type="button" class="mi-btn mi-act-pause" style="display:none"><i class="md-icon">pause</i>Pause</button>
+            <button type="button" class="mi-btn mi-pri mi-act-resume" style="display:none"><i class="md-icon">play_arrow</i>Resume</button>
+            <button type="button" class="mi-btn mi-dan mi-act-stop" style="display:none"><i class="md-icon">stop</i>Stop</button>
+          </div>
+        </div>
+        <div class="mi-scan-live" style="display:none">
+          <div class="mi-bar"><i></i></div>
+          <div class="mi-scan-meta"><span class="mi-m-pct"></span><span class="mi-m-files"></span><span class="mi-m-bytes"></span><span class="mi-m-speed"></span><span class="mi-m-left"></span></div>
+          <div class="mi-cur"></div>
+        </div>
+        <div class="mi-scan-idle secondaryText"></div>
+        <div class="mi-chips"></div>
+      </div>
+
+      <div class="mi-tabs">
+        <button type="button" class="mi-tab mi-on" data-tab="problems">Problems<span class="mi-badge mi-red mi-prob-count">0</span></button>
+        <button type="button" class="mi-tab" data-tab="browse">Browse</button>
+        <button type="button" class="mi-tab" data-tab="activity">Activity</button>
+        <button type="button" class="mi-tab" data-tab="settings">Settings</button>
+      </div>
+
+      <!-- Problems -->
+      <div class="mi-panel mi-on" data-panel="problems">
+        <div class="mi-bar2">
+          <select class="mi-prob-kind"><option value="">All problems</option><option value="changed">Changed (silent)</option><option value="modified">Modified (rewritten)</option><option value="missing">Missing</option><option value="unreadable">Unreadable</option></select>
+          <input type="text" class="mi-prob-filter" placeholder="Filter by name or path" style="min-width:18em" />
+          <label class="mi-nowrap"><input type="checkbox" class="mi-prob-ign" /> Show ignored</label>
+          <span style="margin-left:auto" class="mi-prob-bulk mi-dim">0 selected</span>
+          <button type="button" class="mi-btn mi-mini mi-bulk" data-act="accept" disabled><i class="md-icon">done_all</i>Accept new hash</button>
+          <button type="button" class="mi-btn mi-mini mi-bulk" data-act="recheck" disabled><i class="md-icon">refresh</i>Re-check</button>
+          <button type="button" class="mi-btn mi-mini mi-bulk" data-act="ignore" disabled><i class="md-icon">visibility_off</i>Ignore</button>
+        </div>
+        <table class="mi-t mi-prob-t"><thead><tr>
+          <th class="mi-ns" data-col="sel"><input type="checkbox" class="mi-sel-all" /></th>
+          <th data-sort="status">Status</th><th data-sort="name">Name</th><th data-sort="folder">Folder</th><th data-sort="size" class="mi-num">Size</th>
+          <th data-sort="checked">Last checked</th><th class="mi-ns" data-col="hashes">Baseline → current</th><th class="mi-ns" data-col="actions">Actions</th>
+        </tr></thead><tbody class="mi-click"></tbody></table>
+        <div class="mi-empty mi-prob-empty" style="display:none">No problems. Every checked file matches its baseline.</div>
+        <div class="fieldDescription"><b>Changed</b>: content differs but size and modified time did not: typical of bit rot or a bad copy. <b>Modified</b>: the file was rewritten (size or time changed). Accept the new hash if that was intended. <b>Re-check</b> hashes the file again in the background.</div>
+      </div>
+
+      <!-- Browse -->
+      <div class="mi-panel" data-panel="browse">
+        <div class="mi-bar2">
+          <span class="mi-dim">Group by</span>
+          <div class="mi-seg"><button type="button" class="mi-on" data-group="library">Library</button><button type="button" data-group="folder">Drive / folder</button></div>
+        </div>
+        <table class="mi-t mi-grp-t"><thead><tr>
+          <th class="mi-ns" data-col="group">Group</th><th class="mi-ns mi-num" data-col="files">Files</th><th class="mi-ns mi-num" data-col="size">Size</th><th class="mi-ns mi-num" data-col="ok">OK</th>
+          <th class="mi-ns mi-num" data-col="problems">Problems</th><th class="mi-ns mi-num" data-col="pending">Not yet hashed</th><th class="mi-ns" data-col="checked">Checked</th>
+        </tr></thead><tbody></tbody></table>
+      </div>
+
+      <!-- Activity -->
+      <div class="mi-panel" data-panel="activity">
+        <div class="mi-import-note"></div>
+        <table class="mi-t mi-scans-t"><thead><tr>
+          <th class="mi-ns" data-col="started">Started</th><th class="mi-ns" data-col="state">Result</th><th class="mi-ns" data-col="dur">Duration</th><th class="mi-ns mi-num" data-col="files">Files</th>
+          <th class="mi-ns mi-num" data-col="size">Size</th><th class="mi-ns mi-num" data-col="matched">Matched</th><th class="mi-ns mi-num" data-col="new">New</th><th class="mi-ns mi-num" data-col="changed">Changed</th>
+          <th class="mi-ns mi-num" data-col="modified">Modified</th><th class="mi-ns mi-num" data-col="missing">Missing</th><th class="mi-ns mi-num" data-col="unreadable">Unreadable</th><th class="mi-ns" data-col="note">Note</th>
+        </tr></thead><tbody></tbody></table>
+        <div class="mi-empty mi-scans-empty" style="display:none">No scans yet.</div>
+      </div>
+
+      <!-- Settings -->
+      <div class="mi-panel" data-panel="settings">
+        <form class="mi-settings-form">
+          <h3 class="mi-h">What is checked</h3>
+          <div class="mi-libs"></div>
+          <div class="inputContainer">
+            <label class="inputLabel">Extra folders (one per line)</label>
+            <textarea class="mi-in mi-s-extra" placeholder="D:\Archive"></textarea>
+            <div class="fieldDescription">Scanned in addition to the library folders. All file types are hashed.</div>
+          </div>
+          <div class="mi-grid">
+            <div class="inputContainer">
+              <label class="inputLabel">Never hash these files (name patterns, one per line)</label>
+              <textarea class="mi-in mi-s-exclude"></textarea>
+            </div>
+            <div class="inputContainer">
+              <label class="inputLabel">Accept rewrites silently for these extensions</label>
+              <textarea class="mi-in mi-s-auto"></textarea>
+              <div class="fieldDescription">Emby and other tools rewrite metadata files (.nfo, artwork). A new hash with a changed size or time is accepted for these.</div>
+            </div>
+          </div>
+          <div class="checkboxContainer"><label><input is="emby-checkbox" type="checkbox" class="mi-s-new" /><span>Hash files of newly added library items in the background</span></label></div>
+
+          <h3 class="mi-h">Full scan</h3>
+          <div class="mi-grid">
+            <div class="inputContainer"><label class="inputLabel">Speed limit (MB/s, 0 = unlimited)</label><input is="emby-input" type="number" min="0" max="10000" class="mi-s-throttle" /></div>
+            <div class="inputContainer"><label class="inputLabel">Skip scheduled runs if last verification is newer than (days)</label><input is="emby-input" type="number" min="0" max="3650" class="mi-s-mindays" />
+              <div class="fieldDescription">0 = never skip. <b>Start scan</b> here always runs.</div></div>
+          </div>
+          <div class="checkboxContainer"><label><input is="emby-checkbox" type="checkbox" class="mi-s-play" /><span>Pause hashing while anything is playing</span></label></div>
+          <div class="fieldDescription">Schedule: Dashboard → Scheduled tasks → Media Integrity → <i>Full integrity scan</i> (default every 6 months). Scans run at low priority, one file at a time, and resume where they stopped.</div>
+
+          <h3 class="mi-h">Notifications</h3>
+          <div class="checkboxContainer"><label><input is="emby-checkbox" type="checkbox" class="mi-s-nsum" /><span>Scan summary when a full scan finishes</span></label></div>
+          <div class="checkboxContainer"><label><input is="emby-checkbox" type="checkbox" class="mi-s-nprob" /><span>Changed, missing or unreadable files (one message per scan)</span></label></div>
+          <div class="fieldDescription">Choose where they go under Settings → Notifications (category <i>Media Integrity</i>).</div>
+
+          <h3 class="mi-h">Old hash database</h3>
+          <div class="inputContainer"><label class="inputLabel">get-all-hashes.ps1 database</label><input is="emby-input" type="text" class="mi-s-legacy" />
+            <div class="fieldDescription">Imported once on first start from a read-only copy; the original is never changed.</div></div>
+          <button type="button" class="mi-btn mi-imp-now"><i class="md-icon">download</i>Import now</button>
+          <div class="mi-imp-res"></div>
+
+          <div><button is="emby-button" type="submit" class="raised button-submit block"><span>Save</span></button></div>
+        </form>
+      </div>
+
+      <div class="mi-modal"><div class="mi-dlg">
+        <h3 class="mi-dlg-title"></h3>
+        <div class="mi-dlg-body"></div>
+        <div class="mi-btns"><button type="button" class="mi-btn mi-dlg-no">Close</button></div>
+      </div></div>
+    </div>
+  </div>
+</div>
