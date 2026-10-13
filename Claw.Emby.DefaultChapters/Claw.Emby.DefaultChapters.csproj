@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>Claw.Emby.DefaultChapters</AssemblyName>
+    <RootNamespace>Claw.Emby.DefaultChapters</RootNamespace>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <Version>1.1.1</Version>
+    <AssemblyVersion>1.1.1.0</AssemblyVersion>
+    <FileVersion>1.1.1.0</FileVersion>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+  <PropertyGroup>
+    <!-- Override: /p:EmbyServerPath=C:\Users\...\AppData\Roaming\Emby-Server\system -->
+    <EmbyServerPath Condition="&apos;$(EmbyServerPath)&apos; == &apos;&apos;">$(MSBuildThisFileDirectory)refs</EmbyServerPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The offline test harness lives in tests\ and is a separate project. -->
+    <Compile Remove="tests\**" />
+    <EmbeddedResource Remove="tests\**" />
+    <None Remove="tests\**" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="MediaBrowser.Common">
+      <HintPath>$(EmbyServerPath)\MediaBrowser.Common.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="MediaBrowser.Controller">
+      <HintPath>$(EmbyServerPath)\MediaBrowser.Controller.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="MediaBrowser.Model">
+      <HintPath>$(EmbyServerPath)\MediaBrowser.Model.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Web\config.html" />
+    <EmbeddedResource Include="Web\config.js" />
+    <EmbeddedResource Include="Inject\claw-default-chapters.js" />
+    <EmbeddedResource Include="Images\thumb.png" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,239 @@
+<div id="iptvMapperPage" data-role="page" class="page type-interior pluginConfigurationPage iptvMapperPage" data-require="emby-button,emby-input,emby-select,emby-checkbox" data-controller="__plugin/IptvMapper.js">
+<style>
+.iptvMapperPage .iptvm-root{max-width:none!important;width:auto;padding:0 1.2em 1em 1.2em;box-sizing:border-box}
+.iptvMapperPage .iptvm-head{display:flex;align-items:baseline;gap:1em;flex-wrap:wrap;margin:.6em 0 .2em}
+.iptvMapperPage .iptvm-head h2{margin:0}
+.iptvMapperPage .iptvm-muted{opacity:.62}
+.iptvMapperPage .iptvm-small{font-size:82%}
+.iptvMapperPage .iptvm-banner{display:none;margin:.4em 0;padding:.5em .8em;border-radius:.3em;background:rgba(255,170,0,.14);border:1px solid rgba(255,170,0,.45);font-size:90%}
+.iptvMapperPage .iptvm-banner.iptvm-show{display:block}
+.iptvMapperPage .iptvm-banner.iptvm-err{background:rgba(220,60,60,.14);border-color:rgba(220,60,60,.5)}
+.iptvMapperPage .iptvm-toolbar{display:flex;flex-wrap:wrap;gap:.5em;align-items:center;margin:.45em 0}
+.iptvMapperPage .iptvm-toolbar input[type=search],.iptvMapperPage .iptvm-toolbar select,.iptvMapperPage .iptvm-table select,.iptvMapperPage .iptvm-in,.iptvMapperPage .iptvm-dlg input[type=text]{
+ font:inherit;font-size:90%;color:inherit;background:rgba(128,128,128,.13);border:1px solid rgba(128,128,128,.28);border-radius:.25em;padding:.32em .45em;box-sizing:border-box;outline:none}
+.iptvMapperPage select option{color:#eee;background:#222}
+.iptvMapperPage .iptvm-toolbar input[type=search]{min-width:16em;flex:1 1 16em;max-width:28em}
+.iptvMapperPage .iptvm-toolbar input:focus,.iptvMapperPage .iptvm-toolbar select:focus,.iptvMapperPage .iptvm-table select:focus,.iptvMapperPage .iptvm-in:focus{border-color:var(--theme-accent-text-color,#52b54b)}
+.iptvMapperPage .iptvm-btn{font:inherit;font-size:88%;color:inherit;cursor:pointer;background:rgba(128,128,128,.18);border:1px solid rgba(128,128,128,.3);border-radius:.25em;padding:.38em .8em;margin:0!important;line-height:1.2;
+ display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;vertical-align:middle;white-space:nowrap;text-transform:none;letter-spacing:normal;min-width:0;flex:0 0 auto}
+.iptvMapperPage .iptvm-btn:hover:not([disabled]){background:rgba(128,128,128,.3)}
+.iptvMapperPage .iptvm-btn[disabled]{opacity:.4;cursor:default}
+.iptvMapperPage .iptvm-btn-primary{background:#52b54b;border-color:#52b54b;color:#fff}
+.iptvMapperPage .iptvm-btn-primary:hover:not([disabled]){background:#5fc957}
+.iptvMapperPage .iptvm-btn-danger:hover:not([disabled]){background:rgba(220,60,60,.4)}
+.iptvMapperPage .iptvm-pending{font-weight:600;padding:.2em .6em;border-radius:1em;background:rgba(128,128,128,.18)}
+.iptvMapperPage .iptvm-pending.iptvm-has{background:rgba(255,170,0,.25);color:#ffc24d}
+.iptvMapperPage .iptvm-spacer{flex:1 1 auto}
+.iptvMapperPage .iptvm-progress{display:none;margin:.3em 0;font-size:88%}
+.iptvMapperPage .iptvm-progress.iptvm-show{display:block}
+.iptvMapperPage .iptvm-bar{height:6px;border-radius:3px;background:rgba(128,128,128,.25);overflow:hidden;margin-top:.25em}
+.iptvMapperPage .iptvm-bar>div{height:100%;width:0;background:#52b54b;transition:width .15s}
+.iptvMapperPage .iptvm-results{display:none;margin:.3em 0;max-height:9em;overflow:auto;font-size:85%;padding:.4em .7em;border-radius:.3em;background:rgba(220,60,60,.12);border:1px solid rgba(220,60,60,.4)}
+.iptvMapperPage .iptvm-results.iptvm-show{display:block}
+.iptvMapperPage .iptvm-results.iptvm-ok{background:rgba(82,181,75,.12);border-color:rgba(82,181,75,.45)}
+.iptvMapperPage .iptvm-wrap{overflow:auto;height:calc(100vh - 17em);min-height:22em;border:1px solid var(--line-background,rgba(128,128,128,.25));border-radius:.3em}
+.iptvMapperPage .iptvm-table{border-collapse:separate;border-spacing:0;width:100%;font-size:88%}
+.iptvMapperPage .iptvm-table th{position:sticky;top:0;z-index:3;text-align:left;font-weight:600;white-space:nowrap;padding:.5em .5em;cursor:pointer;user-select:none;
+ background:hsl(var(--background-hue,0),var(--background-saturation,0%),var(--background-lightness,11%));border-bottom:1px solid rgba(128,128,128,.4);box-shadow:0 1px 0 rgba(0,0,0,.25)}
+.iptvMapperPage .iptvm-table th.iptvm-nosort{cursor:default}
+.iptvMapperPage .iptvm-table th .iptvm-arrow{opacity:.8;font-size:80%;margin-left:.25em}
+.iptvMapperPage .iptvm-table td{padding:.22em .5em;border-bottom:1px solid rgba(128,128,128,.13);vertical-align:middle}
+.iptvMapperPage .iptvm-table tbody tr:hover td{background:rgba(128,128,128,.07)}
+.iptvMapperPage .iptvm-table tr.iptvm-row-disabled td{opacity:.55}
+.iptvMapperPage .iptvm-table tr.iptvm-row-disabled td.iptvm-c-en{opacity:1}
+.iptvMapperPage .iptvm-table tr.iptvm-row-error td:first-child{box-shadow:inset 3px 0 0 #e05555}
+.iptvMapperPage .iptvm-table tr.iptvm-row-changed td:first-child{box-shadow:inset 3px 0 0 #ffb020}
+.iptvMapperPage td.iptvm-changed{background:rgba(255,176,32,.13)!important}
+.iptvMapperPage .iptvm-logo{width:64px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:.2em;background:rgba(0,0,0,.25);overflow:hidden}
+.iptvMapperPage .iptvm-logo img{max-width:64px;max-height:36px;object-fit:contain}
+.iptvMapperPage .iptvm-logo span{font-size:70%;opacity:.6;text-align:center;padding:0 2px}
+.iptvMapperPage .iptvm-in{background:transparent;border-color:transparent;width:100%}
+.iptvMapperPage .iptvm-in:hover{border-color:rgba(128,128,128,.3)}
+.iptvMapperPage .iptvm-in[readonly]{opacity:.7}
+.iptvMapperPage .iptvm-c-num{width:5.5em}
+.iptvMapperPage .iptvm-c-name{min-width:14em}
+.iptvMapperPage .iptvm-sub{font-size:78%;opacity:.55;padding-left:.5em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:26em}
+.iptvMapperPage .iptvm-c-src select{max-width:15em}
+.iptvMapperPage .iptvm-chbtn{display:block;width:100%;min-width:12em;max-width:22em;text-align:left;font:inherit;font-size:95%;color:inherit;background:rgba(128,128,128,.1);border:1px solid rgba(128,128,128,.25);border-radius:.25em;padding:.3em .45em;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.iptvMapperPage .iptvm-chbtn:hover:not([disabled]){border-color:var(--theme-accent-text-color,#52b54b)}
+.iptvMapperPage .iptvm-chbtn[disabled]{cursor:default;opacity:.5}
+.iptvMapperPage .iptvm-chip{display:inline-block;font-size:76%;font-weight:600;padding:.12em .55em;border-radius:1em;margin:.1em .2em .1em 0;white-space:nowrap}
+.iptvMapperPage .iptvm-chip-mapped{background:rgba(82,181,75,.22);color:#7fd679}
+.iptvMapperPage .iptvm-chip-unmapped{background:rgba(128,128,128,.22)}
+.iptvMapperPage .iptvm-chip-conflict{background:rgba(224,85,85,.25);color:#ff8a8a}
+.iptvMapperPage .iptvm-chip-dupnum{background:rgba(255,176,32,.22);color:#ffc24d}
+.iptvMapperPage .iptvm-chip-disabled{background:rgba(128,128,128,.15);opacity:.8}
+.iptvMapperPage .iptvm-chip-auto{background:rgba(70,140,230,.2);color:#8fbcff}
+.iptvMapperPage .iptvm-chip-error{background:rgba(224,85,85,.35);color:#ffb0b0}
+.iptvMapperPage .iptvm-switch{position:relative;display:inline-block;width:2.4em;height:1.3em;vertical-align:middle}
+.iptvMapperPage .iptvm-switch input{opacity:0;width:0;height:0;position:absolute}
+.iptvMapperPage .iptvm-switch span{position:absolute;inset:0;cursor:pointer;border-radius:1em;background:rgba(128,128,128,.4);transition:background .15s}
+.iptvMapperPage .iptvm-switch span:before{content:"";position:absolute;width:1em;height:1em;left:.15em;top:.15em;border-radius:50%;background:#fff;transition:transform .15s}
+.iptvMapperPage .iptvm-switch input:checked+span{background:#52b54b}
+.iptvMapperPage .iptvm-switch input:checked+span:before{transform:translateX(1.1em)}
+.iptvMapperPage .iptvm-revert{visibility:hidden;font-size:110%;padding:.05em .4em}
+.iptvMapperPage tr.iptvm-row-changed .iptvm-revert{visibility:visible}
+.iptvMapperPage .iptvm-empty{padding:2em;text-align:center;opacity:.6}
+.iptvMapperPage .iptvm-combo{position:fixed;z-index:2100;display:none;width:26em;max-width:92vw;background:#262626;color:#eee;border:1px solid rgba(128,128,128,.45);border-radius:.35em;box-shadow:0 .4em 1.6em rgba(0,0,0,.6);font-size:88%}
+.iptvMapperPage .iptvm-combo.iptvm-show{display:block}
+.iptvMapperPage .iptvm-combo input{width:100%;box-sizing:border-box;font:inherit;color:#eee;background:#1b1b1b;border:0;border-bottom:1px solid rgba(128,128,128,.4);padding:.55em .6em;outline:none;border-radius:.35em .35em 0 0}
+.iptvMapperPage .iptvm-combo-list{max-height:20em;overflow:auto}
+.iptvMapperPage .iptvm-opt{padding:.32em .6em;cursor:pointer;display:flex;gap:.6em;justify-content:space-between}
+.iptvMapperPage .iptvm-opt.iptvm-active{background:rgba(82,181,75,.3)}
+.iptvMapperPage .iptvm-opt.iptvm-current{font-weight:600}
+.iptvMapperPage .iptvm-opt mark{background:none;color:#7fd679;font-weight:700}
+.iptvMapperPage .iptvm-opt .iptvm-oid{opacity:.5;font-size:85%;white-space:nowrap}
+.iptvMapperPage .iptvm-opt .iptvm-used{color:#ffc24d;font-size:80%;white-space:nowrap}
+.iptvMapperPage .iptvm-combo-foot{padding:.35em .6em;font-size:82%;opacity:.65;border-top:1px solid rgba(128,128,128,.25)}
+.iptvMapperPage .iptvm-overlay{position:fixed;inset:0;z-index:2050;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center}
+.iptvMapperPage .iptvm-overlay.iptvm-show{display:flex}
+.iptvMapperPage .iptvm-dlg{background:#232323;color:#eee;border-radius:.4em;padding:1em 1.2em;width:34em;max-width:94vw;max-height:86vh;overflow:auto;box-shadow:0 .5em 2em rgba(0,0,0,.6)}
+.iptvMapperPage .iptvm-dlg h3{margin:.1em 0 .6em}
+.iptvMapperPage .iptvm-dlg input[type=text]{width:100%}
+/* Dialog buttons: a left-aligned tool row and a separate right-aligned footer (Cancel / Apply), all one height. */
+.iptvMapperPage .iptvm-dlg .iptvm-btn{height:2.45em;padding:0 .95em}
+.iptvMapperPage .iptvm-dlg-tools{display:flex;flex-wrap:wrap;gap:.5em;justify-content:flex-start;align-items:center;margin:.75em 0 0}
+.iptvMapperPage .iptvm-dlg-actions{display:flex;flex-wrap:wrap;gap:.5em;justify-content:flex-end;align-items:center;margin:1em 0 0;padding-top:.85em;border-top:1px solid rgba(128,128,128,.22)}
+.iptvMapperPage .iptvm-dlg-actions .iptvm-btn{min-width:6.5em}
+@media (max-width:520px){
+ .iptvMapperPage .iptvm-dlg{padding:.9em .9em}
+ .iptvMapperPage .iptvm-dlg-tools{display:grid;grid-template-columns:1fr 1fr}
+ .iptvMapperPage .iptvm-dlg-tools .iptvm-btn{padding:0 .5em;overflow:hidden;text-overflow:ellipsis}
+ .iptvMapperPage .iptvm-dlg-actions .iptvm-btn{flex:1 1 0}
+}
+.iptvMapperPage .iptvm-previews{display:flex;gap:1em;margin:.8em 0;flex-wrap:wrap}
+.iptvMapperPage .iptvm-prev{flex:1 1 9em;text-align:center;font-size:82%}
+.iptvMapperPage .iptvm-prev div{height:90px;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.35);border-radius:.3em;margin-bottom:.3em;overflow:hidden}
+.iptvMapperPage .iptvm-prev img{max-width:100%;max-height:86px;object-fit:contain}
+.iptvMapperPage .iptvm-c-sel{width:1.6em;text-align:center}
+.iptvMapperPage .iptvm-c-sel input{cursor:pointer;accent-color:#52b54b}
+.iptvMapperPage .iptvm-table tbody tr.iptvm-row-selected td{background:rgba(82,181,75,.09)}
+.iptvMapperPage .iptvm-grpbtn{min-width:8em;max-width:14em}
+.iptvMapperPage .iptvm-combo.iptvm-combo-wide{width:30em}
+.iptvMapperPage .iptvm-opt-thumb{justify-content:flex-start;align-items:center}
+.iptvMapperPage .iptvm-thumb{flex:0 0 56px;height:32px;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.35);border-radius:.2em;overflow:hidden}
+.iptvMapperPage .iptvm-thumb img{max-width:56px;max-height:32px;object-fit:contain}
+.iptvMapperPage .iptvm-thumb-text{display:flex;flex-direction:column;min-width:0}
+.iptvMapperPage .iptvm-thumb-text .iptvm-oid{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.iptvMapperPage .iptvm-logo-overlay .iptvm-dlg.iptvm-drop{outline:2px dashed #52b54b;outline-offset:-6px;background:#26301f}
+.iptvMapperPage .iptvm-drophint{opacity:.55;font-size:80%;margin-top:.2em}
+.iptvMapperPage .iptvm-snap{border-bottom:1px solid rgba(128,128,128,.2);padding:.5em 0;display:flex;gap:.8em;align-items:center}
+.iptvMapperPage .iptvm-snap>div{flex:1 1 auto;min-width:0}
+.iptvMapperPage .iptvm-snap .iptvm-btn{flex:0 0 auto}
+</style>
+  <div data-role="content">
+    <div class="content-primary iptvm-root">
+      <div class="iptvm-head">
+        <h2 class="sectionTitle">IPTV Channel Mapper</h2>
+        <span class="iptvm-muted iptvm-small iptvm-summary"></span>
+      </div>
+      <div class="iptvm-banner iptvm-mode-banner"></div>
+      <div class="iptvm-banner iptvm-err iptvm-provider-banner"></div>
+
+      <div class="iptvm-toolbar">
+        <input type="search" class="iptvm-f-search" placeholder="Search name, number, tvg-id, group, guide channel..." />
+        <select class="iptvm-f-tuner" title="Tuner"></select>
+        <select class="iptvm-f-group" title="M3U group"></select>
+        <select class="iptvm-f-source" title="Guide source"></select>
+        <select class="iptvm-f-status" title="Status">
+          <option value="">All statuses</option>
+          <option value="unmapped">Unmapped only</option>
+          <option value="mapped">Mapped</option>
+          <option value="conflict">Conflict</option>
+          <option value="dupnum">Duplicate number</option>
+          <option value="disabled">Disabled</option>
+          <option value="changed">Changed (pending)</option>
+          <option value="error">Save errors</option>
+          <optgroup label="Logo (current Emby image)">
+            <option value="nologo">Missing logo</option>
+            <option value="haslogo">Has logo</option>
+          </optgroup>
+        </select>
+        <button type="button" class="iptvm-btn iptvm-act-clearfilters" title="Clear filters">Clear</button>
+        <span class="iptvm-muted iptvm-small iptvm-count"></span>
+      </div>
+
+      <div class="iptvm-toolbar">
+        <span class="iptvm-pending">0 pending</span>
+        <button type="button" class="iptvm-btn iptvm-act-undo" title="Undo (Ctrl+Z)" disabled>&#x21B6; Undo</button>
+        <button type="button" class="iptvm-btn iptvm-act-redo" title="Redo (Ctrl+Y)" disabled>&#x21B7; Redo</button>
+        <button type="button" class="iptvm-btn iptvm-btn-danger iptvm-act-discard" disabled>Discard all</button>
+        <button type="button" class="iptvm-btn iptvm-btn-primary iptvm-act-save" disabled>Save</button>
+        <span class="iptvm-spacer"></span>
+        <span class="iptvm-muted iptvm-small iptvm-sel-count"></span>
+        <button type="button" class="iptvm-btn iptvm-act-clearsel" style="display:none">Clear selection</button>
+        <button type="button" class="iptvm-btn iptvm-act-bulklogo" title="Copy one channel's logo to all selected rows" disabled>Copy logo from&#x2026;</button>
+        <button type="button" class="iptvm-btn iptvm-act-bulkupload" title="Upload one image file from this computer as the logo of all selected rows" disabled>Upload logo for selected&#x2026;</button>
+        <button type="button" class="iptvm-btn iptvm-act-bulksrc" title="Set the guide source (Auto / None / provider) of all selected rows" disabled>Set guide source&#x2026;</button>
+        <input type="file" class="iptvm-bulk-file" accept="image/*" style="display:none" />
+        <button type="button" class="iptvm-btn iptvm-act-enabledummy" style="display:none" title="Add the Channel Name Guide provider (all-day guide tile titled with the channel name) to Emby's guide providers">Enable Channel Name Guide</button>
+        <button type="button" class="iptvm-btn iptvm-act-snapshots" title="Previous saves (rollback)">Snapshots</button>
+        <button type="button" class="iptvm-btn iptvm-act-reload" title="Reload from server">&#x21BB; Reload</button>
+      </div>
+
+      <div class="iptvm-progress"><span class="iptvm-progress-text"></span><div class="iptvm-bar"><div></div></div></div>
+      <div class="iptvm-results"></div>
+
+      <div class="iptvm-wrap">
+        <table class="iptvm-table">
+          <thead><tr>
+            <th class="iptvm-nosort iptvm-c-sel"><input type="checkbox" class="iptvm-sel-all" title="Select all visible rows" /></th>
+            <th class="iptvm-nosort" title="Click a logo to set a logo URL, upload an image or copy another channel's logo">Logo</th>
+            <th data-sort="number">Ch #</th>
+            <th data-sort="name">Name</th>
+            <th data-sort="tuner">Tuner</th>
+            <th data-sort="group" title="Effective group (TvChannel Tags). Click a cell to edit; the M3U group-title is shown below when different.">Group</th>
+            <th data-sort="source">Guide source</th>
+            <th data-sort="channel">Guide channel</th>
+            <th data-sort="status">Status</th>
+            <th data-sort="enabled">Enabled</th>
+            <th class="iptvm-nosort"></th>
+          </tr></thead>
+          <tbody class="iptvm-tbody"><tr><td colspan="11" class="iptvm-empty">Loading channels...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="iptvm-combo">
+    <input type="text" class="iptvm-combo-input" placeholder="Type to search guide channels..." autocomplete="off" spellcheck="false" />
+    <div class="iptvm-combo-list"></div>
+    <div class="iptvm-combo-foot"></div>
+  </div>
+
+  <div class="iptvm-overlay iptvm-logo-overlay">
+    <div class="iptvm-dlg">
+      <h3>Logo override</h3>
+      <div class="iptvm-small iptvm-muted iptvm-logo-title"></div>
+      <div class="iptvm-previews">
+        <div class="iptvm-prev"><div><img class="iptvm-logo-cur" alt="" /></div>Current Emby image</div>
+        <div class="iptvm-prev"><div><img class="iptvm-logo-m3u" alt="" /></div>M3U tvg-logo</div>
+        <div class="iptvm-prev"><div><img class="iptvm-logo-new" alt="" /></div>Preview</div>
+      </div>
+      <label class="iptvm-small">Image URL (http/https), downloaded by Emby on Save. Or <b>Upload image&#x2026;</b> from this computer, or <b>Copy from channel&#x2026;</b> to reuse another channel's logo.</label>
+      <input type="text" class="iptvm-logo-url" placeholder="https://..." spellcheck="false" />
+      <div class="iptvm-small iptvm-logo-msg" style="min-height:1.3em;margin-top:.3em"></div>
+      <input type="file" class="iptvm-logo-file" accept="image/*" style="display:none" />
+      <div class="iptvm-dlg-tools">
+        <button type="button" class="iptvm-btn iptvm-logo-upload">Upload image&#x2026;</button>
+        <button type="button" class="iptvm-btn iptvm-logo-copy">Copy from channel&#x2026;</button>
+        <button type="button" class="iptvm-btn iptvm-logo-usem3u">Use M3U logo</button>
+        <button type="button" class="iptvm-btn iptvm-logo-clear">Clear override</button>
+      </div>
+      <div class="iptvm-drophint" style="margin-top:.45em">You can also drop an image file on this dialog or paste one (Ctrl+V). PNG, JPEG, WebP, GIF or SVG, max 5 MB.</div>
+      <div class="iptvm-dlg-actions">
+        <button type="button" class="iptvm-btn iptvm-logo-cancel">Cancel</button>
+        <button type="button" class="iptvm-btn iptvm-btn-primary iptvm-logo-apply">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="iptvm-overlay iptvm-snap-overlay">
+    <div class="iptvm-dlg">
+      <h3>Snapshots (last saves)</h3>
+      <div class="iptvm-small iptvm-muted">Loading a snapshot queues its <b>before</b> values as pending edits. Review them, then Save.</div>
+      <div class="iptvm-snap-list"></div>
+      <div class="iptvm-dlg-actions"><button type="button" class="iptvm-btn iptvm-snap-close">Close</button></div>
+    </div>
+  </div>
+</div>

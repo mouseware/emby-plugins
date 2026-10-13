@@ -1,0 +1,41 @@
+# Build output
+bin/
+obj/
+**/bin/
+**/obj/
+*.user
+*.suo
+.vs/
+.vscode/
+*.swp
+
+# Local backups (never published)
+_backups/
+
+# Emby SDK reference DLLs (copied from the server; restore into <Project>\refs\ before building)
+**/refs/*.dll
+!**/refs/.gitkeep
+
+# Test outputs
+TestResults/
+**/tests/**/node_modules/
+**/tests/web/*-page.html
+**/tests/web/*.png
+*.trx
+*.log
+
+# Secrets / local config: never commit
+*.env
+.env*
+*.tmp
+ek.tmp
+*.pfx
+*.key
+*.pem
+secrets*.json
+appsettings.*.local.json
+**/configurations/*.xml
+system.xml
+bans.json
+imported-keys.txt
+GeoLite2-*.mmdb

@@ -1,0 +1,71 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+<style>
+html,body{margin:0;height:100%;background:#101010;color:#eee;font-family:"Segoe UI",Roboto,"Noto Sans",Arial,sans-serif;overflow:hidden}
+.md-icon{font-family:"Material Icons";font-weight:normal;font-style:normal;font-size:1.5em;line-height:1;display:inline-block;-webkit-font-feature-settings:"liga";font-feature-settings:"liga";-webkit-font-smoothing:antialiased}
+.bg{position:absolute;inset:0;background:linear-gradient(180deg,rgba(16,16,16,.15),#101010 78%),radial-gradient(ellipse at 70% 10%,#3a4b5c 0,#1a2028 55%,#101010 100%)}
+.hdr{position:absolute;top:0;left:0;right:0;height:3.4em;display:flex;align-items:center;padding:0 1.2em;gap:1em;background:rgba(0,0,0,.25)}
+.hdr b{font-weight:500;font-size:1.15em}
+.detail{position:absolute;top:6em;left:3em;display:flex;gap:2em}
+.poster{width:230px;height:345px;border-radius:.3em;background:linear-gradient(160deg,#5b6f7f,#20303d);box-shadow:0 .5em 2em rgba(0,0,0,.6)}
+.info h1{margin:.1em 0 .2em;font-weight:500;font-size:2.4em}
+.info .meta{opacity:.75;margin-bottom:1.2em}
+.btns{display:flex;gap:.6em}
+.btn{display:flex;align-items:center;gap:.4em;background:rgba(255,255,255,.12);border-radius:.3em;padding:.6em 1em}
+.btn.primary{background:#52b54b}
+.btn.more{outline:2px solid rgba(255,255,255,.6)}
+.chapters{position:absolute;left:3em;right:3em;top:31em;display:flex;gap:1em}
+.chap{width:220px}
+.chap div{height:124px;border-radius:.3em;background:linear-gradient(135deg,#2c3a46,#151b21)}
+.chap span{display:block;font-size:.9em;margin-top:.35em;opacity:.85}
+.chap small{opacity:.55}
+.dim{position:absolute;inset:0;background:rgba(0,0,0,.45)}
+.sheet{position:absolute;top:13.4em;left:560px;min-width:20em;background:#202020;border-radius:.35em;box-shadow:0 0 1.5em rgba(0,0,0,.6);padding:.5em 0}
+.sheet .head{display:flex;align-items:center;gap:.8em;padding:.5em 1.1em .7em;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:.3em}
+.sheet .head .p{width:2.2em;height:3.3em;border-radius:.2em;background:linear-gradient(160deg,#5b6f7f,#20303d)}
+.item{display:flex;align-items:center;gap:1em;padding:.62em 1.3em;font-size:1em}
+.item .md-icon{opacity:.8;font-size:1.35em}
+.item.ours{background:rgba(82,181,75,.10)}
+.item.ours .md-icon{color:#52b54b;opacity:1}
+.item.hover{background:rgba(255,255,255,.10)}
+.tag{position:absolute;right:1em;bottom:.8em;font-size:.8em;opacity:.45}
+.dlgwrap{position:absolute;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center}
+.dlg{background:#202020;border-radius:.4em;width:34em;padding:1.4em 1.6em 1.1em;box-shadow:0 0 2em rgba(0,0,0,.7)}
+.dlg h2{margin:0 0 .7em;font-weight:500;font-size:1.35em}
+.dlg p{margin:0 0 1.6em;line-height:1.45;opacity:.9}
+.dlg .b{display:flex;justify-content:flex-end;gap:.6em}
+.dlg .b span{padding:.6em 1.3em;border-radius:.3em;background:rgba(255,255,255,.12)}
+.dlg .b span.ok{background:#52b54b}
+</style></head><body>
+<div class="bg"></div>
+<div class="hdr"><span class="md-icon">arrow_back</span><b>Heat</b></div>
+<div class="detail"><div class="poster"></div><div class="info"><h1>Heat</h1><div class="meta">1995 &nbsp; 2h 50m &nbsp; R &nbsp; Crime, Drama, Action</div>
+<div class="btns"><span class="btn primary"><span class="md-icon">play_arrow</span>Play</span><span class="btn"><span class="md-icon">favorite_border</span></span><span class="btn more"><span class="md-icon">more_horiz</span></span></div></div></div>
+<div class="chapters">
+ <div class="chap"><div></div><span>Chapter 1</span><small>0:00</small></div>
+ <div class="chap"><div></div><span>Chapter 2</span><small>5:00</small></div>
+ <div class="chap"><div></div><span>Chapter 3</span><small>10:00</small></div>
+ <div class="chap"><div></div><span>Chapter 4</span><small>15:00</small></div>
+ <div class="chap"><div></div><span>Chapter 5</span><small>20:00</small></div>
+</div>
+<div class="dim"></div>
+<div class="tag">Offline mock preview: Emby 4.10 item "&hellip;" menu with the Default Chapters entries (green)</div>
+<script>
+window.renderSheet = function (cmds) {
+  var s = document.createElement('div'); s.className = 'sheet';
+  var h = '<div class="head"><span class="p"></span><div><div>Heat</div><small style="opacity:.6">1995</small></div></div>';
+  cmds.forEach(function (c, i) {
+    var ours = /^claw-dc-/.test(c.id);
+    h += '<div class="item' + (ours ? ' ours' : '') + (c.id === 'claw-dc-generate' ? ' hover' : '') + '"><span class="md-icon">' + c.icon + '</span>' + c.name + '</div>';
+  });
+  s.innerHTML = h; document.body.appendChild(s);
+};
+window.renderConfirm = function (text) {
+  var s = document.querySelector('.sheet'); if (s) s.remove();
+  var d = document.createElement('div'); d.className = 'dlgwrap';
+  d.innerHTML = '<div class="dlg"><h2>Replace chapters?</h2><p></p><div class="b"><span class="ok">Cancel</span><span>Replace</span></div></div>';
+  d.querySelector('p').textContent = text; document.body.appendChild(d);
+  document.querySelector('.tag').textContent = 'Offline mock preview: Emby confirm dialog before Generate (Cancel is the default button)';
+};
+</script>
+</body></html>

@@ -1,0 +1,27 @@
+const puppeteer = require('/workspace/jstest/node_modules/puppeteer-core');
+const path = require('path');
+let passes = 0, fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); c ? passes++ : fails++; };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+(async () => {
+  const b = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-gpu', '--allow-file-access-from-files'] });
+  const p = await b.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
+  await p.setViewport({ width: 1500, height: 1000 });
+  await p.goto('file://' + path.resolve(__dirname, 'dash-tbl.html')); await sleep(700);
+  const C = require('./checks.js')(p, ok);
+  const U = '.userActivityItems + .claw-acttbl-box table', A = '.serverActivityItems + .claw-acttbl-box table';
+  await p.screenshot({ path: '/workspace/ciui-resize-before.png' });
+  const order = () => p.$$eval(U + ' tbody tr', t => t.map(r => r.textContent).join('|'));
+  const o0 = await order();
+  await C.run('Activity table', U, 'item', 'claw.customitemui.cols.activity', async () => { await p.click(U + ' th[data-sort=user]'); });
+  ok(await order() !== o0, 'header click still sorts (table re-rendered)');
+  await C.drag(U, 'user', -30);
+  await C.run('Alerts table', A, 'action', 'claw.customitemui.cols.alerts', async () => { await p.click(A + ' th[data-sort=date]'); });
+  const keys = await p.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('claw.customitemui')));
+  ok(keys.length === 2, 'separate storage per table: ' + keys.join(', '));
+  await p.screenshot({ path: '/workspace/ciui-resize.png' });
+  await p.reload(); await sleep(800);
+  const st = await p.evaluate(() => JSON.parse(localStorage.getItem('claw.customitemui.cols.activity')));
+  ok(Math.abs((await C.thBox(U, 'item')).w - st.item) <= 2, 'Activity widths restored after reload');
+  ok(errs.length === 0, 'no page errors ' + errs.join(' | '));
+  await b.close(); console.log(passes + ' passed, ' + fails + ' failed'); process.exit(fails ? 1 : 0);
+})();

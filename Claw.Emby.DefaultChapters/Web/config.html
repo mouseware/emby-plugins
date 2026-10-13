@@ -1,0 +1,164 @@
+<div id="defaultChaptersPage" data-role="page" class="page type-interior pluginConfigurationPage defaultChaptersPage" data-require="emby-button,emby-input" data-controller="__plugin/DefaultChapters.js">
+<style>
+.defaultChaptersPage .dc-root{max-width:none!important;width:auto;padding:0 1.2em 1em 1.2em;box-sizing:border-box}
+.defaultChaptersPage .dc-head{display:flex;align-items:baseline;gap:1em;flex-wrap:wrap;margin:.6em 0 .2em}
+.defaultChaptersPage .dc-head h2{margin:0}
+.defaultChaptersPage .dc-muted{opacity:.62}
+.defaultChaptersPage .dc-small{font-size:85%}
+.defaultChaptersPage .dc-card{background:rgba(128,128,128,.08);border:1px solid rgba(128,128,128,.2);border-radius:.4em;padding:.8em 1em;margin:.7em 0}
+.defaultChaptersPage .dc-settings{display:flex;flex-wrap:wrap;align-items:center;gap:.6em 1em}
+.defaultChaptersPage .dc-in{font:inherit;color:inherit;background:rgba(128,128,128,.13);border:1px solid rgba(128,128,128,.28);border-radius:.25em;padding:.35em .5em;box-sizing:border-box;outline:none}
+.defaultChaptersPage .dc-in:focus{border-color:var(--theme-accent-text-color,#52b54b)}
+.defaultChaptersPage .dc-interval{width:5.5em}
+.defaultChaptersPage .dc-filter{min-width:16em;flex:1 1 16em;max-width:30em}
+.defaultChaptersPage .dc-btn{font:inherit;font-size:88%;color:inherit;cursor:pointer;background:rgba(128,128,128,.18);border:1px solid rgba(128,128,128,.3);border-radius:.25em;padding:.38em .9em;margin:0!important;line-height:1.2;white-space:nowrap;text-transform:none;letter-spacing:normal}
+.defaultChaptersPage .dc-btn:hover:not([disabled]){background:rgba(128,128,128,.3)}
+.defaultChaptersPage .dc-btn[disabled]{opacity:.4;cursor:default}
+.defaultChaptersPage .dc-btn-accent{background:var(--theme-accent-color,#52b54b);border-color:transparent;color:#fff}
+.defaultChaptersPage .dc-btn-accent:hover:not([disabled]){filter:brightness(1.1);background:var(--theme-accent-color,#52b54b)}
+.defaultChaptersPage .dc-toolbar{display:flex;flex-wrap:wrap;gap:.6em;align-items:center;margin:.9em 0 .45em}
+.defaultChaptersPage .dc-wrap{overflow:auto;border:1px solid rgba(128,128,128,.22);border-radius:.35em}
+.defaultChaptersPage table.dc-table{border-collapse:collapse;width:100%;font-size:92%}
+.defaultChaptersPage .dc-table th,.defaultChaptersPage .dc-table td{padding:.45em .6em;text-align:left;border-bottom:1px solid rgba(128,128,128,.16);vertical-align:middle}
+.defaultChaptersPage .dc-table th{position:sticky;top:0;background:rgba(40,40,40,.97);font-weight:600;white-space:nowrap;user-select:none}
+.defaultChaptersPage .dc-table th[data-sort],.defaultChaptersPage .dc-table th[data-fsort]{cursor:pointer}
+.defaultChaptersPage .dc-table th[data-sort]:hover,.defaultChaptersPage .dc-table th[data-fsort]:hover{color:var(--theme-accent-text-color,#52b54b)}
+.defaultChaptersPage .dc-table th .dc-arrow{display:inline-block;width:1em;opacity:.85}
+.defaultChaptersPage .dc-table td.dc-num,.defaultChaptersPage .dc-table th.dc-num{text-align:right;font-variant-numeric:tabular-nums}
+.defaultChaptersPage .dc-table tr:hover td{background:rgba(128,128,128,.07)}
+.defaultChaptersPage .dc-movie{display:flex;align-items:center;gap:.6em;min-width:14em}
+.defaultChaptersPage .dc-poster{width:2.1em;height:3.15em;flex:0 0 auto;border-radius:.2em;background:rgba(128,128,128,.2) center/cover no-repeat}
+.defaultChaptersPage .dc-movie a{color:inherit;text-decoration:none;font-weight:500}
+.defaultChaptersPage .dc-movie a:hover{text-decoration:underline}
+.defaultChaptersPage .dc-path{font-size:80%;opacity:.55;word-break:break-all}
+.defaultChaptersPage .dc-id{font-family:monospace;font-size:88%;opacity:.8}
+.defaultChaptersPage .dc-empty{padding:1.4em;text-align:center;opacity:.65}
+.defaultChaptersPage .dc-msg{min-height:1.3em}
+.defaultChaptersPage .dc-ok{color:#6fd66a}
+.defaultChaptersPage .dc-err{color:#ff7d7d}
+.defaultChaptersPage .dc-chip{display:inline-block;padding:.05em .45em;border-radius:1em;background:rgba(82,181,75,.18);color:#8fdc8a;font-size:85%;margin-left:.4em}
+.defaultChaptersPage .dc-tabs{display:flex;gap:.2em;margin:1em 0 0;border-bottom:1px solid rgba(128,128,128,.28)}
+.defaultChaptersPage .dc-tab{font:inherit;color:inherit;background:transparent;border:0;border-bottom:3px solid transparent;padding:.55em 1.1em .45em;cursor:pointer;opacity:.7;margin:0 0 -1px 0}
+.defaultChaptersPage .dc-tab:hover{opacity:1}
+.defaultChaptersPage .dc-tab.dc-active{opacity:1;border-bottom-color:var(--theme-accent-color,#52b54b);color:var(--theme-accent-text-color,#52b54b)}
+.defaultChaptersPage .dc-tab .dc-badge{display:inline-block;min-width:1.4em;padding:0 .4em;margin-left:.45em;border-radius:1em;background:rgba(128,128,128,.25);font-size:80%;text-align:center;color:#ddd}
+.defaultChaptersPage .dc-panel[hidden],.defaultChaptersPage .dc-pager[hidden]{display:none}
+.defaultChaptersPage .dc-criteria{display:flex;flex-wrap:wrap;align-items:center;gap:.6em .7em}
+.defaultChaptersPage .dc-criteria .dc-in{width:5.5em}
+.defaultChaptersPage .dc-check{display:inline-flex;align-items:center;gap:.4em;cursor:pointer}
+.defaultChaptersPage .dc-check input,.defaultChaptersPage .dc-table input[type=checkbox]{width:1.05em;height:1.05em;accent-color:var(--theme-accent-color,#52b54b);cursor:pointer;margin:0}
+.defaultChaptersPage .dc-table th.dc-cb,.defaultChaptersPage .dc-table td.dc-cb{width:1.6em;text-align:center}
+.defaultChaptersPage .dc-table tr.dc-sel td{background:rgba(82,181,75,.09)}
+.defaultChaptersPage .dc-table tr.dc-done td{opacity:.55}
+.defaultChaptersPage .dc-table tr.dc-done td.dc-act{opacity:1}
+.defaultChaptersPage .dc-pathcell{font-size:85%;opacity:.7;word-break:break-all;max-width:34em}
+.defaultChaptersPage .dc-status-done{color:#6fd66a;white-space:nowrap}
+.defaultChaptersPage .dc-status-err{color:#ff7d7d;font-size:85%}
+.defaultChaptersPage .dc-warn{display:inline-block;padding:.05em .45em;border-radius:1em;background:rgba(255,170,0,.16);color:#ffc95c;font-size:80%;margin-left:.4em}
+.defaultChaptersPage .dc-pager{display:flex;align-items:center;justify-content:flex-end;gap:.6em;margin:.5em 0}
+.defaultChaptersPage .dc-linkbtn{font:inherit;color:var(--theme-accent-text-color,#52b54b);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
+</style>
+  <div data-role="content">
+    <div class="content-primary dc-root">
+      <div class="dc-head">
+        <h2>Default Chapters</h2>
+        <span class="dc-muted dc-small dc-version"></span>
+      </div>
+      <div class="dc-muted dc-small">
+        Open a movie's <b>&hellip;</b> menu and choose <b>Generate interval chapters</b> to replace its chapters with
+        &ldquo;Chapter 1, 2 &hellip;&rdquo; every N minutes. Intro and credits markers are kept. The original chapters are stashed and
+        come back with <b>Restore original chapters</b> (same menu) or <b>Revert</b> below. Library refreshes keep the interval chapters.
+        Use <b>Found movies</b> to search for long movies with few chapters and generate for many at once. Movies only; administrators only.
+      </div>
+
+      <div class="dc-card">
+        <form class="dc-settings dc-form" novalidate>
+          <label for="dcInterval">Chapter interval (minutes)</label>
+          <input id="dcInterval" class="dc-in dc-interval" type="number" min="1" max="60" step="1" required />
+          <button type="submit" class="dc-btn dc-btn-accent dc-save">Save</button>
+          <span class="dc-small dc-muted">Used for new Generate actions. Existing overrides keep the interval they were made with.</span>
+          <span class="dc-small dc-msg dc-save-msg"></span>
+        </form>
+      </div>
+
+      <div class="dc-tabs" role="tablist">
+        <button type="button" class="dc-tab dc-active" role="tab" data-tab="changed" aria-selected="true">Changed<span class="dc-badge dc-badge-changed"></span></button>
+        <button type="button" class="dc-tab" role="tab" data-tab="found" aria-selected="false">Found movies<span class="dc-badge dc-badge-found">&ndash;</span></button>
+      </div>
+
+      <div class="dc-panel dc-panel-changed" role="tabpanel">
+        <div class="dc-toolbar">
+          <input type="search" class="dc-in dc-filter" placeholder="Filter by movie, path or id" aria-label="Filter changed movies" />
+          <span class="dc-small dc-muted dc-count"></span>
+          <span style="flex:1 1 auto"></span>
+          <button type="button" class="dc-btn dc-reload">Reload</button>
+        </div>
+        <div class="dc-small dc-msg dc-table-msg"></div>
+        <div class="dc-wrap">
+          <table class="dc-table">
+            <thead>
+              <tr>
+                <th data-sort="name">Movie <span class="dc-arrow"></span></th>
+                <th data-sort="id">Id <span class="dc-arrow"></span></th>
+                <th data-sort="changed">Changed <span class="dc-arrow"></span></th>
+                <th data-sort="before" class="dc-num">Before <span class="dc-arrow"></span></th>
+                <th data-sort="after" class="dc-num">After <span class="dc-arrow"></span></th>
+                <th data-sort="interval" class="dc-num">Interval <span class="dc-arrow"></span></th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody class="dc-rows"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="dc-panel dc-panel-found" role="tabpanel" hidden>
+        <div class="dc-card">
+          <form class="dc-criteria dc-find-form" novalidate>
+            <label for="dcMinRuntime">Movies longer than</label>
+            <input id="dcMinRuntime" class="dc-in" type="number" min="0" max="1440" step="1" />
+            <span>minutes</span>
+            <button type="button" class="dc-btn dc-preset" data-min="60">1 hour</button>
+            <button type="button" class="dc-btn dc-preset" data-min="90">1&frac12; hours</button>
+            <span style="margin-left:.6em">with</span>
+            <input id="dcMaxChapters" class="dc-in" type="number" min="0" max="999" step="1" />
+            <label for="dcMaxChapters">or fewer chapters</label>
+            <label class="dc-check" style="margin-left:.6em"><input type="checkbox" id="dcExcludeOverridden" /> Hide movies already changed</label>
+            <span style="flex:1 1 auto"></span>
+            <button type="submit" class="dc-btn dc-btn-accent dc-find">Find matches</button>
+          </form>
+          <div class="dc-small dc-muted" style="margin-top:.45em">Manual only: the library is searched when you press <b>Find matches</b>, never in the background. Intro/credits markers are not counted as chapters. The criteria are saved.</div>
+        </div>
+        <div class="dc-toolbar">
+          <input type="search" class="dc-in dc-filter dc-found-filter" placeholder="Filter by movie, path or id" aria-label="Filter found movies" />
+          <span class="dc-small dc-muted dc-found-count"></span>
+          <span style="flex:1 1 auto"></span>
+          <button type="button" class="dc-btn dc-select-all" disabled>Select all matching</button>
+          <button type="button" class="dc-btn dc-select-none" disabled>Clear selection</button>
+          <button type="button" class="dc-btn dc-btn-accent dc-bulk" disabled>Generate for selected&hellip;</button>
+        </div>
+        <div class="dc-small dc-msg dc-found-msg"></div>
+        <div class="dc-wrap">
+          <table class="dc-table dc-found-table">
+            <thead>
+              <tr>
+                <th class="dc-cb"><input type="checkbox" class="dc-page-cb" aria-label="Select all on this page" /></th>
+                <th data-fsort="name">Movie <span class="dc-arrow"></span></th>
+                <th data-fsort="runtime" class="dc-num">Runtime <span class="dc-arrow"></span></th>
+                <th data-fsort="chapters" class="dc-num">Chapters <span class="dc-arrow"></span></th>
+                <th data-fsort="path">Path <span class="dc-arrow"></span></th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody class="dc-found-rows"></tbody>
+          </table>
+        </div>
+        <div class="dc-pager dc-small" hidden>
+          <button type="button" class="dc-btn dc-prev">&lsaquo; Prev</button>
+          <span class="dc-page-info"></span>
+          <button type="button" class="dc-btn dc-next">Next &rsaquo;</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Offline test harness: plain console app, no Emby server, no network.
+    Run from this folder:  dotnet run -c Release
+    It compiles the plugin's pure Core sources directly. Emby's shipped MediaBrowser.*.dll files are
+    ReadyToRun images for one OS and cannot be loaded by a test process on another, so the two Emby
+    types the core uses (ChapterInfo, MarkerType) are replaced by same-shape stubs in EmbyStubs.cs.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\Core\ChapterGenerator.cs" Link="Core\ChapterGenerator.cs" />
+    <Compile Include="..\..\Core\OverrideStore.cs" Link="Core\OverrideStore.cs" />
+    <Compile Include="..\..\Core\IChapterHost.cs" Link="Core\IChapterHost.cs" />
+    <Compile Include="..\..\Core\DefaultChaptersManager.cs" Link="Core\DefaultChaptersManager.cs" />
+    <Compile Include="..\..\Core\IndexHtmlPatcher.cs" Link="Core\IndexHtmlPatcher.cs" />
+    <Compile Include="..\..\Core\FindModels.cs" Link="Core\FindModels.cs" />
+  </ItemGroup>
+</Project>

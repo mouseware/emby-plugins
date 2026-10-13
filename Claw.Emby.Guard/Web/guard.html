@@ -1,0 +1,202 @@
+<div id="clawGuardPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-button,emby-checkbox,emby-input,emby-select" data-controller="__plugin/ClawGuard.js">
+<style>
+#clawGuardPage .cg-tabs{display:flex;gap:.3em;border-bottom:1px solid rgba(128,128,128,.3);margin:.4em 0 1em;flex-wrap:wrap}
+#clawGuardPage .cg-tab{font:inherit;color:inherit;background:none;border:0;border-bottom:2px solid transparent;padding:.6em 1.1em;cursor:pointer;opacity:.7}
+#clawGuardPage .cg-tab.cg-on{opacity:1;border-bottom-color:#52b54b}
+#clawGuardPage .cg-badge{display:inline-block;min-width:1.2em;text-align:center;background:rgba(128,128,128,.3);border-radius:1em;padding:0 .45em;margin-left:.35em;font-size:.82em}
+#clawGuardPage .cg-badge.cg-red{background:#8a2a2a}
+#clawGuardPage .cg-panel{display:none}#clawGuardPage .cg-panel.cg-on{display:block}
+#clawGuardPage .cg-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(11em,1fr));gap:.8em;margin-bottom:1em}
+#clawGuardPage .cg-card{background:rgba(128,128,128,.1);border-radius:.4em;padding:.7em 1em}
+#clawGuardPage .cg-card b{display:block;font-size:1.6em;font-weight:600}
+#clawGuardPage .cg-card small{opacity:.65}
+#clawGuardPage .cg-bar{display:flex;gap:.6em;align-items:center;flex-wrap:wrap;margin-bottom:.7em}
+#clawGuardPage .cg-bar input[type=text],#clawGuardPage .cg-bar select,#clawGuardPage .cg-in{font:inherit;color:inherit;background:rgba(0,0,0,.3);border:1px solid rgba(128,128,128,.4);border-radius:.25em;padding:.35em .5em}
+#clawGuardPage .cg-import{margin-left:auto;display:inline-flex;align-items:center;gap:.35em}#clawGuardPage .cg-import .md-icon{font-size:1.2em}#clawGuardPage .cg-imp-big{font-size:1.15em;margin-bottom:.6em}#clawGuardPage .cg-imp-n{color:#52b54b;font-size:1.5em}#clawGuardPage .cg-imp-t td{padding:.2em 1.2em .2em 0}#clawGuardPage .cg-imp-t td+td{text-align:right;font-variant-numeric:tabular-nums}
+#clawGuardPage .cg-live{font-size:.85em;color:#52b54b}#clawGuardPage .cg-live.cg-paused{color:#e0a030}
+#clawGuardPage table.cg-t{width:100%;border-collapse:collapse;font-size:.92em}
+#clawGuardPage .cg-t th{text-align:left;font-weight:500;opacity:.7;padding:.45em .5em;border-bottom:1px solid rgba(128,128,128,.4);white-space:nowrap;cursor:pointer;user-select:none}
+#clawGuardPage .cg-t th.cg-ns{cursor:default}
+#clawGuardPage .cg-t td{padding:.42em .5em;border-bottom:1px solid rgba(128,128,128,.15);vertical-align:middle}
+#clawGuardPage .cg-t tbody.cg-click tr{cursor:pointer}#clawGuardPage .cg-t tbody.cg-click tr:hover{background:rgba(128,128,128,.12)}
+#clawGuardPage .cg-t td.cg-ic{width:1.6em;padding-right:0}
+#clawGuardPage .cg-t .md-icon{font-size:1.25em}
+#clawGuardPage .cg-nowrap{white-space:nowrap}
+#clawGuardPage .cg-dim{opacity:.6}
+#clawGuardPage .cg-f{color:#e05050}#clawGuardPage .cg-ok{color:#52b54b}#clawGuardPage .cg-w{color:#e0a030}
+#clawGuardPage .cg-pill{display:inline-block;font-size:.8em;padding:.08em .5em;border-radius:.3em;background:rgba(224,80,80,.2);color:#f0a0a0;white-space:nowrap}
+#clawGuardPage .cg-pill.cg-g{background:rgba(82,181,75,.2);color:#9ad895}
+#clawGuardPage .cg-pill.cg-n{background:rgba(128,128,128,.22);color:inherit}
+#clawGuardPage .cg-menu{position:fixed;z-index:10000;background:#262626;color:#eee;border-radius:.35em;box-shadow:0 .4em 1.4em rgba(0,0,0,.6);padding:.3em 0;min-width:16em;display:none}
+#clawGuardPage .cg-menu button{display:flex;gap:.6em;align-items:center;width:100%;font:inherit;color:inherit;background:none;border:0;text-align:left;padding:.5em 1em;cursor:pointer}
+#clawGuardPage .cg-menu button:hover{background:rgba(255,255,255,.08)}#clawGuardPage .cg-menu button[disabled]{opacity:.4;cursor:default}
+#clawGuardPage .cg-menu .cg-mh{padding:.35em 1em .45em;font-size:.85em;opacity:.65;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:.2em}
+#clawGuardPage .cg-modal{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10001;display:none;align-items:center;justify-content:center}
+#clawGuardPage .cg-modal.cg-on{display:flex}
+#clawGuardPage .cg-dlg{background:#202020;color:#eee;border-radius:.5em;padding:1.2em 1.4em;max-width:32em;box-shadow:0 1em 3em rgba(0,0,0,.6)}
+#clawGuardPage .cg-dlg h3{margin:.1em 0 .6em}
+#clawGuardPage .cg-dlg .cg-btns{display:flex;justify-content:flex-end;gap:.5em;margin-top:1.1em}
+#clawGuardPage .cg-btn{font:inherit;color:inherit;cursor:pointer;background:rgba(128,128,128,.2);border:1px solid rgba(128,128,128,.4);border-radius:.3em;padding:.4em .9em}
+#clawGuardPage .cg-btn.cg-pri{background:#52b54b;border-color:#52b54b;color:#fff}
+#clawGuardPage .cg-btn.cg-dan{background:#b33a3a;border-color:#b33a3a;color:#fff}
+#clawGuardPage .cg-btn.cg-mini{padding:.15em .55em;font-size:.88em}
+#clawGuardPage .cg-note{background:rgba(82,181,75,.08);border:1px solid rgba(82,181,75,.35);border-radius:.35em;padding:.6em .9em;margin:.6em 0 1em;font-size:.92em}
+#clawGuardPage .cg-warn{background:rgba(224,160,48,.1);border-color:rgba(224,160,48,.5)}
+#clawGuardPage .cg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(17em,1fr));gap:.2em 1.5em}
+#clawGuardPage .cg-steps td{padding:.25em .4em}
+#clawGuardPage .cg-steps input{width:5em}
+#clawGuardPage h3.cg-h{margin:1.2em 0 .4em;font-weight:500}
+#clawGuardPage .cg-empty{opacity:.6;padding:1em .3em}
+#clawGuardPage .cg-err{color:#e05050;margin:.4em 0;display:none}#clawGuardPage .cg-err.cg-on{display:block}
+</style>
+  <div data-role="content">
+    <div class="content-primary">
+      <div class="sectionTitleContainer flex align-items-center">
+        <h2 class="sectionTitle"><i class="md-icon" style="vertical-align:-.15em">shield</i> Guard</h2>
+      </div>
+      <p class="secondaryText cg-sub">Bans addresses after failed sign-ins, forbidden sign-ins or repeated failed API calls, using Emby's Remote IP filter (blacklist mode).</p>
+
+      <div class="cg-tabs">
+        <button type="button" class="cg-tab cg-on" data-tab="live">Live log</button>
+        <button type="button" class="cg-tab" data-tab="bans">Bans<span class="cg-badge cg-red cg-bans-count">0</span></button>
+        <button type="button" class="cg-tab" data-tab="rules">Rules</button>
+        <button type="button" class="cg-tab" data-tab="whitelist">Whitelist<span class="cg-badge cg-wl-count">0</span></button>
+        <button type="button" class="cg-tab" data-tab="settings">Settings</button>
+      </div>
+
+      <!-- LIVE -->
+      <div class="cg-panel cg-on" data-panel="live">
+        <div class="cg-cards">
+          <div class="cg-card"><b class="cg-f cg-c-failed">0</b><small>failed sign-ins, 24 h</small></div>
+          <div class="cg-card"><b class="cg-w cg-c-api">0</b><small>failed API calls (401/403), 24 h</small></div>
+          <div class="cg-card"><b class="cg-c-bans">0</b><small>active bans</small></div>
+          <div class="cg-card"><b class="cg-c-ips">0</b><small>distinct IPs, 24 h</small></div>
+          <div class="cg-card"><b class="cg-c-state">-</b><small class="cg-c-statetext">enforcement</small></div>
+        </div>
+        <div class="cg-bar">
+          <input type="text" class="cg-filter" placeholder="Filter IP / user / client / request" style="width:19em" />
+          <select class="cg-kind">
+            <option value="">All events</option>
+            <option value="fail">Failed + forbidden sign-ins</option>
+            <option value="ok">Successful sign-ins</option>
+            <option value="api">API 401/403</option>
+            <option value="ban">Bans / unbans / blocked</option>
+          </select>
+          <select class="cg-range">
+            <option value="24">Last 24 h</option>
+            <option value="168">Last 7 days</option>
+            <option value="720">Last 30 days</option>
+            <option value="0">Everything kept</option>
+          </select>
+          <span class="cg-ipfilter" style="display:none"><span class="cg-pill cg-n"></span> <button type="button" class="cg-btn cg-mini cg-clear-ip">Show all IPs</button></span>
+          <label class="cg-nowrap"><input type="checkbox" class="cg-pause" /> Pause</label>
+          <span class="cg-live">&#9679; live (4 s)</span>
+          <button type="button" class="cg-btn cg-import" title="Read embyserver*.txt (current + rotated) and add past failed sign-ins / 401 / 403 to Guard's log"><i class="md-icon">history</i><span>Import from Emby logs</span></button>
+          <span class="cg-import-last cg-dim" style="font-size:.85em"></span>
+        </div>
+        <table class="cg-t cg-live-t"><thead></thead><tbody class="cg-click"></tbody></table>
+        <div class="cg-empty cg-live-empty" style="display:none">No events in this range yet.</div>
+      </div>
+
+      <!-- BANS -->
+      <div class="cg-panel" data-panel="bans">
+        <div class="cg-bar">
+          <input type="text" class="cg-ban-ip" placeholder="IP or CIDR to ban" style="width:14em" />
+          <select class="cg-ban-dur">
+            <option value="60">1 hour</option><option value="1440" selected>1 day</option><option value="10080">7 days</option>
+            <option value="43200">30 days</option><option value="0">Permanent</option>
+          </select>
+          <input type="text" class="cg-ban-reason" placeholder="Reason (optional)" style="width:14em" />
+          <button type="button" class="cg-btn cg-pri cg-ban-add">Ban</button>
+        </div>
+        <div class="cg-err cg-ban-err"></div>
+        <table class="cg-t cg-bans-t"><thead></thead><tbody></tbody></table>
+        <div class="cg-empty cg-bans-empty" style="display:none">No active bans.</div>
+        <h3 class="cg-h">History <span class="cg-dim" style="font-size:.8em">(expired / lifted; used for escalation)</span></h3>
+        <table class="cg-t cg-hist-t"><thead></thead><tbody></tbody></table>
+      </div>
+
+      <!-- RULES -->
+      <div class="cg-panel" data-panel="rules">
+        <form class="cg-rules-form">
+          <h3 class="cg-h">Failed sign-ins</h3>
+          <div class="cg-grid">
+            <div class="inputContainer"><label class="inputLabel" for="cgSigninN">Failures before a ban</label><input is="emby-input" type="number" id="cgSigninN" min="1" max="1000" /></div>
+            <div class="inputContainer"><label class="inputLabel" for="cgSigninW">Within (minutes)</label><input is="emby-input" type="number" id="cgSigninW" min="1" max="10080" /></div>
+            <div class="inputContainer"><label class="inputLabel" for="cgUnknownN">Nonexistent usernames: tries before a ban (0 = off)</label><input is="emby-input" type="number" id="cgUnknownN" min="0" max="1000" /></div>
+          </div>
+          <div class="checkboxContainer"><label><input type="checkbox" is="emby-checkbox" id="cgUnknownInstant" /><span>Ban non-existent usernames instantly</span></label></div>
+          <div class="fieldDescription">When on, any sign-in attempt with a username that does not exist in Emby bans the address immediately (LAN and whitelisted addresses are still never banned). Off by default; the tries setting above then applies.</div>
+          <div class="fieldDescription">Forbidden sign-ins (account not allowed to connect remotely) count as failed sign-ins. A successful sign-in from the same address resets its counter.</div>
+
+          <h3 class="cg-h">Instant-ban usernames</h3>
+          <div class="inputContainer">
+            <label class="inputLabel" for="cgInstant">One per line or comma separated. A failed sign-in with one of these bans the address immediately.</label>
+            <textarea is="emby-textarea" id="cgInstant" rows="4" class="cg-in" style="width:100%;max-width:40em;box-sizing:border-box"></textarea>
+            <div class="fieldDescription cg-instant-note">Names that are real Emby users are skipped, so a real user mistyping their password never bans themselves. Only addresses are banned; Emby accounts are never locked.</div>
+          </div>
+
+          <h3 class="cg-h">Failed API calls (401 / 403)</h3>
+          <div class="checkboxContainer"><label><input is="emby-checkbox" type="checkbox" id="cgApiOn" /><span>Watch failed API calls</span></label></div>
+          <div class="cg-grid">
+            <div class="inputContainer"><label class="inputLabel" for="cgApiN">Failures before a ban</label><input is="emby-input" type="number" id="cgApiN" min="1" max="100000" /></div>
+            <div class="inputContainer"><label class="inputLabel" for="cgApiW">Within (minutes)</label><input is="emby-input" type="number" id="cgApiW" min="1" max="10080" /></div>
+          </div>
+          <div class="fieldDescription">Read from embyserver.txt ("Response 401/403 to &lt;ip&gt;"). Apps with an expired session produce a few 401s, so keep this well above the sign-in threshold.</div>
+
+          <h3 class="cg-h">Ban length (escalation)</h3>
+          <table class="cg-steps"><tbody class="cg-steps-body"></tbody></table>
+          <button type="button" class="cg-btn cg-mini cg-step-add">Add step</button>
+          <div class="cg-grid" style="margin-top:.8em">
+            <div class="inputContainer"><label class="inputLabel" for="cgReset">Escalation resets after (days without a ban, 0 = never)</label><input is="emby-input" type="number" id="cgReset" min="0" max="3650" /></div>
+            <div class="inputContainer"><label class="inputLabel" for="cgV6">IPv6: ban the whole prefix /N</label><input is="emby-input" type="number" id="cgV6" min="16" max="128" /></div>
+          </div>
+          <div class="checkboxContainer checkboxContainer-withDescription"><label><input is="emby-checkbox" type="checkbox" id="cgNotify" /><span>Send an Emby notification for every ban</span></label>
+            <div class="fieldDescription checkboxFieldDescription">Event "Guard: IP address banned". Enable it for your notifier (e.g. email) under Settings &rarr; Notifications.</div></div>
+          <div class="cg-err cg-rules-err"></div>
+          <button is="emby-button" type="submit" class="raised button-submit block"><span>Save rules</span></button>
+        </form>
+      </div>
+
+      <!-- WHITELIST -->
+      <div class="cg-panel" data-panel="whitelist">
+        <div class="cg-note">Home and LAN addresses are never filtered by Emby (loopback, 10/8, 172.16/12, 192.168/16, link-local, 100.64/10, IPv6 ULA/link-local and Emby's own "LAN networks"), so Guard never bans them and they don't need to be listed here. Your admin address is <b>not</b> trusted automatically.</div>
+        <div class="cg-bar">
+          <input type="text" class="cg-wl-cidr" placeholder="IP or CIDR (e.g. 203.0.113.0/24)" style="width:16em" />
+          <input type="text" class="cg-wl-note" placeholder="Note (optional)" style="width:14em" />
+          <button type="button" class="cg-btn cg-pri cg-wl-add">Add</button>
+          <button type="button" class="cg-btn cg-wl-mine">Add my current IP</button>
+        </div>
+        <div class="cg-err cg-wl-err"></div>
+        <table class="cg-t cg-wl-t"><thead><tr><th class="cg-ns">Address / range</th><th class="cg-ns">Note</th><th class="cg-ns"></th></tr></thead><tbody></tbody></table>
+        <div class="cg-empty cg-wl-empty">The whitelist is empty.</div>
+        <button is="emby-button" type="button" class="raised button-submit block cg-wl-save" style="margin-top:1em"><span>Save whitelist</span></button>
+      </div>
+
+      <!-- SETTINGS -->
+      <div class="cg-panel" data-panel="settings">
+        <form class="cg-settings-form">
+          <div class="checkboxContainer checkboxContainer-withDescription"><label><input is="emby-checkbox" type="checkbox" id="cgEnabled" /><span>Guard enabled (master switch)</span></label>
+            <div class="fieldDescription checkboxFieldDescription">Off: no new bans, and every entry Guard added to Emby's Remote IP filter is removed (entries you typed there yourself stay). Events are still logged. Bans are kept and come back when you switch it on again.</div></div>
+          <div class="cg-note cg-filter-note"></div>
+          <h3 class="cg-h">Country (optional, MaxMind GeoLite2)</h3>
+          <div class="cg-grid">
+            <div class="inputContainer"><label class="inputLabel" for="cgMmId">MaxMind account ID</label><input is="emby-input" type="text" id="cgMmId" autocomplete="off" /></div>
+            <div class="inputContainer"><label class="inputLabel" for="cgMmKey">MaxMind license key</label><input is="emby-input" type="password" id="cgMmKey" autocomplete="off" /></div>
+          </div>
+          <div class="fieldDescription">Free GeoLite account at maxmind.com (GeoLite EULA). With both set, Guard downloads GeoLite2-Country, refreshes it weekly and shows a Country column. Clear them to hide the column and delete the database.</div>
+          <p class="cg-geo-status cg-dim"></p>
+          <button type="button" class="cg-btn cg-geo-now">Download now</button>
+          <h3 class="cg-h">Log retention</h3>
+          <p class="cg-retention"></p>
+          <p class="cg-tail cg-dim" style="font-size:.9em"></p>
+          <div class="cg-err cg-settings-err"></div>
+          <button is="emby-button" type="submit" class="raised button-submit block"><span>Save settings</span></button>
+        </form>
+      </div>
+
+      <div class="cg-menu"></div>
+      <div class="cg-modal"><div class="cg-dlg"><h3 class="cg-dlg-title"></h3><div class="cg-dlg-body"></div><div class="cg-btns"><button type="button" class="cg-btn cg-dlg-no">Cancel</button><button type="button" class="cg-btn cg-pri cg-dlg-yes">OK</button></div></div></div>
+    </div>
+  </div>
+</div>

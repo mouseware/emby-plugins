@@ -1,0 +1,214 @@
+<div id="clawCustomItemUiPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-button,emby-checkbox,emby-input,emby-select" data-controller="__plugin/CustomItemUI.js">
+<style>
+#clawCustomItemUiPage .cdl-wrap{margin:.4em 0 1.2em}
+#clawCustomItemUiPage .cdl-tabs{display:flex;gap:.4em;margin:.6em 0 .8em;flex-wrap:wrap}
+#clawCustomItemUiPage .cdl-tab{font:inherit;cursor:pointer;padding:.45em 1em;border-radius:.3em;border:1px solid rgba(128,128,128,.35);background:rgba(128,128,128,.12);color:inherit}
+#clawCustomItemUiPage .cdl-tab.cdl-on{background:#52b54b;border-color:#52b54b;color:#fff;font-weight:600}
+#clawCustomItemUiPage .cdl-rows{display:flex;flex-direction:column;gap:0;user-select:none;-webkit-user-select:none}
+#clawCustomItemUiPage .cdl-row{display:flex;gap:.5em;align-items:stretch;padding:.45em;border:1px dashed rgba(128,128,128,.35);border-radius:.4em;background:rgba(128,128,128,.06)}
+#clawCustomItemUiPage .cdl-row.cdl-over{border-color:#e0a030;background:rgba(224,160,48,.08)}
+#clawCustomItemUiPage .cdl-row.cdl-target{border-color:#52b54b;border-style:solid;background:rgba(82,181,75,.08)}
+#clawCustomItemUiPage .cdl-rownum{flex:0 0 3.2em;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:85%;opacity:.75;text-align:center}
+#clawCustomItemUiPage .cdl-rownum small{opacity:.8}
+#clawCustomItemUiPage .cdl-row.cdl-over .cdl-rownum small{color:#e0a030;opacity:1;font-weight:600}
+#clawCustomItemUiPage .cdl-tiles{position:relative;flex:1 1 auto;display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:.45em;min-width:0}
+#clawCustomItemUiPage .cdl-tile{position:relative;min-width:0;box-sizing:border-box;padding:.45em .55em;border-radius:.35em;border:1px solid rgba(82,181,75,.6);background:rgba(82,181,75,.14);display:flex;flex-direction:column;gap:.35em}
+#clawCustomItemUiPage .cdl-tile.cdl-cond{border-style:dashed}
+#clawCustomItemUiPage .cdl-tile.cdl-hiddentile{opacity:.45;border-color:rgba(128,128,128,.5);background:rgba(128,128,128,.1)}
+#clawCustomItemUiPage .cdl-tile.cdl-dragging{opacity:.25}
+#clawCustomItemUiPage .cdl-tile.cdl-before::before{content:"";position:absolute;left:-.35em;top:0;bottom:0;width:3px;border-radius:2px;background:#52b54b}
+#clawCustomItemUiPage .cdl-tiles.cdl-end::after{content:"";position:absolute;right:-.3em;top:0;bottom:0;width:3px;border-radius:2px;background:#52b54b;pointer-events:none}
+#clawCustomItemUiPage .cdl-head{display:flex;align-items:center;gap:.4em;min-width:0}
+#clawCustomItemUiPage .cdl-grip{cursor:grab;touch-action:none;padding:.1em .3em;border-radius:.2em;opacity:.8;font-weight:700;letter-spacing:-.15em;background:rgba(128,128,128,.18)}
+#clawCustomItemUiPage .cdl-grip:active{cursor:grabbing}
+#clawCustomItemUiPage .cdl-name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1 1 auto;min-width:0}
+#clawCustomItemUiPage .cdl-body{display:flex;align-items:center;gap:.35em;flex-wrap:wrap;font-size:88%}
+#clawCustomItemUiPage .cdl-body select{font:inherit;color:inherit;background:rgba(0,0,0,.35);border:1px solid rgba(128,128,128,.4);border-radius:.25em;padding:.15em .25em}
+#clawCustomItemUiPage .cdl-mini{font:inherit;font-size:90%;cursor:pointer;color:inherit;background:rgba(128,128,128,.18);border:1px solid rgba(128,128,128,.35);border-radius:.25em;padding:.1em .45em;line-height:1.3}
+#clawCustomItemUiPage .cdl-mini:hover{background:rgba(128,128,128,.32)}
+#clawCustomItemUiPage .cdl-mv{display:inline-flex;gap:.2em;margin-left:auto}
+#clawCustomItemUiPage .cdl-note{font-size:78%;opacity:.65}
+#clawCustomItemUiPage .cdl-free{grid-column-end:span 1;border:1px dashed rgba(128,128,128,.3);border-radius:.35em;display:flex;align-items:center;justify-content:center;font-size:78%;opacity:.5}
+#clawCustomItemUiPage .cdl-newrow{height:.6em;margin:.1em 0;border-radius:.4em;box-sizing:border-box}
+#clawCustomItemUiPage .cdl-rows.cdl-isdragging .cdl-newrow{height:2.2em;border:2px dashed rgba(82,181,75,.45);display:flex;align-items:center;justify-content:center;font-size:82%;color:#7fd679}
+#clawCustomItemUiPage .cdl-rows.cdl-isdragging .cdl-newrow::after{content:"New row here"}
+#clawCustomItemUiPage .cdl-rows .cdl-newrow.cdl-newrow-end{height:2.4em;border:2px dashed rgba(82,181,75,.35);display:flex;align-items:center;justify-content:center;font-size:82%;color:#7fd679;margin-top:.4em}
+#clawCustomItemUiPage .cdl-rows .cdl-newrow.cdl-newrow-end::after{content:"Drop a section here to start a new row"}
+#clawCustomItemUiPage .cdl-newrow.cdl-target{background:rgba(82,181,75,.18);border-color:#52b54b!important;border-style:solid!important}
+#clawCustomItemUiPage .cdl-ghost{background:#26382a;position:fixed;z-index:10000;pointer-events:none;opacity:.92;box-shadow:0 .5em 1.4em rgba(0,0,0,.55);transform:rotate(-1deg)}
+#clawCustomItemUiPage .cdl-actions{display:flex;gap:.5em;flex-wrap:wrap;margin:.7em 0 0}
+#clawCustomItemUiPage .cdl-error{display:none;margin:.6em 0;padding:.5em .8em;border-radius:.3em;background:rgba(224,160,48,.14);border:1px solid rgba(224,160,48,.5);font-size:90%}
+#clawCustomItemUiPage .cdl-error.cdl-show{display:block}
+#clawCustomItemUiPage .cdl-table{border-collapse:collapse;width:100%;max-width:44em;font-size:92%}
+#clawCustomItemUiPage .cdl-table th,#clawCustomItemUiPage .cdl-table td{padding:.35em .5em;border-bottom:1px solid rgba(128,128,128,.2);text-align:left}
+#clawCustomItemUiPage .cdl-table th{font-weight:600;opacity:.75}
+#clawCustomItemUiPage .cdl-table input[type=number]{width:4.5em;font:inherit;color:inherit;background:rgba(0,0,0,.3);border:1px solid rgba(128,128,128,.4);border-radius:.25em;padding:.2em .3em}
+#clawCustomItemUiPage .cdl-table tr.cdl-over td{background:rgba(224,160,48,.08)}
+#clawCustomItemUiPage .cdl-opts{display:grid;grid-template-columns:repeat(auto-fill,minmax(15em,1fr));gap:0 1.5em}
+@media all and (max-width:40em){#clawCustomItemUiPage .cdl-tiles{grid-template-columns:repeat(6,minmax(0,1fr))}#clawCustomItemUiPage .cdl-tile{grid-column:span 6!important}}
+</style>
+  <div data-role="content">
+    <div class="content-primary">
+      <form class="clawCustomItemUiForm">
+        <div class="sectionTitleContainer flex align-items-center">
+          <h2 class="sectionTitle">Custom Item UI</h2>
+        </div>
+        <p class="secondaryText">Web client only. Moves Links up, wraps media paths for VLC, styles external links, and can rearrange the admin Dashboard. Re-injects on Emby startup after updates.</p>
+
+        <div class="checkboxContainer checkboxContainer-withDescription">
+          <label><input is="emby-checkbox" type="checkbox" id="txtEnabled" /><span>Enable plugin</span></label>
+        </div>
+
+        <h3 class="sectionTitle">Links section</h3>
+        <div class="checkboxContainer checkboxContainer-withDescription">
+          <label><input is="emby-checkbox" type="checkbox" id="txtEnableMoveLinksUp" /><span>Move Links section up</span></label>
+        </div>
+        <div class="inputContainer">
+          <label class="inputLabel" for="selectLinksInsertAfter">Insert after</label>
+          <select is="emby-select" id="selectLinksInsertAfter">
+            <option value="recordingEditor">Recording controls</option>
+            <option value="directors">Directors</option>
+            <option value="overview">Overview</option>
+          </select>
+        </div>
+        <div class="inputContainer">
+          <label class="inputLabel" for="txtLinksOrder">CSS order</label>
+          <input is="emby-input" type="number" id="txtLinksOrder" />
+        </div>
+        <div class="checkboxContainer checkboxContainer-withDescription">
+          <label><input is="emby-checkbox" type="checkbox" id="txtHideLinksHeading" /><span>Hide Links heading</span></label>
+        </div>
+        <div class="checkboxContainer checkboxContainer-withDescription">
+          <label><input is="emby-checkbox" type="checkbox" id="txtAlignLinksLeft" /><span>Left-align links with other detail items</span></label>
+        </div>
+        <div class="checkboxContainer checkboxContainer-withDescription">
+          <label><input is="emby-checkbox" type="checkbox" id="txtRemoveLinkCommas" /><span>Remove commas between links</span></label>
+        </div>
+        <div class="inputContainer">
+          <label class="inputLabel" for="txtLinksGap">Space between link buttons (e.g. .5em)</label>
+          <input is="emby-input" type="text" id="txtLinksGap" />
+        </div>
+
+        <h3 class="sectionTitle">VLC path links</h3>
+        <div class="checkboxContainer checkboxContainer-withDescription">
+          <label><input is="emby-checkbox" type="checkbox" id="txtEnableVlcPathLinks" /><span>Make media paths open in VLC</span></label>
+        </div>
+        <div class="inputContainer">
+          <label class="inputLabel" for="txtVlcUrlTemplate">URL template ({path} = encoded file path)</label>
+          <input is="emby-input" type="text" id="txtVlcUrlTemplate" />
+        </div>
+        <div class="checkboxContainer checkboxContainer-withDescription">
+          <label><input is="emby-checkbox" type="checkbox" id="txtShowVlcIcon" /><span>Show VLC icon</span></label>
+        </div>
+
+        <h3 class="sectionTitle">External link buttons</h3>
+        <div class="checkboxContainer checkboxContainer-withDescription">
+          <label><input is="emby-checkbox" type="checkbox" id="txtEnableRaisedLinkButtons" /><span>Style external links as raised buttons</span></label>
+        </div>
+        <div class="inputContainer">
+          <label class="inputLabel" for="txtButtonBorderRadius">Button border radius</label>
+          <input is="emby-input" type="text" id="txtButtonBorderRadius" />
+        </div>
+        <div class="inputContainer">
+          <label class="inputLabel" for="txtButtonTextColor">Button text color</label>
+          <div style="display:flex;gap:.75em;align-items:center">
+            <input is="emby-input" type="text" id="txtButtonTextColor" placeholder="#ffffff" style="flex:1" />
+            <input type="color" id="pickButtonTextColor" style="width:3em;height:2.2em;border:0;background:none;cursor:pointer" />
+          </div>
+          <div class="fieldDescription">Any CSS color (#ffffff, white, rgb(...)). Leave blank to use Emby's default.</div>
+        </div>
+        <div class="inputContainer">
+          <label class="inputLabel" for="txtButtonCustomCss">Custom button CSS</label>
+          <textarea is="emby-textarea" id="txtButtonCustomCss" rows="5" style="font-family:monospace" placeholder="background: #2b2b2b; border: 1px solid #555; font-weight: 500;"></textarea>
+          <div class="fieldDescription">Plain declarations are applied to the link buttons, for example <code>background:#333; padding:.4em 1em;</code>. Full rules with selectors are used as written, for example <code>.itemLinks a:hover { background:#52b54b; }</code>.</div>
+        </div>
+
+        <h3 class="sectionTitle">Dashboard layout</h3>
+        <p class="secondaryText">Rearranges the admin Dashboard home page (Server info, Alerts, Now playing, Activity, ...). Each row is 12 columns wide. Sections Emby only shows when needed (Running tasks, Active recordings, Maintenance, Now playing while nothing plays) take no space, and with "grow to fill" their row-mates expand. If Emby's dashboard markup changes and a section can't be found, the dashboard is left untouched.</p>
+        <div class="checkboxContainer checkboxContainer-withDescription">
+          <label><input is="emby-checkbox" type="checkbox" id="chkEnableDashboardLayout" /><span>Enable custom dashboard layout</span></label>
+          <div class="fieldDescription checkboxFieldDescription">Off = Emby's stock dashboard, exactly as Emby renders it.</div>
+        </div>
+        <div class="cdl-wrap">
+          <div class="cdl-tabs" role="tablist">
+            <button type="button" class="cdl-tab cdl-on" data-tab="builder" role="tab">Row builder</button>
+            <button type="button" class="cdl-tab" data-tab="table" role="tab">Table (number boxes)</button>
+          </div>
+          <div class="cdl-error"></div>
+          <div class="cdl-pane" data-pane="builder">
+            <div class="cdl-rows"></div>
+            <div class="fieldDescription">Drag a section by its <b>&#8942;&#8942;</b> handle into another row, between sections, or onto "new row". The arrow buttons do the same from the keyboard. Width is in twelfths of the row.</div>
+          </div>
+          <div class="cdl-pane" data-pane="table" style="display:none">
+            <table class="cdl-table">
+              <thead><tr><th>Section</th><th>Visible</th><th>Row</th><th>Order in row</th><th>Width (of 12)</th></tr></thead>
+              <tbody class="cdl-tbody"></tbody>
+            </table>
+            <div class="fieldDescription">Rows and orders are renumbered (1, 2, 3...) when you leave a field. A row's widths must add up to 12 or less.</div>
+          </div>
+          <div class="cdl-actions">
+            <button is="emby-button" type="button" class="raised cdl-reset"><span>Reset to default layout</span></button>
+          </div>
+        </div>
+        <div class="cdl-opts">
+          <div class="inputContainer">
+            <label class="inputLabel" for="txtDashboardStackBelowPx">Stack in one column below (px)</label>
+            <input is="emby-input" type="number" id="txtDashboardStackBelowPx" min="320" max="4000" step="10" />
+          </div>
+          <div class="inputContainer">
+            <label class="inputLabel" for="txtDashboardAlertsLimit">Alerts entries shown</label>
+            <input is="emby-input" type="number" id="txtDashboardAlertsLimit" min="1" max="100" />
+          </div>
+          <div class="inputContainer">
+            <label class="inputLabel" for="txtDashboardActivityLimit">Activity entries shown</label>
+            <input is="emby-input" type="number" id="txtDashboardActivityLimit" min="1" max="100" />
+          </div>
+          <div class="inputContainer">
+            <label class="inputLabel" for="selectDashboardNowPlayingPerRow">Now playing cards per row</label>
+            <select is="emby-select" id="selectDashboardNowPlayingPerRow">
+              <option value="0">Automatic (Emby default)</option>
+              <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+              <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+            </select>
+          </div>
+        </div>
+        <div class="checkboxContainer checkboxContainer-withDescription">
+          <label><input is="emby-checkbox" type="checkbox" id="chkDashboardFillRows" /><span>Grow sections to fill space left by hidden row-mates</span></label>
+          <div class="fieldDescription checkboxFieldDescription">Example: Now playing (8) + Running tasks (4) &rarr; Now playing is full width while no task runs.</div>
+        </div>
+
+        <div class="checkboxContainer checkboxContainer-withDescription">
+          <label><input is="emby-checkbox" type="checkbox" id="chkDashboardActivityTable" /><span>Show Activity as a table</span></label>
+          <div class="fieldDescription checkboxFieldDescription">Icon, user, action, item (click to open), device, date. Click a column header to sort. Same entries and refresh as Emby's list.</div>
+        </div>
+        <div class="checkboxContainer checkboxContainer-withDescription">
+          <label><input is="emby-checkbox" type="checkbox" id="chkDashboardAlertsTable" /><span>Show Alerts as a table</span></label>
+          <div class="fieldDescription checkboxFieldDescription">Icon, event (with details underneath when Emby has them), date.</div>
+        </div>
+
+        <h3 class="sectionTitle">Who it applies to</h3>
+        <p class="secondaryText">Item-page tweaks only. The dashboard layout applies to every admin (the Dashboard is admin-only).</p>
+        <div class="inputContainer">
+          <label class="inputLabel" for="selectApplyMode">Apply mode</label>
+          <select is="emby-select" id="selectApplyMode">
+            <option value="all">All users</option>
+            <option value="admins">Admins only</option>
+            <option value="allowlist">Allowlist</option>
+          </select>
+        </div>
+        <div class="inputContainer">
+          <label class="inputLabel" for="txtAllowedUserNames">Allowed user names (comma-separated)</label>
+          <input is="emby-input" type="text" id="txtAllowedUserNames" />
+        </div>
+        <div class="inputContainer">
+          <label class="inputLabel" for="txtAllowedUserIds">Allowed user IDs (comma-separated, optional)</label>
+          <input is="emby-input" type="text" id="txtAllowedUserIds" />
+        </div>
+
+        <div>
+          <button is="emby-button" type="submit" class="raised button-submit block"><span>Save</span></button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
