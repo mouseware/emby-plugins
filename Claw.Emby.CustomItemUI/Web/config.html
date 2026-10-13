@@ -46,6 +46,13 @@
 #clawCustomItemUiPage .cdl-table tr.cdl-over td{background:rgba(224,160,48,.08)}
 #clawCustomItemUiPage .cdl-opts{display:grid;grid-template-columns:repeat(auto-fill,minmax(15em,1fr));gap:0 1.5em}
 @media all and (max-width:40em){#clawCustomItemUiPage .cdl-tiles{grid-template-columns:repeat(6,minmax(0,1fr))}#clawCustomItemUiPage .cdl-tile{grid-column:span 6!important}}
+#clawCustomItemUiPage .ct-tabs{display:flex;gap:.3em;border-bottom:1px solid rgba(128,128,128,.3);margin:.4em 0 1em;flex-wrap:wrap}
+#clawCustomItemUiPage .ct-tab{font:inherit;color:inherit;background:none;border:0;border-bottom:2px solid transparent;padding:.6em 1.1em;cursor:pointer;opacity:.7}
+#clawCustomItemUiPage .ct-tab.ct-on{opacity:1;border-bottom-color:#52b54b}
+#clawCustomItemUiPage .ct-pane > .sectionTitle:first-child{margin-top:.2em}
+#clawCustomItemUiPage .ct-about td{padding:.2em 1.4em .2em 0;vertical-align:top}
+#clawCustomItemUiPage .ct-about td:first-child{opacity:.7}
+#clawCustomItemUiPage .ct-save{margin-top:1.4em}
 </style>
   <div data-role="content">
     <div class="content-primary">
@@ -55,10 +62,13 @@
         </div>
         <p class="secondaryText">Web client only. Moves Links up, wraps media paths for VLC, styles external links, and can rearrange the admin Dashboard. Re-injects on Emby startup after updates.</p>
 
-        <div class="checkboxContainer checkboxContainer-withDescription">
-          <label><input is="emby-checkbox" type="checkbox" id="txtEnabled" /><span>Enable plugin</span></label>
+        <div class="ct-tabs" role="tablist">
+          <button type="button" class="ct-tab ct-on" data-cttab="item" role="tab">Item pages</button>
+          <button type="button" class="ct-tab" data-cttab="dashboard" role="tab">Dashboard</button>
+          <button type="button" class="ct-tab" data-cttab="general" role="tab">General</button>
         </div>
 
+        <div class="ct-pane" data-ctpane="item">
         <h3 class="sectionTitle">Links section</h3>
         <div class="checkboxContainer checkboxContainer-withDescription">
           <label><input is="emby-checkbox" type="checkbox" id="txtEnableMoveLinksUp" /><span>Move Links section up</span></label>
@@ -123,6 +133,28 @@
           <div class="fieldDescription">Plain declarations are applied to the link buttons, for example <code>background:#333; padding:.4em 1em;</code>. Full rules with selectors are used as written, for example <code>.itemLinks a:hover { background:#52b54b; }</code>.</div>
         </div>
 
+        <h3 class="sectionTitle">Who it applies to</h3>
+        <p class="secondaryText">Item-page tweaks only. The dashboard layout applies to every admin (the Dashboard is admin-only).</p>
+        <div class="inputContainer">
+          <label class="inputLabel" for="selectApplyMode">Apply mode</label>
+          <select is="emby-select" id="selectApplyMode">
+            <option value="all">All users</option>
+            <option value="admins">Admins only</option>
+            <option value="allowlist">Allowlist</option>
+          </select>
+        </div>
+        <div class="inputContainer">
+          <label class="inputLabel" for="txtAllowedUserNames">Allowed user names (comma-separated)</label>
+          <input is="emby-input" type="text" id="txtAllowedUserNames" />
+        </div>
+        <div class="inputContainer">
+          <label class="inputLabel" for="txtAllowedUserIds">Allowed user IDs (comma-separated, optional)</label>
+          <input is="emby-input" type="text" id="txtAllowedUserIds" />
+        </div>
+
+        </div>
+
+        <div class="ct-pane" data-ctpane="dashboard" style="display:none">
         <h3 class="sectionTitle">Dashboard layout</h3>
         <p class="secondaryText">Rearranges the admin Dashboard home page (Server info, Alerts, Now playing, Activity, ...). Each row is 12 columns wide. Sections Emby only shows when needed (Running tasks, Active recordings, Maintenance, Now playing while nothing plays) take no space, and with "grow to fill" their row-mates expand. If Emby's dashboard markup changes and a section can't be found, the dashboard is left untouched.</p>
         <div class="checkboxContainer checkboxContainer-withDescription">
@@ -186,26 +218,25 @@
           <div class="fieldDescription checkboxFieldDescription">Icon, event (with details underneath when Emby has them), date.</div>
         </div>
 
-        <h3 class="sectionTitle">Who it applies to</h3>
-        <p class="secondaryText">Item-page tweaks only. The dashboard layout applies to every admin (the Dashboard is admin-only).</p>
-        <div class="inputContainer">
-          <label class="inputLabel" for="selectApplyMode">Apply mode</label>
-          <select is="emby-select" id="selectApplyMode">
-            <option value="all">All users</option>
-            <option value="admins">Admins only</option>
-            <option value="allowlist">Allowlist</option>
-          </select>
-        </div>
-        <div class="inputContainer">
-          <label class="inputLabel" for="txtAllowedUserNames">Allowed user names (comma-separated)</label>
-          <input is="emby-input" type="text" id="txtAllowedUserNames" />
-        </div>
-        <div class="inputContainer">
-          <label class="inputLabel" for="txtAllowedUserIds">Allowed user IDs (comma-separated, optional)</label>
-          <input is="emby-input" type="text" id="txtAllowedUserIds" />
         </div>
 
-        <div>
+        <div class="ct-pane" data-ctpane="general" style="display:none">
+          <h3 class="sectionTitle">General</h3>
+        <div class="checkboxContainer checkboxContainer-withDescription">
+          <label><input is="emby-checkbox" type="checkbox" id="txtEnabled" /><span>Enable plugin</span></label>
+          <div class="fieldDescription checkboxFieldDescription">Off = no item-page or dashboard changes. The script stays injected but does nothing.</div>
+        </div>
+
+          <h3 class="sectionTitle">About</h3>
+          <table class="ct-about"><tbody>
+            <tr><td>Version</td><td class="ct-version">&ndash;</td></tr>
+            <tr><td>Script</td><td>claw-custom-item-ui.js, injected into the web client's index.html at Emby startup (re-applied after Emby updates).</td></tr>
+            <tr><td>Source</td><td><a is="emby-linkbutton" class="button-link" style="color:#52b54b" href="https://github.com/mouseware/emby-plugins" target="_blank" rel="noopener">github.com/mouseware/emby-plugins</a></td></tr>
+          </tbody></table>
+          <div class="fieldDescription">After changing settings, refresh other open browser tabs to pick them up.</div>
+        </div>
+
+        <div class="ct-save">
           <button is="emby-button" type="submit" class="raised button-submit block"><span>Save</span></button>
         </div>
       </form>

@@ -405,17 +405,49 @@ define([], function () {
     });
   }
 
+  // Inner tabs (Item pages / Dashboard / General). One form and one Save button cover every tab.
+  var TAB_KEY = "claw.customitemui.settingsTab";
+  function showTab(view, t) {
+    var ok = false;
+    view.querySelectorAll(".ct-tab").forEach(function (b) { if (b.getAttribute("data-cttab") === t) ok = true; });
+    if (!ok) t = "item";
+    view.querySelectorAll(".ct-tab").forEach(function (b) {
+      var on = b.getAttribute("data-cttab") === t;
+      b.classList.toggle("ct-on", on); b.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    view.querySelectorAll(".ct-pane").forEach(function (p) { p.style.display = p.getAttribute("data-ctpane") === t ? "" : "none"; });
+    try { localStorage.setItem(TAB_KEY, t); } catch (e) { }
+  }
+  function wireTabs(view) {
+    view.querySelectorAll(".ct-tab").forEach(function (b) {
+      b.addEventListener("click", function () { showTab(view, b.getAttribute("data-cttab")); });
+    });
+    var last = null;
+    try { last = localStorage.getItem(TAB_KEY); } catch (e) { }
+    showTab(view, last || "item");
+  }
+  function showVersion(view) {
+    var el = view.querySelector(".ct-version");
+    if (!el || typeof ApiClient === "undefined" || !ApiClient.getInstalledPlugins) return;
+    ApiClient.getInstalledPlugins().then(function (list) {
+      var me = (list || []).filter(function (x) { return (x.Id || "").toLowerCase() === pluginId; })[0];
+      if (me && me.Version) el.textContent = me.Version;
+    }, function () { });
+  }
+
   // Emby require() uses deps[0] as the controller constructor.
   // Do NOT use exports.default here — that makes .prototype undefined and crashes on onResume.
   function View(view, params) {
     wireColorPicker(view);
     wireDash(view);
+    wireTabs(view);
     var form = view.querySelector("form");
     if (form) {
       form.addEventListener("submit", function (e) {
         e.preventDefault();
         var over = overRows(dashState(view).list);
         if (over.length) {
+          showTab(view, "dashboard");
           var msg = "Dashboard layout: " + over.map(function (x) { return "row " + x.row + " adds up to " + x.sum + "/12"; }).join(", ") + ". Fix the widths before saving.";
           if (typeof Dashboard !== "undefined" && Dashboard.alert) Dashboard.alert({ message: msg }); else window.alert(msg);
           return false;
@@ -434,6 +466,7 @@ define([], function () {
         function (config) {
           loadPage(view, config);
           Dashboard.hideLoadingMsg();
+          showVersion(view);
         },
         function () {
           loadPage(view, {});

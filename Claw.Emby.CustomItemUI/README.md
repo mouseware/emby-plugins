@@ -83,7 +83,7 @@ Default layout:
 
 ## Changelog
 
-
+- **1.2.3.0**: The settings page is split into tabs like Guard's: **Item pages** (Links, VLC path links, external link buttons, who it applies to), **Dashboard** (layout editor, Activity/Alerts table options) and **General** (master switch, version, about). The last tab you used is remembered in this browser (localStorage `claw.customitemui.settingsTab`). One **Save** button saves every tab, and the settings themselves haven't changed. If a dashboard row is over 12 columns when you save, the page switches to the Dashboard tab and shows the error.
 - **1.2.2.0**: Dashboard Activity and Alerts tables have resizable columns. Drag the right edge of any column header to resize it. Widths are saved per table in this browser (localStorage `claw.customitemui.cols.activity / .alerts`). Double-click an edge to reset the table to automatic widths.
 
 - **1.1.1**: Item page fix. Links (and VLC path links) are now applied on every item page, not only the first one opened after a browser refresh. Each item view is handled separately, a debounced observer on the visible item view re-applies the changes whenever Emby fills in or re-renders the links or media info (new items, metadata refresh, back navigation), and the observer is disconnected when the view is hidden.
