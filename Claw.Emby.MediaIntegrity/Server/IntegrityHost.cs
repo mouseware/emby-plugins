@@ -50,6 +50,39 @@ namespace Claw.Emby.MediaIntegrity.Server
         public string LastSkipReason { get; private set; }
         public bool ScanRunning => _scanRunning != 0;
 
+        // ---------------- disk enumeration cache ----------------
+        private Timer _discoverTimer;
+        private int _discovering;
+        private string _discoverReason = "startup";
+        public bool Discovering => _discovering != 0;
+        public DiscoveryResult LastDiscovery { get; private set; }
+        public DateTime? DiscoveryRequested { get; private set; }
+
+        /// <summary>Schedules a refresh of the file list (debounced: library changes arrive in bursts).</summary>
+        public void RequestDiscovery(string reason, int delayMs)
+        {
+            _discoverReason = reason; DiscoveryRequested = DateTime.UtcNow.AddMilliseconds(delayMs);
+            _discoverTimer?.Change(delayMs, Timeout.Infinite);
+        }
+
+        private void RunDiscovery()
+        {
+            if (_disposed || Interlocked.Exchange(ref _discovering, 1) == 1) return;
+            try
+            {
+                DiscoveryRequested = null;
+                var r = FileDiscovery.Run(Store, Roots(), ExcludeRegex(), _discoverReason, CancellationToken.None);
+                LastDiscovery = r;
+                try { Store.SetMeta("discovery", System.Text.Json.JsonSerializer.Serialize(r)); } catch { }
+                _log.Info("Media Integrity: file list refreshed ({0}): {1} files on disk in {2} folders ({3} offline), {4} not yet hashed added, {5} gone removed, {6:0.0}s",
+                    r.Reason, r.OnDisk, r.Roots, r.RootsOffline, r.Added, r.Removed, r.Seconds);
+                foreach (var e in r.Errors.Take(5)) _log.Warn("Media Integrity: file list: {0}", e);
+            }
+            catch (Exception ex) { _log.ErrorException("Media Integrity: file list refresh", ex); }
+            finally { Interlocked.Exchange(ref _discovering, 0); }
+        }
+        private void OnLibraryChanged(object sender, ItemChangeEventArgs e) { if (!_disposed) RequestDiscovery("library change", 60000); }
+
         public IntegrityHost(IServerConfigurationManager config, ILibraryManager library, ISessionManager sessions, INotificationManager notifications, ITaskManager tasks, ILogManager logManager)
         {
             _config = config; _library = library; _sessions = sessions; _notifications = notifications; _tasks = tasks;
@@ -113,14 +146,20 @@ namespace Claw.Emby.MediaIntegrity.Server
             else try { Import = System.Text.Json.JsonSerializer.Deserialize<ImportResult>(imp); } catch { }
 
             _library.ItemAdded += OnItemAdded;
+            _library.ItemRemoved += OnLibraryChanged;
+            try { LastDiscovery = System.Text.Json.JsonSerializer.Deserialize<DiscoveryResult>(Store.GetMeta("discovery") ?? "null"); } catch { }
+            _discoverTimer = new Timer(_ => RunDiscovery(), null, Timeout.Infinite, Timeout.Infinite);
+            RequestDiscovery("startup", 90000);
             _queueThread = new Thread(QueueLoop) { IsBackground = true, Name = "MediaIntegrity queue", Priority = ThreadPriority.Lowest };
             _queueThread.Start();
             _queueTimer = new Timer(_ => _queueWake.Set(), null, 15000, 30000);
             Manual = new ManualCheckQueue(Engine, ManualGate)
             {
                 OnError = (path, ex) => _log.ErrorException("Media Integrity: manual check " + (path ?? ""), ex),
-                JobFinished = j => _log.Info("Media Integrity: manual check \"{0}\" {1}: {2} files, {3} ok, {4} new, {5} changed, {6} modified, {7} missing, {8} unreadable",
-                    j.Label, j.State, j.Done, j.Ok, j.New, j.Changed, j.Modified, j.Missing, j.Unreadable)
+                Queued = () => { try { _tasks.QueueIfNotRunning<ManualCheckTask>(); } catch (Exception ex) { _log.ErrorException("Media Integrity: start manual task", ex); } },
+                JobStarted = j => { try { j.LogId = Store.NewScan(j.Source == "item" ? "item" : "manual", j.Started ?? DateTime.UtcNow, null, j.Label, j.Source).Id; } catch (Exception ex) { _log.ErrorException("Media Integrity: activity entry", ex); } },
+                JobFinished = j => { LogJob(j); _log.Info("Media Integrity: manual check \"{0}\" {1}: {2} files, {3} ok, {4} new, {5} changed, {6} modified, {7} missing, {8} unreadable",
+                    j.Label, j.State, j.Done, j.Ok, j.New, j.Changed, j.Modified, j.Missing, j.Unreadable); }
             };
             Manual.Start();
             _log.Info("Media Integrity started: {0} files, {1} checks, {2} queued", Store.FileCount, Store.CheckCount, Store.QueueLength);
@@ -129,6 +168,7 @@ namespace Claw.Emby.MediaIntegrity.Server
         public void ApplyConfiguration()
         {
             var c = Cfg;
+            if (_discoverTimer != null) RequestDiscovery("settings changed", 5000);
             if (Engine != null) Engine.Options = new ScanOptions { Exclude = c.Exclude ?? new string[0], AutoAcceptModifiedExtensions = c.AutoAcceptModifiedExtensions ?? new string[0] };
         }
 
@@ -154,6 +194,8 @@ namespace Claw.Emby.MediaIntegrity.Server
         {
             _disposed = true;
             _library.ItemAdded -= OnItemAdded;
+            _library.ItemRemoved -= OnLibraryChanged;
+            _discoverTimer?.Dispose();
             _queueTimer?.Dispose();
             try { Manual?.Dispose(); } catch { }
             try { _scanStop?.Cancel(); } catch { }
@@ -213,6 +255,7 @@ namespace Claw.Emby.MediaIntegrity.Server
             try
             {
                 bool forced = _forceNextRun; _forceNextRun = false;
+                Engine.ScanTrigger = forced ? "manual" : "scheduled";
                 var minDays = Cfg.MinDaysBetweenScheduledScans;
                 var last = LastCompleteVerification();
                 bool resumable = Store.ResumableScan("full") != null;
@@ -292,21 +335,65 @@ namespace Claw.Emby.MediaIntegrity.Server
             try
             {
                 var item = e?.Item;
-                if (item == null || item is MediaBrowser.Controller.Entities.Folder || !item.IsFileProtocol || string.IsNullOrEmpty(item.Path) || !Cfg.HashNewItems) return;
+                if (item == null) return;
+                RequestDiscovery("library change", 60000);
+                if (!item.IsFileProtocol || string.IsNullOrEmpty(item.Path) || !Cfg.HashNewItems) return;
+                if (item is MediaBrowser.Controller.Entities.CollectionFolder || item is MediaBrowser.Controller.Entities.AggregateFolder) return;
                 var roots = Roots();
                 if (!roots.Any(r => item.Path.StartsWith(IntegrityStore.WithSep(r.Path), StringComparison.OrdinalIgnoreCase))) return;
-                Store.Enqueue(item.Path, "added", DateTime.UtcNow.AddMinutes(2), DateTime.UtcNow);
+                foreach (var p in ManualCheckQueue.NewItemFiles(item.Path, item is MediaBrowser.Controller.Entities.Folder, ExcludeRegex()))
+                    Store.Enqueue(p, "added", DateTime.UtcNow.AddMinutes(2), DateTime.UtcNow);
             }
             catch (Exception ex) { _log.ErrorException("Media Integrity: queue new item", ex); }
+        }
+
+        /// <summary>Closes the Activity entry of a manual check job (combined batches are one entry).</summary>
+        private void LogJob(CheckJob j)
+        {
+            try
+            {
+                if (j.LogId == null) return;
+                var s = Store.GetScan(j.LogId.Value); if (s == null) return;
+                s.State = j.State == "done" ? "completed" : j.State == "cancelled" ? "stopped" : j.State;
+                s.Ended = j.Ended ?? DateTime.UtcNow; s.Label = j.Label;
+                s.Total = j.Total; s.Done = j.Done; s.BytesTotal = j.BytesTotal; s.BytesDone = j.BytesDone; s.BytesHashed = j.BytesDone;
+                s.Matched = j.Ok; s.New = j.New; s.Changed = j.Changed; s.Modified = j.Modified; s.Missing = j.Missing; s.Unreadable = j.Unreadable;
+                s.ActiveSeconds = ((s.Ended ?? DateTime.UtcNow) - s.Started).TotalSeconds;
+                s.Note = (j.Batches > 1 ? j.Batches + " batches combined" : "") + (j.Absent > 0 ? (j.Batches > 1 ? "; " : "") + j.Absent + " not on disk (untracked)" : "");
+                Store.SaveScan(s);
+            }
+            catch (Exception ex) { _log.ErrorException("Media Integrity: activity entry", ex); }
+        }
+
+        /// <summary>New library items are rolled up into one Activity entry per day instead of one per file.</summary>
+        private void LogNewMedia(ScanRecord log, ScanEngine.Outcome o, long bytes)
+        {
+            if (log == null) return;
+            try
+            {
+                var s = Store.GetScan(log.Id); if (s == null) return;
+                s.Total++; s.Done++; s.BytesTotal += bytes; s.BytesDone += bytes; s.Ended = DateTime.UtcNow; s.State = "completed";
+                switch (o?.Result)
+                {
+                    case "new": case CheckResult.Baseline: s.New++; break;
+                    case CheckResult.Match: case CheckResult.ModifiedAccepted: s.Matched++; break;
+                    case CheckResult.Changed: s.Changed++; break;
+                    case CheckResult.Modified: s.Modified++; break;
+                    case CheckResult.Missing: s.Missing++; break;
+                    default: s.Unreadable++; break;
+                }
+                Store.SaveScan(s);
+            }
+            catch { }
         }
 
         // ---------------- manual checks ----------------
         private System.Text.RegularExpressions.Regex ExcludeRegex() => ScanEngine.GlobsToRegex(Cfg.Exclude ?? new string[0]);
 
-        public CheckJob CheckPaths(string label, IList<string> files, IList<string> dirs, bool companions)
+        public CheckJob CheckPaths(string label, IList<string> files, IList<string> dirs, bool companions, string source = "manual")
         {
             var paths = ManualCheckQueue.ExpandTargets(files, dirs, ExcludeRegex(), d => Store.PathsUnder(d, null), companions);
-            return Snap(Manual.Enqueue(label, paths));
+            return Snap(Manual.Enqueue(label, paths, source));
         }
         /// <summary>Serializable snapshot of a job (the live object keeps changing on the worker thread).</summary>
         public CheckJob Snap(CheckJob j) => Manual.Get(j.Id, int.MaxValue) ?? j;
@@ -340,7 +427,7 @@ namespace Claw.Emby.MediaIntegrity.Server
                 }
             }
             var label = names.Count == 0 ? "Item check" : names.Count == 1 ? names[0] : names[0] + " and " + (names.Count - 1) + " more";
-            return CheckPaths(label, files, dirs, true);
+            return CheckPaths(label, files, dirs, true, "item");
         }
 
         public void Recheck(FileRecord f) { Store.Enqueue(f.Path, "recheck", DateTime.UtcNow, DateTime.UtcNow); _queueWake.Set(); }
@@ -366,7 +453,13 @@ namespace Claw.Emby.MediaIntegrity.Server
                         }
                         catch { }
                         QueueCurrent = path;
-                        try { Engine.CheckFile(path, reason, null, QueueGate, CancellationToken.None); }
+                        try
+                        {
+                            var log = reason == "added" ? Store.NewMediaLog(DateTime.UtcNow) : null;
+                            long len = 0; try { len = new FileInfo(path).Length; } catch { }
+                            var o = Engine.CheckFile(path, reason, null, QueueGate, CancellationToken.None, null, null, log?.Id);
+                            LogNewMedia(log, o, len);
+                        }
                         catch (Exception ex) { _log.ErrorException("Media Integrity: hashing " + path, ex); }
                         finally { QueueCurrent = null; }
                         Store.Dequeue(id);

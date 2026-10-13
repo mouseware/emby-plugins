@@ -94,7 +94,7 @@ define([], function () {
   var API = "ClawMediaIntegrity/";
   var TAB_KEY = "claw.mediaintegrity.tab", GROUP_KEY = "claw.mediaintegrity.groupBy";
   var PAGE = 100, LIVE_MS = 700;
-  var STATUS_FILTERS = [["", "All statuses"], ["ok", "OK"], ["problems", "Problems"], ["changed", "Changed"], ["modified", "Modified"], ["missing", "Missing"], ["unreadable", "Unreadable"], ["never_hashed", "Never verified"], ["pending", "Not yet hashed (any)"], ["ignored", "Ignored"]];
+  var STATUS_FILTERS = [["", "All statuses"], ["ok", "OK"], ["problems", "Problems"], ["changed", "Changed"], ["modified", "Modified"], ["missing", "Missing"], ["unreadable", "Unreadable"], ["never_hashed", "Never verified"], ["pending", "Not yet hashed"], ["ignored", "Ignored"]];
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -143,7 +143,7 @@ define([], function () {
     modified: { label: "Modified", icon: "edit_document", cls: "mi-w" },
     missing: { label: "Missing", icon: "help", cls: "mi-w" },
     unreadable: { label: "Unreadable", icon: "block", cls: "mi-f" },
-    pending: { label: "Queued", icon: "schedule", cls: "" },
+    pending: { label: "Not yet hashed", icon: "schedule", cls: "" },
     never_hashed: { label: "Never verified", icon: "schedule", cls: "" }
   };
   var RESULT = {
@@ -199,7 +199,20 @@ define([], function () {
       q(".mi-c-last").textContent = s.LastCompleteVerification ? ago(s.LastCompleteVerification, now) : "never";
       q(".mi-c-last-sub").textContent = s.LastCompleteVerification ? fmtDate(s.LastCompleteVerification) : "";
       q(".mi-c-pending").textContent = fmtNum((c.pending || 0) + (c.never_hashed || 0));
-      q(".mi-c-queue").textContent = s.QueueLength ? s.QueueLength + " in background queue" + (s.QueueCurrent ? " (hashing)" : "") : (c.never_hashed ? fmtNum(c.never_hashed) + " never verified (old database)" : "background queue empty");
+      // "(old database)" is shown only while imported files without any verified hash remain (status never_hashed);
+      // a file leaves that status as soon as the plugin hashes it, so the note disappears when the count reaches 0.
+      var qparts = [];
+      if (s.QueueLength) qparts.push(fmtNum(s.QueueLength) + " in background queue" + (s.QueueCurrent ? " (hashing)" : ""));
+      if (c.never_hashed) qparts.push(fmtNum(c.never_hashed) + " never verified (old database)");
+      q(".mi-c-queue").textContent = qparts.join(" · ") || ((c.pending || 0) ? "not hashed yet" : "background queue empty");
+      var pend = (c.pending || 0) + (c.never_hashed || 0);
+      q(".mi-pend-note").style.display = pend ? "" : "none";
+      q(".mi-pend-text").textContent = fmtNum(pend) + " file" + (pend === 1 ? " has" : "s have") + " no baseline yet (not yet hashed" + (c.never_hashed ? ", " + fmtNum(c.never_hashed) + " never verified by the old script" : "") + "). They are not problems, but corruption cannot be detected until they are hashed.";
+      var fl = s.FileList || {}, last = fl.Last;
+      q(".mi-fl-info").textContent = fl.Running ? "Reading file list from disk…" : last ? fmtNum(last.OnDisk) + " files on disk, read " + ago(last.Time, now) + (last.RootsOffline ? " (" + last.RootsOffline + " folder" + (last.RootsOffline === 1 ? "" : "s") + " offline)" : "") : fl.Scheduled ? "File list not read yet (starts shortly)" : "";
+      q(".mi-fl-refresh").disabled = !!fl.Running;
+      if (S.flWasRunning && !fl.Running && S.tab === "browse") { loadGroups(); if (S.reGlobal) S.reGlobal(); }
+      S.flWasRunning = !!fl.Running;
       var badge = q(".mi-prob-count"); badge.textContent = fmtNum(s.Problems); badge.style.display = s.Problems ? "" : "none";
 
       var running = s.State && s.State !== "idle", paused = s.State === "paused";
@@ -280,6 +293,21 @@ define([], function () {
     }
     q(".mi-man-cancel").addEventListener("click", function () { post("Check/Cancel").then(function () { setTimeout(loadStatus, 300); }); });
 
+    // ---------------- Gmail-style "select all N matching" ----------------
+    /** Banner under a table toolbar. sel: { all: bool }; pageN: ticked rows on this page; total: rows matching the filter. */
+    function selBanner(el, sel, pageN, pageRows, total, onChange) {
+      var show = total > pageRows && (sel.all || (pageN === pageRows && pageRows > 0));
+      el.style.display = show ? "" : "none";
+      if (!show) return;
+      el.innerHTML = sel.all
+        ? "All <b>" + fmtNum(total) + "</b> matching files are selected. " + '<a href="#" class="mi-sa-clear">Clear selection</a>'
+        : "All <b>" + fmtNum(pageN) + "</b> on this page selected. " + '<a href="#" class="mi-sa-all">Select all ' + fmtNum(total) + " matching files</a>" + ' · <a href="#" class="mi-sa-clear">Clear selection</a>';
+      var a = el.querySelector(".mi-sa-all"), c = el.querySelector(".mi-sa-clear");
+      if (a) a.onclick = function (e) { e.preventDefault(); sel.all = true; onChange("all"); };
+      c.onclick = function (e) { e.preventDefault(); sel.all = false; onChange("clear"); };
+    }
+    function confirmBig(n, what) { return n <= 2000 || confirm("Check all " + fmtNum(n) + " " + what + " now? It runs in the background; progress shows above."); }
+
     // ---------------- live "Check now" ----------------
     function liveCell(tr, html) { var c = tr.querySelector(".mi-live"); if (c) c.innerHTML = html; }
     function rowsFor(id) { return qa('tr[data-id="' + id + '"]'); }
@@ -287,7 +315,7 @@ define([], function () {
     function checkNow(ids, opts) {
       ids = ids.map(String); opts = opts || {};
       ids.forEach(function (id) { rowsFor(id).forEach(function (tr) { tr.classList.add("mi-checking"); liveCell(tr, '<span class="mi-dim">queued…</span>'); }); });
-      return post("Check/Files", { Ids: ids.join(",") }).then(function (job) {
+      return (opts.matching ? post("Check/Matching", opts.matching) : post("Check/Files", { Ids: ids.join(",") })).then(function (job) {
         setTimeout(loadStatus, 200);
         var w = S.live[job.Id];
         if (w) {
@@ -386,7 +414,12 @@ define([], function () {
       var k = S.probSort.key, d = S.probSort.dir;
       list.sort(function (a, b) { var x = probVal(a, k), y = probVal(b, k); return (x < y ? -1 : x > y ? 1 : 0) * d || (a.Path < b.Path ? -1 : 1); });
       qa(".mi-prob-t th[data-sort]").forEach(function (th) { var s = th.getAttribute("data-sort"); th.innerHTML = th.innerHTML.replace(/ [▲▼]$/, "") + (s === k ? (d > 0 ? " ▲" : " ▼") : ""); });
-      q(".mi-prob-t tbody").innerHTML = list.map(probRow).join("");
+      S.probList = list;
+      var pages = Math.max(1, Math.ceil(list.length / PAGE)); S.probStart = Math.min(S.probStart || 0, (pages - 1) * PAGE);
+      var page = list.slice(S.probStart, S.probStart + PAGE);
+      q(".mi-prob-t tbody").innerHTML = page.map(probRow).join("");
+      q(".mi-prob-pager").style.display = list.length > PAGE ? "" : "none";
+      q(".mi-prob-page").textContent = (list.length ? fmtNum(S.probStart + 1) : 0) + "–" + fmtNum(S.probStart + page.length) + " of " + fmtNum(list.length);
       q(".mi-prob-empty").style.display = list.length ? "none" : "";
       q(".mi-prob-t").style.display = list.length ? "" : "none";
       q(".mi-prob-empty").textContent = S.problems.length ? "Nothing matches the filter." : "No problems. Every checked file matches its baseline.";
@@ -405,11 +438,17 @@ define([], function () {
           '<td class="mi-ell" title="' + esc(f.Name) + '">' + esc(f.Name) + '</td><td class="mi-ell mi-dim" title="' + esc(f.Folder) + '">' + esc(f.Folder) + "</td>" +
           '<td class="mi-num mi-nowrap">' + fmtBytes(f.Size) + '</td><td class="mi-nowrap">' + fmtTime(f.LastChecked) + "</td><td>" + hashes + '</td><td><div class="mi-acts">' + acts + "</div></td></tr>";
     }
-    function selectedIds() { return Object.keys(S.sel).filter(function (k) { return S.sel[k]; }); }
+    function selectedIds() { return S.probAll ? (S.probList || []).map(function (f) { return String(f.Id); }) : Object.keys(S.sel).filter(function (k) { return S.sel[k]; }); }
+    function clearProbSel() { S.probAll = false; S.sel = {}; qa(".mi-prob-t .mi-sel").forEach(function (c) { c.checked = false; }); q(".mi-sel-all").checked = false; updateBulk(); }
     function updateBulk() {
-      var n = selectedIds().length;
-      q(".mi-prob-bulk").textContent = n + " selected";
+      var rows = qa(".mi-prob-t tbody .mi-sel"), onPage = rows.filter(function (c) { return c.checked; }).length, total = (S.probList || []).length;
+      if (S.probAll && onPage < rows.length) S.probAll = false;
+      var n = S.probAll ? total : Object.keys(S.sel).filter(function (k) { return S.sel[k]; }).length;
+      q(".mi-prob-bulk").textContent = fmtNum(n) + " selected";
       qa(".mi-bulk").forEach(function (b) { b.disabled = !n; });
+      q(".mi-sel-all").checked = rows.length > 0 && onPage === rows.length;
+      var sel = { all: !!S.probAll };
+      selBanner(q(".mi-prob-selall"), sel, onPage, rows.length, total, function (how) { if (how === "clear") clearProbSel(); else { S.probAll = true; updateBulk(); } });
     }
     function fileAction(ids, act) {
       if (!ids.length) return Promise.resolve();
@@ -430,20 +469,31 @@ define([], function () {
       showHistory(id);
     });
     q(".mi-sel-all").addEventListener("change", function (e) {
-      qa(".mi-prob-t tbody tr").forEach(function (tr) { S.sel[tr.getAttribute("data-id")] = e.target.checked; tr.querySelector(".mi-sel").checked = e.target.checked; });
+      S.probAll = false;
+      qa(".mi-prob-t tbody tr[data-id]").forEach(function (tr) { S.sel[tr.getAttribute("data-id")] = e.target.checked; tr.querySelector(".mi-sel").checked = e.target.checked; });
       updateBulk();
     });
+    q(".mi-prob-prev").addEventListener("click", function () { S.probStart = Math.max(0, (S.probStart || 0) - PAGE); renderProblems(); });
+    q(".mi-prob-next").addEventListener("click", function () { if ((S.probStart || 0) + PAGE < (S.probList || []).length) { S.probStart = (S.probStart || 0) + PAGE; renderProblems(); } });
     qa(".mi-bulk").forEach(function (b) { b.addEventListener("click", function () {
       var ids = selectedIds(), act = b.getAttribute("data-act");
-      if (act === "recheck") { ids.forEach(function (i) { delete S.sel[i]; }); updateBulk(); qa(".mi-prob-t .mi-sel").forEach(function (c) { c.checked = false; }); q(".mi-sel-all").checked = false; checkNow(ids); return; }
+      if (act === "recheck") {
+        if (S.probAll) {
+          if (!confirmBig(ids.length, "problem files")) return;
+          var m = { Group: "problems", Search: q(".mi-prob-filter").value.trim(), Status: q(".mi-prob-kind").value, IncludeIgnored: q(".mi-prob-ign").checked };
+          var pageIds = qa(".mi-prob-t tbody tr[data-id]").map(function (tr) { return tr.getAttribute("data-id"); });
+          clearProbSel(); toast("Checking all " + fmtNum(ids.length) + " matching problem files"); checkNow(pageIds, { matching: m }); return;
+        }
+        clearProbSel(); checkNow(ids); return;
+      }
       fileAction(ids, act);
     }); });
     q(".mi-prob-t thead").addEventListener("click", function (e) {
       var th = e.target.closest("th[data-sort]"); if (!th || e.target.classList.contains("cr-h")) return;
       var k = th.getAttribute("data-sort"); S.probSort = { key: k, dir: S.probSort.key === k ? -S.probSort.dir : 1 }; renderProblems();
     });
-    q(".mi-prob-kind").addEventListener("change", renderProblems);
-    q(".mi-prob-filter").addEventListener("input", renderProblems);
+    q(".mi-prob-kind").addEventListener("change", function () { S.probStart = 0; S.probAll = false; renderProblems(); });
+    q(".mi-prob-filter").addEventListener("input", function () { S.probStart = 0; S.probAll = false; renderProblems(); });
     q(".mi-prob-ign").addEventListener("change", loadProblems);
 
     // ---------------- history ----------------
@@ -477,6 +527,18 @@ define([], function () {
       q(".mi-g-clear").style.display = on ? "" : "none";
       if (on) { S.global.start = 0; var box = q(".mi-gsearch-box"); if (!box.getAttribute("data-box")) renderBox(box, "all", S.global, true); else loadFiles(box); }
     }
+    S.reGlobal = function () { if (globalActive()) applyGlobal(); };
+    q(".mi-fl-refresh").addEventListener("click", function () {
+      post("FileList/Refresh", {}).then(function () { toast("Reading the file list from disk…"); S.flWasRunning = true; if (S.status) { S.status.FileList = S.status.FileList || {}; S.status.FileList.Running = true; renderStatus(); } setTimeout(loadStatus, 800); });
+    });
+    q(".mi-pend-browse").addEventListener("click", function () {
+      showTab("browse"); q(".mi-g-status").value = "pending"; S.global.status = "pending"; applyGlobal();
+    });
+    q(".mi-pend-check").addEventListener("click", function () {
+      var c = (S.status && S.status.Counts) || {}, n = (c.pending || 0) + (c.never_hashed || 0);
+      if (n > 2000 && !confirm("Hash all " + fmtNum(n) + " files that are not yet hashed? It runs in the background; progress shows above.")) return;
+      post("Check/Group", { GroupBy: "library", Group: "pending" }).then(function (j) { toast("Checking " + fmtNum(j.Total) + " files that were not yet hashed"); setTimeout(loadStatus, 300); });
+    });
     var gTimer = null;
     q(".mi-g-search").addEventListener("input", function (e) { clearTimeout(gTimer); gTimer = setTimeout(function () { S.global.search = e.target.value.trim(); applyGlobal(); }, 300); });
     q(".mi-g-status").innerHTML = statusOptions(""); q(".mi-g-status").options[0].text = "Any status";
@@ -513,6 +575,7 @@ define([], function () {
       td.innerHTML = '<div class="mi-bar2">' + (global ? "" : '<input type="text" class="mi-f-search" placeholder="Search in this group" value="' + esc(st.search) + '" style="min-width:20em" />' +
         '<select class="mi-f-status">' + statusOptions(st.status) + "</select>") +
         '<span class="mi-dim mi-f-count"></span><span style="margin-left:auto" class="mi-dim mi-bsel-n">0 selected</span><button type="button" class="mi-btn mi-mini mi-bsel-check" disabled><i class="md-icon">health_and_safety</i>Check selected</button></div>' +
+        '<div class="mi-selall" style="display:none"></div>' +
         '<table class="mi-t mi-files-t"><thead><tr><th class="mi-ns" data-col="sel"><input type="checkbox" class="mi-bsel-all" /></th><th data-sort="name">Name</th><th data-sort="size" class="mi-num">Size</th><th data-sort="hash">MD5</th><th data-sort="checked">Last checked</th><th data-sort="status">Status</th><th class="mi-ns" data-col="act"></th></tr></thead><tbody class="mi-click"></tbody></table>' +
         '<div class="mi-pager"><button type="button" class="mi-btn mi-mini mi-f-prev">‹ Previous</button><span class="mi-f-page"></span><button type="button" class="mi-btn mi-mini mi-f-next">Next ›</button></div>';
       ClawColResize.attach(td.querySelector("table"), "claw.mediaintegrity.cols." + (global ? "search" : "files"));
@@ -522,9 +585,29 @@ define([], function () {
         td.querySelector(".mi-f-status").addEventListener("change", function (e) { st.status = e.target.value; st.start = 0; loadFiles(tr); });
       }
       function bsel() { return qa('[data-box="' + key + '"] .mi-bsel:checked').map(function (c) { return c.closest("tr").getAttribute("data-id"); }); }
-      function updB() { var n = bsel().length; td.querySelector(".mi-bsel-n").textContent = n + " selected"; td.querySelector(".mi-bsel-check").disabled = !n; }
-      td.querySelector(".mi-bsel-all").addEventListener("change", function (e) { td.querySelectorAll("tbody .mi-bsel").forEach(function (c) { c.checked = e.target.checked; }); updB(); });
-      td.querySelector(".mi-bsel-check").addEventListener("click", function () { var ids = bsel(); td.querySelectorAll(".mi-bsel").forEach(function (c) { c.checked = false; }); td.querySelector(".mi-bsel-all").checked = false; updB(); checkNow(ids); });
+      var sel = td._sel = { all: false };
+      function clearSel() { sel.all = false; td.querySelectorAll(".mi-bsel").forEach(function (c) { c.checked = false; }); td.querySelector(".mi-bsel-all").checked = false; updB(); }
+      function updB() {
+        var n = bsel().length, rows = td.querySelectorAll("tbody .mi-bsel").length, total = td._total || 0;
+        if (sel.all && n < rows) sel.all = false; // unticking a row leaves "all matching"
+        td.querySelector(".mi-bsel-n").textContent = (sel.all ? fmtNum(total) : n) + " selected";
+        td.querySelector(".mi-bsel-check").disabled = !n;
+        td.querySelector(".mi-bsel-all").checked = rows > 0 && n === rows;
+        selBanner(td.querySelector(".mi-selall"), sel, n, rows, total, function (how) { if (how === "clear") clearSel(); else updB(); });
+      }
+      td.querySelector(".mi-bsel-all").addEventListener("change", function (e) { sel.all = false; td.querySelectorAll("tbody .mi-bsel").forEach(function (c) { c.checked = e.target.checked; }); updB(); });
+      td.querySelector(".mi-bsel-check").addEventListener("click", function () {
+        var ids = bsel(), all = sel.all, total = td._total || 0;
+        if (all) {
+          if (!confirmBig(total, "matching files")) return;
+          var gb = key === "all" ? "library" : S.groupBy;
+          clearSel();
+          checkNow(ids, { matching: { Group: key, GroupBy: gb, Search: st.search || "", Status: st.status || "" } }).then(function () { }, function () { });
+          toast("Checking all " + fmtNum(total) + " matching files");
+          return;
+        }
+        clearSel(); checkNow(ids);
+      });
       td.querySelector(".mi-f-prev").addEventListener("click", function () { st.start = Math.max(0, st.start - PAGE); loadFiles(tr); });
       td.querySelector(".mi-f-next").addEventListener("click", function () { st.start += PAGE; loadFiles(tr); });
       td.querySelector("thead").addEventListener("click", function (e) {
@@ -553,7 +636,8 @@ define([], function () {
         td.querySelectorAll(".mi-files-t th[data-sort]").forEach(function (th) {
           var s = th.getAttribute("data-sort"); th.innerHTML = th.innerHTML.replace(/ [▲▼]$/, "") + (s === st.sort ? (st.desc ? " ▼" : " ▲") : "");
         });
-        td.querySelector("tbody").innerHTML = items.map(function (f) { return fileRow(f, key); }).join("") || '<tr><td colspan="7" class="mi-empty">No files match.</td></tr>';
+        td.querySelector("tbody").innerHTML = items.map(function (f) { return fileRow(f, key); }).join("") || '<tr><td colspan="7" class="mi-empty">' + (st.search || st.status || key === "all" ? "No files match." : "No files found on disk in this " + (S.groupBy === "library" ? "library" : "folder") + " yet. Use Refresh file list to read it from disk.") + "</td></tr>";
+        td._total = r.Total || 0; if (td._sel) td._sel.all = false;
         if (td._updB) td._updB();
         var from = r.Total ? r.StartIndex + 1 : 0, to = r.StartIndex + items.length;
         td.querySelector(".mi-f-count").textContent = fmtNum(r.Total) + " file" + (r.Total === 1 ? "" : "s");
@@ -604,15 +688,42 @@ define([], function () {
         fmtNum(imp.Ok) + " OK, " + fmtNum(imp.Changed) + " changed, " + fmtNum(imp.NeverHashed) + " never verified), " + fmtNum(imp.ChecksImported) + " past checks from " + fmtDate(imp.OldestCheck) + " to " + fmtDate(imp.NewestCheck) +
         (imp.CaseDuplicatesMerged ? ", " + imp.CaseDuplicatesMerged + " duplicate paths merged" : "") + ".</div>" : "";
       var cls = { completed: "mi-ok", failed: "mi-f", stopped: "mi-w", interrupted: "mi-w", running: "", paused: "mi-w", abandoned: "mi-dim" };
-      q(".mi-scans-t tbody").innerHTML = S.scans.map(function (s) {
-        var end = s.Ended ? new Date(s.Ended) : null;
+      var f = q(".mi-act-type").value;
+      var list = S.scans.filter(function (s) { return !f || actType(s) === f; });
+      q(".mi-act-count").textContent = fmtNum(list.length) + " entr" + (list.length === 1 ? "y" : "ies");
+      q(".mi-scans-t tbody").innerHTML = list.map(function (s) {
+        var end = s.Ended ? new Date(s.Ended) : null, t = actType(s);
         var n = function (v, c) { return '<td class="mi-num ' + (v ? c || "" : "mi-dim") + '">' + fmtNum(v) + "</td>"; };
-        return '<tr><td class="mi-nowrap">' + fmtTime(s.Started) + '</td><td class="' + (cls[s.State] || "") + '">' + esc(s.State) + (s.State !== "completed" && s.Total ? " at " + fmtNum(s.Done) + "/" + fmtNum(s.Total) : "") +
-          '</td><td class="mi-nowrap">' + (end ? fmtDur((end - new Date(s.Started)) / 1000) : s.ActiveSeconds ? fmtDur(s.ActiveSeconds) + " so far" : "") + '</td><td class="mi-num">' + fmtNum(s.Total) + '</td><td class="mi-num mi-nowrap">' + fmtBytes(s.BytesTotal) +
+        var label = s.Label || (s.Kind === "full" ? "Full integrity scan" : s.Roots || "");
+        var row = '<tr data-scan="' + s.Id + '"><td><span class="mi-type mi-type-' + t + '">' + esc(ACT_TYPES[t] || t) + '</span></td><td class="mi-ell" title="' + esc(label) + '">' + esc(label) + "</td>" +
+          '<td class="mi-nowrap">' + fmtTime(s.Started) + '</td><td class="mi-nowrap">' + (end ? fmtTime(s.Ended) : '<span class="mi-dim">–</span>') + "</td>" +
+          '<td class="mi-nowrap">' + (end ? fmtDur((end - new Date(s.Started)) / 1000) : s.ActiveSeconds ? fmtDur(s.ActiveSeconds) + " so far" : "") + '</td><td class="' + (cls[s.State] || "") + '">' + esc(s.State) + (s.State !== "completed" && s.Total ? " at " + fmtNum(s.Done) + "/" + fmtNum(s.Total) : "") +
+          '</td><td class="mi-num">' + fmtNum(s.Total) + '</td><td class="mi-num mi-nowrap">' + fmtBytes(s.BytesTotal) +
           "</td>" + n(s.Matched, "mi-ok") + n(s.New) + n(s.Changed, "mi-f") + n(s.Modified, "mi-w") + n(s.Missing, "mi-w") + n(s.Unreadable, "mi-f") + '<td class="mi-dim mi-ell" title="' + esc(s.Note) + '">' + esc(s.Note || "") + "</td></tr>";
+        return row + (S.actOpen === s.Id ? '<tr class="mi-act-detail" data-for="' + s.Id + '"><td colspan="15"><span class="mi-dim">Loading…</span></td></tr>' : "");
       }).join("");
+      if (S.actOpen) loadActDetail(S.actOpen);
       q(".mi-scans-empty").style.display = S.scans.length ? "none" : "";
     }
+
+    var ACT_TYPES = { scheduled: "Scheduled", fullmanual: "Full scan (you)", manual: "Manual", item: "Item menu", newmedia: "New media" };
+    function actType(s) { return s.Kind === "full" ? (s.Trigger === "manual" ? "fullmanual" : "scheduled") : s.Kind === "item" ? "item" : s.Kind === "newmedia" ? "newmedia" : "manual"; }
+    function loadActDetail(id) {
+      return getJSON("Scans/" + id).then(function (d) {
+        var td = q('.mi-act-detail[data-for="' + id + '"] td'); if (!td) return;
+        var sc = d.Scan || {}, fs = d.Findings || [];
+        td.innerHTML = "<div><b>" + esc(sc.Label || "Full integrity scan") + "</b> · " + fmtNum(d.Checks) + " file check" + (d.Checks === 1 ? "" : "s") + " recorded" + (sc.Roots && sc.Kind === "full" ? ' · <span class="mi-dim">' + esc(sc.Roots) + "</span>" : "") + "</div>" +
+          (fs.length ? '<table class="mi-t mi-act-find"><thead><tr><th>Status</th><th>File</th><th class="mi-num">Size</th><th>Last checked</th></tr></thead><tbody class="mi-click">' +
+            fs.map(function (f) { return '<tr data-id="' + f.Id + '"><td>' + pill(f.Status, f.Ignored) + '</td><td class="mi-ell" title="' + esc(f.Path) + '">' + esc(f.Path) + '</td><td class="mi-num">' + fmtBytes(f.Size) + "</td><td>" + fmtTime(f.LastChecked) + "</td></tr>"; }).join("") + "</tbody></table>"
+            : '<div class="mi-dim" style="margin-top:.4em">No problems found by this run.</div>');
+      });
+    }
+    q(".mi-act-type").addEventListener("change", renderScans);
+    q(".mi-scans-t tbody").addEventListener("click", function (e) {
+      var fr = e.target.closest(".mi-act-find tr[data-id]"); if (fr) { showHistory(fr.getAttribute("data-id")); return; }
+      var tr = e.target.closest("tr[data-scan]"); if (!tr) return;
+      var id = +tr.getAttribute("data-scan"); S.actOpen = S.actOpen === id ? null : id; renderScans();
+    });
 
     // ---------------- settings ----------------
     function lines(a) { return (a || []).join("\n"); }

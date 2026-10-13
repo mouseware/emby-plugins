@@ -42,6 +42,8 @@ namespace Claw.Emby.MediaIntegrity.Core
         public int Problems => Changed + Modified + Missing + Unreadable;
         /// <summary>How many requests were merged into this job (a later "Check selected" appends to the active job).</summary>
         public int Batches { get; set; } = 1;
+        /// <summary>Activity entry (scans table) of this job; its checks carry this id.</summary>
+        public long? LogId { get; set; }
         /// <summary>Files added by the last merged batch (0 when it brought nothing new).</summary>
         public int LastBatchAdded { get; set; }
         /// <summary>Index into Results where this response starts (GET .../Jobs/{id}?Since=n returns only newer results).</summary>
@@ -78,6 +80,8 @@ namespace Claw.Emby.MediaIntegrity.Core
         private long _nextId;
         private double _rate; private DateTime _rateT; private long _rateB;
         public Action<CheckJob> JobFinished { get; set; }
+        /// <summary>Called on the worker thread before the job's first file (the host opens its Activity entry and sets LogId).</summary>
+        public Action<CheckJob> JobStarted { get; set; }
         public Action<string, Exception> OnError { get; set; }
         public const int KeepFinished = 30;
 
@@ -127,7 +131,7 @@ namespace Claw.Emby.MediaIntegrity.Core
                     Trim();
                 }
             }
-            if (job.Total == 0 && job.State == "done") JobFinished?.Invoke(job); else _wake.Set();
+            if (job.Total == 0 && job.State == "done") JobFinished?.Invoke(job); else { _wake.Set(); try { Queued?.Invoke(); } catch { } }
             return job;
         }
 
@@ -146,6 +150,43 @@ namespace Claw.Emby.MediaIntegrity.Core
         public int PendingFiles { get { lock (_l) return _jobs.Where(j => j.State == "queued" || j.State == "running").Sum(j => j.Total - j.Done); } }
         public double BytesPerSecond => _rate;
         public bool Busy { get { lock (_l) return _jobs.Any(j => j.State == "queued" || j.State == "running"); } }
+        /// <summary>Called after work was queued (the host starts the "Manual integrity check" task).</summary>
+        public Action Queued { get; set; }
+
+        /// <summary>Overall progress 0..100 of the running and queued jobs (files, with the current file's bytes as a fraction).</summary>
+        public double Percent
+        {
+            get
+            {
+                lock (_l)
+                {
+                    var act = _jobs.Where(j => j.State == "queued" || j.State == "running").ToList();
+                    long total = act.Sum(j => (long)j.Total); if (total == 0) return 100;
+                    double done = act.Sum(j => (double)j.Done) + act.Where(j => j.State == "running" && j.CurrentSize > 0).Sum(j => Math.Min(1.0, (double)j.CurrentDone / j.CurrentSize));
+                    return Math.Max(0, Math.Min(100, 100.0 * done / total));
+                }
+            }
+        }
+
+        /// <summary>Body of the Emby task "Manual integrity check": reports progress while the queue has work, cancels the
+        /// queue when Emby cancels the task, and returns when the queue is empty. The worker thread does the hashing.</summary>
+        public static void RunWhileBusy(ManualCheckQueue q, CancellationToken ct, IProgress<double> progress, int pollMs = 1000, int graceMs = 3000)
+        {
+            var idleSince = DateTime.UtcNow; double last = -1;
+            while (true)
+            {
+                if (ct.IsCancellationRequested) { q.CancelAll(); progress?.Report(100); return; }
+                if (q.Busy)
+                {
+                    idleSince = DateTime.UtcNow;
+                    // the dashboard bar never jumps back when a batch is appended (the page shows the exact x of y)
+                    var p = Math.Max(last, Math.Round(q.Percent, 1));
+                    if (p != last) { progress?.Report(p); last = p; }
+                }
+                else if ((DateTime.UtcNow - idleSince).TotalMilliseconds >= graceMs) { progress?.Report(100); return; } // short grace: a follow-up batch keeps the same task run
+                ct.WaitHandle.WaitOne(pollMs);
+            }
+        }
 
         /// <summary>Cancels the running job and all queued ones.</summary>
         public int CancelAll()
@@ -179,6 +220,7 @@ namespace Claw.Emby.MediaIntegrity.Core
                     if (job == null) return;
                     job.State = "running"; job.Started = _now(); ct = _cancel.Token;
                 }
+                try { JobStarted?.Invoke(job); } catch { }
                 RunJob(job, ct);
                 JobFinished?.Invoke(job);
             }
@@ -202,7 +244,7 @@ namespace Claw.Emby.MediaIntegrity.Core
                     long size = 0; try { var fi = new FileInfo(path); if (fi.Exists) size = fi.Length; } catch { }
                     lock (_l) { job.CurrentFile = path; job.CurrentSize = size; job.CurrentDone = 0; }
                     ScanEngine.Outcome o = null;
-                    try { o = _engine.CheckFile(path, job.Source, null, _gate, ct, n => Bytes(job, n)); }
+                    try { o = _engine.CheckFile(path, job.Source == "item" ? "manual" : job.Source, null, _gate, ct, n => Bytes(job, n), null, job.LogId); }
                     catch (OperationCanceledException) { throw; }
                     catch (Exception ex) { OnError?.Invoke(path, ex); }
                     lock (_l)
@@ -265,6 +307,21 @@ namespace Claw.Emby.MediaIntegrity.Core
         /// e.g. Movie.nfo, Movie.en.srt, Movie-poster.jpg); each directory recursively; plus files already tracked under those
         /// directories that are gone from disk (so a manual check reports them missing).
         /// </summary>
+        /// <summary>Files to baseline for a new library item of any type (movie, episode, track, audiobook...):
+        /// a file item itself; a folder item (album, audiobook folder, series...) its files directly in that folder.</summary>
+        public static List<string> NewItemFiles(string path, bool isFolder, Regex exclude)
+        {
+            var list = new List<string>();
+            try
+            {
+                if (!isFolder) { if (!Directory.Exists(path)) list.Add(path); return list; }
+                if (!Directory.Exists(path)) return list;
+                foreach (var f in Directory.EnumerateFiles(path).Take(2000)) if (exclude == null || !exclude.IsMatch(Path.GetFileName(f))) list.Add(f);
+            }
+            catch { }
+            return list;
+        }
+
         public static List<string> ExpandTargets(IEnumerable<string> files, IEnumerable<string> dirs, Regex exclude, Func<IList<string>, List<string>> knownUnder, bool companions = true)
         {
             var outp = new List<string>();

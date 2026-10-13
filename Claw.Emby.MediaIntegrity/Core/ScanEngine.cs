@@ -72,7 +72,7 @@ namespace Claw.Emby.MediaIntegrity.Core
 
         // ---------------- single file ----------------
         /// <summary>Hash one file and update its record + history. Returns the check result.</summary>
-        public Outcome CheckFile(string path, string source, long? scanId, IHashGate gate, CancellationToken ct, Action<long> onBytes = null, Action<string> onPause = null)
+        public Outcome CheckFile(string path, string source, long? scanId, IHashGate gate, CancellationToken ct, Action<long> onBytes = null, Action<string> onPause = null, long? logId = null)
         {
             var now = _now();
             var rec = _store.GetFile(path);
@@ -84,7 +84,7 @@ namespace Claw.Emby.MediaIntegrity.Core
                 if (rec.Status != FileStatus.Missing)
                 {
                     rec.Status = FileStatus.Missing; rec.LastResult = CheckResult.Missing; rec.LastChecked = now; rec.LastScanId = scanId ?? rec.LastScanId;
-                    _store.Db.Transaction(() => { _store.UpdateFile(rec); _store.AddCheck(new CheckRecord { FileId = rec.Id, Time = now, Result = CheckResult.Missing, Source = source, ScanId = scanId }); });
+                    _store.Db.Transaction(() => { _store.UpdateFile(rec); _store.AddCheck(new CheckRecord { FileId = rec.Id, Time = now, Result = CheckResult.Missing, Source = source, ScanId = scanId ?? logId }); });
                 }
                 return new Outcome { Result = CheckResult.Missing, File = rec };
             }
@@ -93,6 +93,7 @@ namespace Claw.Emby.MediaIntegrity.Core
             var mtime = DateTime.SpecifyKind(fi.LastWriteTimeUtc, DateTimeKind.Utc);
             bool isNew = rec == null;
             if (isNew) rec = new FileRecord { Path = path, FirstSeen = now, Status = FileStatus.Pending };
+            bool firstHash = isNew || (rec.Status == FileStatus.Pending && string.IsNullOrEmpty(rec.BaselineMd5)); // incl. files found by the disk enumeration
             string result;
             if (!h.Ok)
             {
@@ -129,14 +130,17 @@ namespace Claw.Emby.MediaIntegrity.Core
             _store.Db.Transaction(() =>
             {
                 if (isNew) _store.InsertFile(rec); else _store.UpdateFile(rec);
-                _store.AddCheck(new CheckRecord { FileId = rec.Id, Time = now, Md5 = h.Md5, Size = fi.Length, Seconds = Math.Round(h.Seconds, 3), Result = result, Source = source, ScanId = scanId, Note = h.Error });
+                _store.AddCheck(new CheckRecord { FileId = rec.Id, Time = now, Md5 = h.Md5, Size = fi.Length, Seconds = Math.Round(h.Seconds, 3), Result = result, Source = source, ScanId = scanId ?? logId, Note = h.Error });
             });
-            return new Outcome { Result = isNew && result == CheckResult.Baseline ? "new" : result, File = rec, Hash = h };
+            return new Outcome { Result = firstHash && result == CheckResult.Baseline ? "new" : result, File = rec, Hash = h };
         }
 
         public static string NormExt(string e) { e = (e ?? "").Trim().ToLowerInvariant(); return e.Length == 0 || e[0] == '.' ? e : "." + e; }
 
         // ---------------- enumeration ----------------
+        /// <summary>Recorded on a new full scan: scheduled | manual.</summary>
+        public string ScanTrigger { get; set; } = "scheduled";
+
         public sealed class Found { public string Path; public long Size; }
 
         public static Regex GlobsToRegex(IEnumerable<string> globs)
@@ -196,7 +200,7 @@ namespace Claw.Emby.MediaIntegrity.Core
             var rootsText = string.Join("\n", rootList.Select(r => r.Path));
             ScanRecord scan = resume ? _store.ResumableScan("full") : null;
             if (!resume) { var old = _store.ResumableScan("full"); if (old != null) { old.State = "abandoned"; old.Ended = now; _store.SaveScan(old); } }
-            if (scan == null) scan = _store.NewScan("full", now, rootsText);
+            if (scan == null) scan = _store.NewScan("full", now, rootsText, "Full integrity scan", ScanTrigger);
             else { scan.State = "running"; scan.Roots = rootsText; scan.Note = "resumed " + Time.ToDb(now) + (string.IsNullOrEmpty(scan.Note) ? "" : "; " + scan.Note); _store.SaveScan(scan); }
             res.Scan = scan;
             progress.Begin(scan, now);

@@ -59,6 +59,10 @@ CREATE TABLE IF NOT EXISTS queue (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   path TEXT NOT NULL UNIQUE COLLATE NOCASE,
   reason TEXT NOT NULL, added TEXT NOT NULL, not_before TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0)");
+            // 1.0.4: activity log for manual checks and new-media rollups (same table as the full scans)
+            var cols = Db.Query("PRAGMA table_info(scans)").Select(r => r.Str("name")).ToList();
+            if (!cols.Contains("label", StringComparer.OrdinalIgnoreCase)) Db.ExecScript("ALTER TABLE scans ADD COLUMN label TEXT");
+            if (!cols.Contains("trigger", StringComparer.OrdinalIgnoreCase)) Db.ExecScript("ALTER TABLE scans ADD COLUMN trigger TEXT");
             if (GetMeta("schema") == null) SetMeta("schema", SchemaVersion.ToString());
         }
 
@@ -166,9 +170,9 @@ CREATE TABLE IF NOT EXISTS queue (
              MIN(last_checked) oldest, MAX(last_checked) newest FROM files GROUP BY folder");
 
         /// <summary>Files under any of <paramref name="prefixes"/> (or outside all of <paramref name="notUnder"/>), paged and searchable.</summary>
-        public PagedFiles Browse(IList<string> prefixes, IList<string> notUnder, string search, string status, string sort, bool desc, int offset, int limit)
+        private static string BrowseWhere(IList<string> prefixes, IList<string> notUnder, string search, string status, List<(string, object)> args)
         {
-            var where = new List<string>(); var args = new List<(string, object)>();
+            var where = new List<string>();
             if (prefixes != null && prefixes.Count > 0)
             {
                 var ors = new List<string>();
@@ -185,7 +189,21 @@ CREATE TABLE IF NOT EXISTS queue (
                 else if (status == "pending") where.Add("status IN ('pending','never_hashed')");
                 else { where.Add("status=@st"); args.Add(("st", status)); }
             }
-            var w = where.Count > 0 ? " WHERE " + string.Join(" AND ", where) : "";
+            return where.Count > 0 ? " WHERE " + string.Join(" AND ", where) : "";
+        }
+
+        /// <summary>Every path matching a Browse filter (group prefixes, search, status): "select all N matching" checks.</summary>
+        public List<string> MatchingPaths(IList<string> prefixes, IList<string> notUnder, string search, string status)
+        {
+            var args = new List<(string, object)>();
+            var w = BrowseWhere(prefixes, notUnder, search, status, args);
+            return Db.Query("SELECT path FROM files" + w + " ORDER BY path COLLATE NOCASE", args.ToArray()).Select(r => r.Str("path")).ToList();
+        }
+
+        public PagedFiles Browse(IList<string> prefixes, IList<string> notUnder, string search, string status, string sort, bool desc, int offset, int limit)
+        {
+            var args = new List<(string, object)>();
+            var w = BrowseWhere(prefixes, notUnder, search, status, args);
             string col;
             switch ((sort ?? "").ToLowerInvariant())
             {
@@ -220,6 +238,33 @@ CREATE TABLE IF NOT EXISTS queue (
             return Db.Query("SELECT path FROM files" + w + " ORDER BY path COLLATE NOCASE", args.ToArray()).Select(r => r.Str("path")).ToList();
         }
 
+        /// <summary>Records files found on disk under root that are not in the database as pending (not yet hashed);
+        /// drops pending rows under root that were never hashed and are no longer on disk. Returns (added, removed).</summary>
+        public (long, long) SyncDiscovered(string root, IList<ScanEngine.Found> found, DateTime now)
+        {
+            var known = new HashSet<string>(PathsUnder(new[] { root }, null), StringComparer.OrdinalIgnoreCase);
+            var onDisk = new HashSet<string>(found.Select(f => f.Path), StringComparer.OrdinalIgnoreCase);
+            var p = WithSep(root);
+            var stale = Db.Query(@"SELECT f.id, f.path FROM files f WHERE substr(f.path,1,@n)=@p COLLATE NOCASE AND f.status='pending' AND f.baseline_md5 IS NULL
+                                   AND f.last_checked IS NULL AND NOT EXISTS (SELECT 1 FROM checks c WHERE c.file_id=f.id)", ("p", p), ("n", (long)p.Length))
+                .Where(r => !onDisk.Contains(r.Str("path"))).Select(r => r.Long("id")).ToList();
+            long added = 0;
+            Db.Transaction(() =>
+            {
+                foreach (var f in found)
+                {
+                    if (known.Contains(f.Path)) continue;
+                    DateTime? mt = null; try { mt = File.GetLastWriteTimeUtc(f.Path); } catch { }
+                    InsertFile(new FileRecord { Path = f.Path, Size = f.Size, Mtime = mt, Status = FileStatus.Pending, FirstSeen = now, LastSeen = now });
+                    added++;
+                }
+                foreach (var id in stale) Db.Exec("DELETE FROM files WHERE id=@id", ("id", id));
+            });
+            return (added, stale.Count);
+        }
+
+        public List<string> PendingPaths() => Db.Query("SELECT path FROM files WHERE status IN ('pending','never_hashed') AND ignored=0 ORDER BY path COLLATE NOCASE").Select(r => r.Str("path")).ToList();
+
         public static string WithSep(string p)
         {
             if (string.IsNullOrEmpty(p)) return p;
@@ -236,30 +281,43 @@ CREATE TABLE IF NOT EXISTS queue (
         }
 
         // ---------------- scans ----------------
-        private const string ScanCols = "id,kind,state,started,ended,total,done,bytes_total,bytes_done,matched,changed,modified,new,missing,unreadable,position,roots,note,active_seconds,bytes_hashed";
+        private const string ScanCols = "id,kind,state,started,ended,total,done,bytes_total,bytes_done,matched,changed,modified,new,missing,unreadable,position,roots,note,active_seconds,bytes_hashed,label,trigger";
         private static ScanRecord ToScan(Row r) => new ScanRecord
         {
             Id = r.Long("id"), Kind = r.Str("kind"), State = r.Str("state"), Started = Time.FromDb(r.Str("started")) ?? DateTime.MinValue, Ended = Time.FromDb(r.Str("ended")),
             Total = r.Long("total"), Done = r.Long("done"), BytesTotal = r.Long("bytes_total"), BytesDone = r.Long("bytes_done"), Matched = r.Long("matched"),
             Changed = r.Long("changed"), Modified = r.Long("modified"), New = r.Long("new"), Missing = r.Long("missing"), Unreadable = r.Long("unreadable"),
             Position = r.Str("position"), Roots = r.Str("roots"), Note = r.Str("note"), ActiveSeconds = r.Dbl("active_seconds"), BytesHashed = r.Dbl("bytes_hashed")
+            , Label = r.Str("label"), Trigger = r.Str("trigger")
         };
 
-        public ScanRecord NewScan(string kind, DateTime now, string roots)
+        public ScanRecord NewScan(string kind, DateTime now, string roots, string label = null, string trigger = null)
         {
             lock (Db.SyncRoot)
             {
-                Db.Exec("INSERT INTO scans(kind,state,started,roots) VALUES(@k,'running',@t,@r)", ("k", kind), ("t", now), ("r", roots));
+                Db.Exec("INSERT INTO scans(kind,state,started,roots,label,trigger) VALUES(@k,'running',@t,@r,@lb,@tr)", ("k", kind), ("t", now), ("r", roots), ("lb", label), ("tr", trigger));
                 return GetScan(Db.LastInsertId);
+            }
+        }
+        /// <summary>Today's "new media" rollup entry (one per local day), created on first use.</summary>
+        public ScanRecord NewMediaLog(DateTime nowUtc)
+        {
+            lock (Db.SyncRoot)
+            {
+                var day = nowUtc.ToLocalTime().ToString("yyyy-MM-dd");
+                var s = Db.Query("SELECT " + ScanCols + " FROM scans WHERE kind='newmedia' AND roots=@d ORDER BY id DESC LIMIT 1", ("d", day)).Select(ToScan).FirstOrDefault();
+                if (s != null) return s;
+                s = NewScan("newmedia", nowUtc, day, "New media " + nowUtc.ToLocalTime().ToString("MMM d"), "newmedia");
+                return s;
             }
         }
         public ScanRecord GetScan(long id) => Db.Query("SELECT " + ScanCols + " FROM scans WHERE id=@id", ("id", id)).Select(ToScan).FirstOrDefault();
         public ScanRecord ResumableScan(string kind) => Db.Query("SELECT " + ScanCols + " FROM scans WHERE kind=@k AND state IN ('running','paused','stopped','interrupted') ORDER BY id DESC LIMIT 1", ("k", kind)).Select(ToScan).FirstOrDefault();
         public List<ScanRecord> Scans(int limit = 100) => Db.Query("SELECT " + ScanCols + " FROM scans ORDER BY id DESC LIMIT @l", ("l", limit)).Select(ToScan).ToList();
         public void SaveScan(ScanRecord s) => Db.Exec(@"UPDATE scans SET state=@state,ended=@ended,total=@total,done=@done,bytes_total=@bt,bytes_done=@bd,matched=@m,changed=@c,modified=@mo,new=@n,missing=@mi,
-            unreadable=@u,position=@pos,roots=@roots,note=@note,active_seconds=@as,bytes_hashed=@bh WHERE id=@id",
+            unreadable=@u,position=@pos,roots=@roots,note=@note,active_seconds=@as,bytes_hashed=@bh,label=@lb WHERE id=@id",
             ("state", s.State), ("ended", s.Ended), ("total", s.Total), ("done", s.Done), ("bt", s.BytesTotal), ("bd", s.BytesDone), ("m", s.Matched), ("c", s.Changed), ("mo", s.Modified),
-            ("n", s.New), ("mi", s.Missing), ("u", s.Unreadable), ("pos", s.Position), ("roots", s.Roots), ("note", s.Note), ("as", s.ActiveSeconds), ("bh", s.BytesHashed), ("id", s.Id));
+            ("n", s.New), ("mi", s.Missing), ("u", s.Unreadable), ("pos", s.Position), ("roots", s.Roots), ("note", s.Note), ("as", s.ActiveSeconds), ("bh", s.BytesHashed), ("lb", s.Label), ("id", s.Id));
         /// <summary>At startup: a scan left 'running'/'paused' by a restart becomes 'interrupted' (it resumes next run).</summary>
         public int MarkInterrupted() => Db.Exec("UPDATE scans SET state='interrupted' WHERE state IN ('running','paused')");
         public List<FileRecord> ScanFindings(long scanId, int limit = 50) => Db.Query("SELECT " + FileCols + @" FROM files WHERE id IN

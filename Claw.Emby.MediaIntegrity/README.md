@@ -41,6 +41,22 @@ Tests:
 
 ## Changes
 
+- **1.0.4.0**
+  - **Every file on disk is listed.** A cached disk enumeration ("file list") covers every library of any type (audiobooks, books, music, home videos and so on) plus the extra folders.
+    - Files the database does not know yet are added as **Not yet hashed**. They show in Browse, in search and in the status filter, and are counted on the summary rows and the Problems tab.
+    - They can be checked with Check now, Check selected and Check this library/folder.
+    - The file list is refreshed at startup, after library changes (debounced by 60 s), when settings change, and on demand with **Refresh file list**.
+    - Files that were never hashed and are gone again are dropped, not reported as missing.
+  - Libraries with 0 tracked files are listed, with a hint in the empty table.
+  - New library items of every type, including folder items such as audiobooks and albums, queue their files for a baseline.
+  - The Problems tab shows "N files not yet hashed", with **Show in Browse** and **Check all not yet hashed**.
+  - "(old database)" only shows while imported files without a verified hash remain. A file leaves "Never verified" with its first plugin hash.
+  - Browse, search and Problems page at 100 rows. Gmail-style selection: "All 100 on this page selected. Select all N matching files" and "Clear selection". Select-all checks send the filter to the server (Check/Matching), not the ids, and ask for confirmation above 2,000 files.
+  - **Activity** lists manual checks (Check now, Check selected, select-all, Check this library/folder, item-menu Verify integrity) next to scheduled and full scans, plus one **New media** entry per day.
+    - Columns: Type, What was checked, Started, Ended, Duration, Result, Files and result counts. There is also a type filter.
+    - Click an entry to see its problem files, then click a file for its history. Combined batches are one entry.
+  - New Emby task **Manual integrity check** (no triggers). It starts automatically when manual work is queued and shows progress on the dashboard. Cancelling it cancels the queue, and it ends when the queue is empty. The full scan task still reports its own progress.
+
 - **1.0.3.0**
   - Fix: a second Check selected or Check this library/folder batch now joins the running manual check instead of starting a hidden separate job. The total grows (file x of y), the panel shows "N batches combined", and rows in every batch update live. Files that are already queued are not added again.
   - The progress panel now has two bars for both the full scan and manual checks. The top bar shows overall progress (file x of y, percent, time left). The bar under it shows the file being hashed (name, percent of bytes read, speed).

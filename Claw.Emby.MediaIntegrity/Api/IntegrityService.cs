@@ -50,6 +50,11 @@ namespace Claw.Emby.MediaIntegrity.Api
     [Authenticated(Roles = "Admin")]
     public class GetScans : IReturn<List<ScanRecord>> { public int Limit { get; set; } = 100; }
 
+    [Route("/ClawMediaIntegrity/Scans/{Id}", "GET", Summary = "Media Integrity: one Activity entry with the files it found problems in")]
+    [Authenticated(Roles = "Admin")]
+    public class GetScan : IReturn<ScanDetail> { public long Id { get; set; } }
+    public class ScanDetail { public ScanRecord Scan { get; set; } public List<FileDto> Findings { get; set; } public long Checks { get; set; } }
+
     [Route("/ClawMediaIntegrity/Libraries", "GET", Summary = "Media Integrity: Emby libraries and whether they are scanned")]
     [Authenticated(Roles = "Admin")]
     public class GetLibraries : IReturn<List<IntegrityHost.LibraryInfo>> { }
@@ -81,6 +86,26 @@ namespace Claw.Emby.MediaIntegrity.Api
     [Route("/ClawMediaIntegrity/Check/Cancel", "POST", Summary = "Media Integrity: cancel the running and queued manual checks")]
     [Authenticated(Roles = "Admin")]
     public class PostCheckCancel : IReturn<OkResult> { }
+
+    [Route("/ClawMediaIntegrity/FileList/Refresh", "POST", Summary = "Media Integrity: re-read the library folders from disk now (files not in the database are listed as not yet hashed)")]
+    [Authenticated(Roles = "Admin")]
+    public class PostFileListRefresh : IReturn<OkResult> { }
+
+    [Route("/ClawMediaIntegrity/Check/Matching", "POST", Summary = "Media Integrity: check every file matching a Browse / Problems filter (select all N matching)")]
+    [Authenticated(Roles = "Admin")]
+    public class PostCheckMatching : IReturn<CheckJob>
+    {
+        /// <summary>Browse group key ("all", "other", "lib:..", a folder) or "problems" for the Problems tab.</summary>
+        public string Group { get; set; }
+        public string GroupBy { get; set; }
+        public string Search { get; set; }
+        public string Status { get; set; }
+        public bool IncludeIgnored { get; set; }
+        /// <summary>Only count, do not queue (for the confirmation above 2,000 files).</summary>
+        public bool CountOnly { get; set; }
+    }
+
+    public class DiscoveryStatus { public bool Running { get; set; } public DateTime? Scheduled { get; set; } public DiscoveryResult Last { get; set; } }
 
     public class ManualStatus
     {
@@ -157,6 +182,7 @@ namespace Claw.Emby.MediaIntegrity.Api
         public DateTime? LastCompleteVerification { get; set; }
         public int RootCount { get; set; }
         public DateTime Now { get; set; }
+        public DiscoveryStatus FileList { get; set; }
         public ManualStatus Manual { get; set; }
     }
 
@@ -167,17 +193,18 @@ namespace Claw.Emby.MediaIntegrity.Api
         public object Get(GetStatus r)
         {
             var h = H; var p = h.Progress; var counts = h.Store.StatusCounts();
-            var scans = h.Store.Scans(5);
+            var scans = h.Store.Scans(50);
             return new StatusResult
             {
                 State = h.ScanRunning ? p.State : "idle", PauseReason = p.PauseReason, UserPaused = h.ScanGate.UserPaused, ScanId = p.ScanId,
                 FileIndex = p.FileIndex, FileCount = p.FileCount, CurrentFile = p.CurrentFile, CurrentSize = p.CurrentSize, CurrentDone = p.CurrentDone,
                 BytesDone = p.BytesDone, BytesTotal = p.BytesTotal, BytesPerSecond = p.BytesPerSecond, SecondsLeft = p.SecondsLeft, Percent = Math.Round(p.Percent, 2),
                 Matched = p.Matched, Changed = p.Changed, Modified = p.Modified, New = p.New, Missing = p.Missing, Unreadable = p.Unreadable, Started = p.Started,
-                Resumable = h.ScanRunning ? null : h.Store.ResumableScan("full"), LastScan = scans.FirstOrDefault(),
+                Resumable = h.ScanRunning ? null : h.Store.ResumableScan("full"), LastScan = scans.FirstOrDefault(x => x.Kind == "full"),
                 QueueLength = h.Store.QueueLength, QueueCurrent = h.QueueCurrent, PlaybackActive = h.IsPlaybackActive(),
                 Counts = counts, Files = h.Store.FileCount, Problems = FileStatus.Problems.Sum(s => counts.TryGetValue(s, out var n) ? n : 0),
                 Import = h.Import, LastSkipReason = h.LastSkipReason, LastCompleteVerification = h.LastCompleteVerification(), RootCount = h.Roots().Count, Now = DateTime.UtcNow,
+                FileList = new DiscoveryStatus { Running = h.Discovering, Scheduled = h.DiscoveryRequested, Last = h.LastDiscovery },
                 Manual = ManualStatusOf(h)
             };
         }
@@ -212,6 +239,7 @@ namespace Claw.Emby.MediaIntegrity.Api
         {
             var h = H;
             var groups = Groups(h, r.GroupBy, out var allRoots);
+            if (r.Group == "pending") return h.Snap(h.Manual.Enqueue("All files not yet hashed", h.Store.PendingPaths()));
             if (r.Group == "other") return h.Snap(h.Manual.Enqueue("Not in scope (old paths)", h.Store.PathsUnder(null, allRoots)));
             var g = groups.FirstOrDefault(x => x.Key == r.Group);
             if (g == null) return h.Snap(h.Manual.Enqueue("(unknown group)", new string[0]));
@@ -346,7 +374,43 @@ namespace Claw.Emby.MediaIntegrity.Api
         }
 
         public object Get(GetScans r) => H.Store.Scans(Math.Max(1, Math.Min(r.Limit, 500)));
+        public object Get(GetScan r)
+        {
+            var h = H; var sc = h.Store.GetScan(r.Id);
+            if (sc == null) return new ScanDetail { Findings = new List<FileDto>() };
+            return new ScanDetail { Scan = sc, Findings = h.Store.ScanFindings(r.Id, 200).Select(FileDto.From).ToList(), Checks = h.Store.Db.ScalarLong("SELECT COUNT(*) FROM checks WHERE scan_id=@s", ("s", r.Id)) };
+        }
         public object Get(GetLibraries r) => H.Libraries();
         public object Post(PostImport r) => H.RunImport();
+        public object Post(PostCheckMatching r)
+        {
+            var h = H;
+            List<string> paths;
+            string label;
+            if (r.Group == "problems")
+            {
+                // same rows as the Problems tab: problem status (one kind or all), name/path filter, ignored only when shown
+                var kinds = string.IsNullOrEmpty(r.Status) ? FileStatus.Problems : new[] { r.Status };
+                paths = h.Store.Problems(r.IncludeIgnored, int.MaxValue).Where(f => kinds.Contains(f.Status))
+                    .Where(f => string.IsNullOrWhiteSpace(r.Search) || (f.Path ?? "").IndexOf(r.Search.Trim(), StringComparison.OrdinalIgnoreCase) >= 0).Select(f => f.Path).ToList();
+                label = "All matching problems";
+            }
+            else
+            {
+                var groups = Groups(h, r.GroupBy, out var allRoots);
+                if (string.IsNullOrEmpty(r.Group) || r.Group == "all") { paths = h.Store.MatchingPaths(null, null, r.Search, r.Status); label = "All matching files"; }
+                else if (r.Group == "other") { paths = h.Store.MatchingPaths(null, allRoots, r.Search, r.Status); label = "Not in scope (matching)"; }
+                else
+                {
+                    var g = groups.FirstOrDefault(x => x.Key == r.Group);
+                    paths = g == null ? new List<string>() : h.Store.MatchingPaths(g.Paths, null, r.Search, r.Status);
+                    label = (g?.Label ?? "?") + (string.IsNullOrWhiteSpace(r.Search) && string.IsNullOrEmpty(r.Status) ? "" : " (matching)");
+                }
+            }
+            if (r.CountOnly) return new CheckJob { Label = label, Total = paths.Count, State = "count" };
+            return h.Snap(h.Manual.Enqueue(label, paths));
+        }
+
+        public object Post(PostFileListRefresh r) { H.RequestDiscovery("refresh button", 0); return new OkResult { Ok = true }; }
     }
 }

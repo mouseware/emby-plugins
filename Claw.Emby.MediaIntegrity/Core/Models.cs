@@ -84,6 +84,10 @@ namespace Claw.Emby.MediaIntegrity.Core
         public string Note { get; set; }
         public double ActiveSeconds { get; set; }
         public double BytesHashed { get; set; }
+        /// <summary>What was checked ("Full integrity scan", "Sintel (2010)", "Movies", "3 selected files + 1 more batch", "New media Oct 13").</summary>
+        public string Label { get; set; }
+        /// <summary>full: scheduled | manual. manual/item: the button used. newmedia: daily rollup.</summary>
+        public string Trigger { get; set; }
     }
 
     public class ScanRoot

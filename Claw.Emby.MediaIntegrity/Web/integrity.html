@@ -5,6 +5,13 @@
 #clawMediaIntegrityPage .mi-tab.mi-on{opacity:1;border-bottom-color:#52b54b}
 #clawMediaIntegrityPage .mi-badge{display:inline-block;min-width:1.2em;text-align:center;background:rgba(128,128,128,.3);border-radius:1em;padding:0 .45em;margin-left:.35em;font-size:.82em}
 #clawMediaIntegrityPage .mi-badge.mi-red{background:#8a2a2a}
+#clawMediaIntegrityPage .mi-selall{margin:.2em 0 .5em;padding:.5em .8em;text-align:center;border-radius:.3em;background:rgba(82,181,75,.14);font-size:.92em}
+#clawMediaIntegrityPage .mi-selall a{color:#8fd18a;font-weight:600}
+#clawMediaIntegrityPage .mi-type{display:inline-block;padding:.05em .5em;border-radius:1em;font-size:.82em;background:rgba(128,128,128,.22);white-space:nowrap}
+#clawMediaIntegrityPage .mi-type-scheduled,#clawMediaIntegrityPage .mi-type-fullmanual{background:rgba(82,181,75,.25)}#clawMediaIntegrityPage .mi-type-item{background:rgba(66,133,244,.25)}#clawMediaIntegrityPage .mi-type-newmedia{background:rgba(255,193,7,.22)}
+#clawMediaIntegrityPage tr.mi-act-detail td{background:rgba(128,128,128,.07);padding:.6em 1em}
+#clawMediaIntegrityPage .mi-pend-note{display:flex;align-items:center;gap:.7em;margin:.2em 0 .8em;padding:.55em .8em;border-radius:.3em;background:rgba(128,128,128,.12)}
+#clawMediaIntegrityPage .mi-fl-info{font-size:.88em;white-space:nowrap}
 #clawMediaIntegrityPage .mi-filebar{margin:.45em 0 .2em 1.2em;padding-left:.7em;border-left:2px solid rgba(128,128,128,.35)}
 #clawMediaIntegrityPage .mi-fb-top{display:flex;align-items:center;gap:.8em;font-size:.88em;min-width:0}
 #clawMediaIntegrityPage .mi-fb-top .md-icon{font-size:1.15em;opacity:.7;flex:none}
@@ -143,11 +150,16 @@
           <button type="button" class="mi-btn mi-mini mi-bulk" data-act="recheck" disabled><i class="md-icon">health_and_safety</i>Check now</button>
           <button type="button" class="mi-btn mi-mini mi-bulk" data-act="ignore" disabled><i class="md-icon">visibility_off</i>Ignore</button>
         </div>
+        <div class="mi-pend-note" style="display:none"><i class="md-icon">schedule</i><span class="mi-pend-text"></span>
+          <button type="button" class="mi-btn mi-mini mi-pend-browse"><i class="md-icon">list</i>Show in Browse</button>
+          <button type="button" class="mi-btn mi-mini mi-pend-check"><i class="md-icon">health_and_safety</i>Check all not yet hashed</button></div>
+        <div class="mi-selall mi-prob-selall" style="display:none"></div>
         <table class="mi-t mi-prob-t"><thead><tr>
           <th class="mi-ns" data-col="sel"><input type="checkbox" class="mi-sel-all" /></th>
           <th data-sort="status">Status</th><th data-sort="name">Name</th><th data-sort="folder">Folder</th><th data-sort="size" class="mi-num">Size</th>
           <th data-sort="checked">Last checked</th><th class="mi-ns" data-col="hashes">Baseline → current</th><th class="mi-ns" data-col="actions">Actions</th>
         </tr></thead><tbody class="mi-click"></tbody></table>
+        <div class="mi-pager mi-prob-pager" style="display:none"><button type="button" class="mi-btn mi-mini mi-prob-prev">‹ Previous</button><span class="mi-prob-page"></span><button type="button" class="mi-btn mi-mini mi-prob-next">Next ›</button></div>
         <div class="mi-empty mi-prob-empty" style="display:none">No problems. Every checked file matches its baseline.</div>
         <div class="fieldDescription"><b>Changed</b>: content differs but size and modified time did not: typical of bit rot or a bad copy. <b>Modified</b>: the file was rewritten (size or time changed). Accept the new hash if that was intended. <b>Check now</b> hashes the file right away (separate from the full scan, also while it is paused) and updates the row when done.</div>
       </div>
@@ -158,6 +170,8 @@
           <input type="search" class="mi-g-search" placeholder="Search all files (name or path)" style="min-width:22em" />
           <select class="mi-g-status" title="Status"></select>
           <button type="button" class="mi-btn mi-mini mi-g-clear" style="display:none"><i class="md-icon">close</i>Clear</button>
+          <span class="mi-fl-info mi-dim" title="Files on disk in every library and extra folder. Files the database does not know yet are listed as Not yet hashed."></span>
+          <button type="button" class="mi-btn mi-mini mi-fl-refresh"><i class="md-icon">refresh</i>Refresh file list</button>
           <span class="mi-groupby" style="margin-left:auto;display:flex;align-items:center;gap:.6em"><span class="mi-dim">Group by</span>
           <div class="mi-seg"><button type="button" class="mi-on" data-group="library">Library</button><button type="button" data-group="folder">Drive / folder</button></div></span>
         </div>
@@ -171,12 +185,14 @@
       <!-- Activity -->
       <div class="mi-panel" data-panel="activity">
         <div class="mi-import-note"></div>
+        <div class="mi-bar2"><select class="mi-act-type"><option value="">All activity</option><option value="scheduled">Scheduled scans</option><option value="fullmanual">Full scans started by you</option><option value="manual">Manual checks</option><option value="item">Item menu</option><option value="newmedia">New media</option></select>
+          <span class="mi-dim mi-act-count"></span></div>
         <table class="mi-t mi-scans-t"><thead><tr>
-          <th class="mi-ns" data-col="started">Started</th><th class="mi-ns" data-col="state">Result</th><th class="mi-ns" data-col="dur">Duration</th><th class="mi-ns mi-num" data-col="files">Files</th>
+          <th class="mi-ns" data-col="type">Type</th><th class="mi-ns" data-col="what">What was checked</th><th class="mi-ns" data-col="started">Started</th><th class="mi-ns" data-col="ended">Ended</th><th class="mi-ns" data-col="dur">Duration</th><th class="mi-ns" data-col="state">Result</th><th class="mi-ns mi-num" data-col="files">Files</th>
           <th class="mi-ns mi-num" data-col="size">Size</th><th class="mi-ns mi-num" data-col="matched">Matched</th><th class="mi-ns mi-num" data-col="new">New</th><th class="mi-ns mi-num" data-col="changed">Changed</th>
           <th class="mi-ns mi-num" data-col="modified">Modified</th><th class="mi-ns mi-num" data-col="missing">Missing</th><th class="mi-ns mi-num" data-col="unreadable">Unreadable</th><th class="mi-ns" data-col="note">Note</th>
-        </tr></thead><tbody></tbody></table>
-        <div class="mi-empty mi-scans-empty" style="display:none">No scans yet.</div>
+        </tr></thead><tbody class="mi-click"></tbody></table>
+        <div class="mi-empty mi-scans-empty" style="display:none">No activity yet.</div>
       </div>
 
       <!-- Settings -->

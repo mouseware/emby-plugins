@@ -22,13 +22,106 @@ static class Program
         var keep = new List<string>();
         try
         {
-            SqliteBasics(); Hashing(); Import(); Checks(); FullScan(); Browse(); Manual(); Patcher();
+            SqliteBasics(); Hashing(); Import(); Checks(); FullScan(); Browse(); Manual(); Discovery(); ManualTask(); Patcher();
             var legacy = Environment.GetEnvironmentVariable("LEGACY_DB");
             if (!string.IsNullOrEmpty(legacy)) RealDb(legacy, Environment.GetEnvironmentVariable("VERIFY_DIR"));
         }
         catch (Exception ex) { Ok(false, "unexpected: " + ex); }
         Console.WriteLine(pass + " passed, " + fail + " failed");
         return fail == 0 ? 0 : 1;
+    }
+
+    sealed class Prog : IProgress<double> { public readonly List<double> V = new List<double>(); public void Report(double v) { lock (V) V.Add(v); } }
+
+    static void ManualTask()
+    {
+        var d = Tmp();
+        var a = Path.Combine(d, "a.bin"); File.WriteAllBytes(a, new byte[3_000_000]);
+        var b = Path.Combine(d, "b.bin"); File.WriteAllBytes(b, new byte[3_000_000]);
+        var c = Path.Combine(d, "c.bin"); File.WriteAllBytes(c, new byte[3_000_000]);
+        using (var s = new IntegrityStore(Path.Combine(d, "t.db")))
+        {
+            var e = new ScanEngine(s);
+            int queuedCalls = 0;
+            using (var q = new ManualCheckQueue(e, new G { BytesPerSecond = 6_000_000 }) { Queued = () => Interlocked.Increment(ref queuedCalls) })
+            {
+                q.Start();
+                Ok(q.Percent == 100 && !q.Busy, "idle queue: 100%, not busy");
+                q.Enqueue("first", new[] { a, b });
+                Ok(queuedCalls == 1, "queuing work asks the host to start the Emby task");
+                var prog = new Prog(); var cts = new CancellationTokenSource();
+                var t = new Thread(() => ManualCheckQueue.RunWhileBusy(q, cts.Token, prog, 50, 300)); t.Start();
+                Thread.Sleep(250);
+                q.Enqueue("second batch", new[] { c }); // appended while the task runs
+                bool ended = t.Join(15000);
+                double[] v; lock (prog.V) v = prog.V.ToArray();
+                Ok(ended && !q.Busy, "task ends when the queue is empty");
+                Ok(v.Length >= 3 && v.Last() == 100 && v.Take(v.Length - 1).Any(x => x > 0 && x < 100), "task reports overall progress (" + v.Length + " reports, e.g. " + string.Join(",", v.Take(6).Select(x => x.ToString("0"))) + ")");
+                Ok(v.Zip(v.Skip(1), (x, y) => y >= x - 0.001).All(z => z), "progress never goes backwards when a batch is appended");
+                Ok(s.GetFile(c)?.BaselineMd5 != null, "appended batch processed in the same task run");
+                // cancel from the dashboard -> queue cancelled
+                File.AppendAllText(a, "x"); File.AppendAllText(b, "x");
+                var job = q.Enqueue("to cancel", new[] { a, b, c });
+                var cts2 = new CancellationTokenSource(); var prog2 = new Prog();
+                var t2 = new Thread(() => ManualCheckQueue.RunWhileBusy(q, cts2.Token, prog2, 50, 300)); t2.Start();
+                Thread.Sleep(200); cts2.Cancel();
+                Ok(t2.Join(5000), "cancelled task returns");
+                Thread.Sleep(500);
+                Ok(!q.Busy && (job.State == "cancelled"), "cancelling the task cancels the manual queue (" + job.State + ")");
+                // restart on new work
+                var prog3 = new Prog(); q.Enqueue("later", new[] { c });
+                var t3 = new Thread(() => ManualCheckQueue.RunWhileBusy(q, CancellationToken.None, prog3, 50, 300)); t3.Start();
+                Ok(t3.Join(10000) && prog3.V.Count > 0 && queuedCalls == 4, "new work starts a new task run (" + queuedCalls + " start requests)");
+            }
+        }
+    }
+
+    static void Discovery()
+    {
+        var d = Tmp(); var lib = Path.Combine(d, "BOOKS"); var other = Path.Combine(d, "Movies");
+        Directory.CreateDirectory(Path.Combine(lib, "Author", "Book")); Directory.CreateDirectory(other);
+        var m4b = Path.Combine(lib, "Author", "Book", "Book.m4b"); File.WriteAllBytes(m4b, new byte[300000]);
+        var epub = Path.Combine(lib, "Author", "Book", "Book.epub"); File.WriteAllText(epub, "epub");
+        var jpg = Path.Combine(lib, "Author", "Book", "cover.jpg"); File.WriteAllText(jpg, "jpg");
+        var tmp = Path.Combine(lib, "Author", "Book", "x.tmp"); File.WriteAllText(tmp, "t");
+        var mov = Path.Combine(other, "Known.mkv"); File.WriteAllText(mov, "known");
+        var legacy = Path.Combine(other, "Legacy.mkv"); File.WriteAllText(legacy, "legacy");
+        using (var s = new IntegrityStore(Path.Combine(d, "i.db")))
+        {
+            s.InsertFile(new FileRecord { Path = mov, Status = FileStatus.Ok, BaselineMd5 = "AA" });
+            s.InsertFile(new FileRecord { Path = legacy, Status = FileStatus.NeverHashed, LegacyId = 7 });
+            var roots = new List<ScanRoot> { new ScanRoot(lib, "Audio books"), new ScanRoot(other, "Movies"), new ScanRoot(Path.Combine(d, "Offline"), "Gone") };
+            var ex = ScanEngine.GlobsToRegex(new[] { "*.tmp" });
+            var r = FileDiscovery.Run(s, roots, ex, "test", CancellationToken.None);
+            Ok(r.Roots == 3 && r.RootsOffline == 1 && r.OnDisk == 5 && r.Added == 3, $"discovery: 3 untracked library files added (roots {r.Roots}, offline {r.RootsOffline}, on disk {r.OnDisk}, added {r.Added})");
+            var f = s.GetFile(m4b);
+            Ok(f != null && f.Status == FileStatus.Pending && f.BaselineMd5 == null && f.Size == 300000, "untracked audiobook listed as not yet hashed (pending), with size");
+            Ok(s.GetFile(tmp) == null, "excluded pattern not listed");
+            Ok(s.GetFile(mov).Status == FileStatus.Ok && s.GetFile(legacy).Status == FileStatus.NeverHashed, "known rows untouched");
+            var pg = s.Browse(new[] { lib }, null, null, "pending", "name", false, 0, 100);
+            Ok(pg.Total == 3, "Browse group + status filter 'pending' finds them");
+            Ok(s.Browse(null, null, "Book.m4b", null, "name", false, 0, 100).Total == 1, "global search finds untracked file");
+            Ok(s.StatusCounts()[FileStatus.Pending] == 3, "counts include untracked files");
+            var r2 = FileDiscovery.Run(s, roots, ex, "again", CancellationToken.None);
+            Ok(r2.Added == 0 && r2.Removed == 0, "second refresh adds nothing (cached in the db)");
+            File.Delete(jpg);
+            var r3 = FileDiscovery.Run(s, roots, ex, "deleted", CancellationToken.None);
+            Ok(r3.Removed == 1 && s.GetFile(jpg) == null, "never-hashed file deleted from disk is dropped (not reported missing)");
+            Ok(s.MatchingPaths(new[] { lib }, null, "Book", "pending").Count == 2 && s.MatchingPaths(null, null, null, null).Count == 4, "MatchingPaths = every file of a filter (select all matching)");
+            Ok(s.PendingPaths().Count == 3, "PendingPaths covers pending + never_hashed");
+            // hashing: discovered -> "new", imported never_hashed -> leaves never_hashed for good
+            var e = new ScanEngine(s);
+            var o = e.CheckFile(m4b, "manual", null, new G(), CancellationToken.None);
+            Ok(o.Result == "new" && s.GetFile(m4b).Status == FileStatus.Ok && s.GetFile(m4b).BaselineMd5 != null, "Check now on an untracked file stores its first hash (new)");
+            Ok(s.StatusCounts().TryGetValue(FileStatus.NeverHashed, out var nh) && nh == 1, "one never-verified imported file before");
+            var o2 = e.CheckFile(legacy, "manual", null, new G(), CancellationToken.None);
+            var lf = s.GetFile(legacy);
+            Ok(lf.Status == FileStatus.Ok && lf.BaselineMd5 != null && !s.StatusCounts().ContainsKey(FileStatus.NeverHashed), "first plugin hash clears never_hashed; count reaches 0 (" + o2.Result + ")");
+            File.Delete(legacy);
+            var o3 = e.CheckFile(legacy, "manual", null, new G(), CancellationToken.None);
+            Ok(s.GetFile(legacy).Status == FileStatus.Missing, "after its first hash the file is a normal tracked file (missing is reported)");
+            Ok(ManualCheckQueue.NewItemFiles(Path.Combine(lib, "Author", "Book"), true, ex).Count == 2 && ManualCheckQueue.NewItemFiles(m4b, false, ex).Count == 1, "new item of any type: folder item queues its files, file item itself");
+        }
     }
 
     static void SqliteBasics()

@@ -6,7 +6,8 @@
   var libs = [
     { Id: "101", Name: "Movies", Type: "movies", Locations: ["D:\\Media\\Movies"], Included: true },
     { Id: "102", Name: "TV Shows", Type: "tvshows", Locations: ["D:\\Media\\TV"], Included: true },
-    { Id: "103", Name: "Home Videos", Type: "homevideos", Locations: ["E:\\Family\\Videos"], Included: true }
+    { Id: "103", Name: "Home Videos", Type: "homevideos", Locations: ["E:\\Family\\Videos"], Included: true },
+    { Id: "104", Name: "Audio books", Type: "audiobooks", Locations: ["F:\\Books"], Included: true }
   ];
   var movies = ["Big Buck Bunny (2008)", "Sintel (2010)", "Tears of Steel (2012)", "Elephants Dream (2006)", "Cosmos Laundromat (2015)", "Spring (2019)", "Agent 327 (2017)", "Caminandes (2013)", "Glass Half (2015)", "Hero (2018)", "Coffee Run (2020)", "Sprite Fright (2021)", "Charge (2022)", "Wing It! (2023)"];
   var files = [], id = 0;
@@ -44,7 +45,9 @@
       CurrentFile: "D:\\Media\\Movies\\Tears of Steel (2012)\\Tears of Steel (2012) [Bluray-1080p].mkv", CurrentSize: 6.4e9, CurrentDone: 2.9e9, Matched: 6150, Changed: 1, Modified: 1, New: 28, Missing: 1, Unreadable: 1 },
     running: true,
     scans: [
-      { Id: 4, Kind: "full", State: "running", Started: iso(19 * H), Ended: null, Total: 14612, Done: 6182, BytesTotal: 25.9e12, Matched: 6150, Changed: 1, Modified: 1, New: 28, Missing: 1, Unreadable: 1, ActiveSeconds: 17.2 * 3600, Note: "resumed after restart" },
+      { Id: 6, Kind: "newmedia", Trigger: "newmedia", Label: "New media Oct 12", Roots: "2026-10-12", State: "completed", Started: iso(30 * H), Ended: iso(26 * H), Total: 7, Done: 7, BytesTotal: 31.2e9, Matched: 0, New: 7, Changed: 0, Modified: 0, Missing: 0, Unreadable: 0, Note: "" },
+      { Id: 5, Kind: "item", Trigger: "item", Label: "Sintel (2010)", State: "completed", Started: iso(22 * H), Ended: iso(22 * H - 95000), Total: 4, Done: 4, BytesTotal: 5.2e9, Matched: 3, New: 0, Changed: 1, Modified: 0, Missing: 0, Unreadable: 0, Note: "" },
+      { Id: 4, Kind: "full", Trigger: "scheduled", Label: "Full integrity scan", State: "running", Started: iso(19 * H), Ended: null, Total: 14612, Done: 6182, BytesTotal: 25.9e12, Matched: 6150, Changed: 1, Modified: 1, New: 28, Missing: 1, Unreadable: 1, ActiveSeconds: 17.2 * 3600, Note: "resumed after restart" },
       { Id: 3, Kind: "full", State: "completed", Started: iso(183 * D), Ended: iso(180 * D), Total: 14390, Done: 14390, BytesTotal: 25.1e12, Matched: 14211, Changed: 0, Modified: 0, New: 179, Missing: 0, Unreadable: 0, Note: "" },
       { Id: 2, Kind: "full", State: "stopped", Started: iso(186 * D), Ended: null, Total: 14388, Done: 2210, BytesTotal: 25.1e12, Matched: 2210, ActiveSeconds: 11000, Note: "" },
       { Id: 1, Kind: "full", State: "completed", Started: iso(365 * D), Ended: iso(362 * D), Total: 14102, Done: 14102, BytesTotal: 24.4e12, Matched: 14100, Changed: 2, Modified: 0, New: 0, Missing: 0, Unreadable: 0, Note: "offline: F:\\Old" }
@@ -52,6 +55,25 @@
     imp: { Ran: true, Source: "D:\\Tools\\filehashes.db", Time: iso(20 * H), FilesImported: 14316, ChecksImported: 82291, CaseDuplicatesMerged: 16, AlreadyPresent: 0, Ok: 12977, Changed: 0, NeverHashed: 1339, OldestCheck: iso(1140 * D), NewestCheck: iso(100 * D), Seconds: 2.1 }
   };
   var S = window.__srv;
+  S.add = add;
+  // files on disk the database does not know yet (added to files by "Refresh file list")
+  S.disk = [];
+  ["Jane Example\\The Long Walk", "Sam Sample\\Quiet Rivers", "Ada Placeholder\\Notes on Nothing"].forEach(function (b, i) {
+    var dir = "F:\\Books\\" + b;
+    S.disk.push({ path: dir + "\\" + b.split("\\")[1] + ".m4b", size: (310 + i * 47) * 1048576 });
+    S.disk.push({ path: dir + "\\cover.jpg", size: 182000 + i * 999 });
+    S.disk.push({ path: dir + "\\" + b.split("\\")[1] + ".epub", size: 1.2e6 + i * 5e4 });
+    S.disk.push({ path: dir + "\\metadata.opf", size: 3100 + i });
+  });
+  S.disk.push({ path: "D:\\Media\\Movies\\Sintel (2010)\\extras\\Making of.mp4", size: 640 * 1048576 });
+  S.fl = { Running: false, Scheduled: null, Last: { Time: iso(3 * H), Reason: "startup", Roots: 5, RootsOffline: 0, OnDisk: files.length, Added: 0, Removed: 0, Seconds: 4.2 } };
+  S.flPolls = 0;
+  function flTick() {
+    if (!S.fl.Running || ++S.flPolls < 2) return;
+    var added = 0;
+    S.disk.forEach(function (d) { if (!files.some(function (f) { return f.Path.toLowerCase() === d.path.toLowerCase(); })) { add(d.path, d.size, "pending", { Hash: null, LastHash: null, LastChecked: null, LastResult: null, BaselineDate: null }); added++; } });
+    S.fl = { Running: false, Scheduled: null, Last: { Time: new Date().toISOString(), Reason: "refresh button", Roots: 5, RootsOffline: 0, OnDisk: files.length, Added: added, Removed: 0, Seconds: 3.1 } };
+  }
 
   // ---- manual check jobs (simulated: each poll advances the running job) ----
   S.jobs = []; S.jobSeq = 0; S.freeze = false; S.step = 0.34; S.outcome = {};
@@ -114,6 +136,12 @@
     S.calls.push(method + " " + path);
     var m;
     if (method === "GET" && (m = /^Check\/Jobs\/(\d+)$/.exec(path))) { advance(); var jj = S.jobs.filter(function (x) { return x.Id === +m[1]; })[0]; if (!jj) return { Id: +m[1], State: "unknown" }; var pj = pub(jj), since = Math.min(+q.Since || 0, pj.Results.length); pj.ResultsOffset = since; pj.Results = pj.Results.slice(since); return pj; }
+    if (method === "GET" && (m = /^Scans\/(\d+)$/.exec(path))) {
+      var sid = +m[1], sc = S.scans.filter(function (x) { return x.Id === sid; })[0], jb = S.jobs.filter(function (x) { return 1000 + x.Id === sid; })[0];
+      var finds = jb ? (jb.Findings || []).map(function (fd) { return files.filter(function (x) { return x.Id === fd.FileId; })[0]; }).filter(Boolean)
+        : files.filter(function (f) { return problemsSt.indexOf(f.Status) >= 0; }).slice(0, sid === 5 ? 1 : 4);
+      return { Scan: sc || { Id: sid, Kind: "manual", Label: jb && jb.Label }, Findings: finds, Checks: sc ? sc.Done : jb ? jb.Done : 0 };
+    }
     if (method === "GET" && (m = /^Files\/(\d+)\/History$/.exec(path))) {
       var f = files.filter(function (x) { return x.Id === +m[1]; })[0];
       var checks = [
@@ -127,7 +155,21 @@
     switch (method + " " + path) {
       case "POST Check/Files": { var fl = q.Ids.split(",").map(Number).map(function (i) { return files.filter(function (x) { return x.Id === i; })[0]; }).filter(Boolean); return pub(newJob(fl.length === 1 ? fl[0].Name : fl.length + " selected files", fl)); }
       case "POST Check/Items": return pub(newJob("Sintel (2010)", files.filter(function (f) { return /Sintel/.test(f.Path); })));
-      case "POST Check/Group": { var gg = groups(q.GroupBy).filter(function (x) { return x.Key === q.Group; })[0]; return pub(newJob(gg ? gg.Label : "?", gg ? files.filter(function (f) { return under(f, gg.Paths); }) : [])); }
+      case "POST Check/Matching": {
+        var ml;
+        if (q.Group === "problems") ml = files.filter(function (f) { return problemsSt.indexOf(f.Status) >= 0 && (q.IncludeIgnored === "true" || !f.Ignored) && (!q.Status || f.Status === q.Status) && (!q.Search || f.Path.toLowerCase().indexOf(q.Search.toLowerCase()) >= 0); });
+        else {
+          var mg = groups(q.GroupBy).filter(function (x) { return x.Key === q.Group; })[0];
+          ml = files.filter(function (f) { return q.Group === "all" || (mg && under(f, mg.Paths)); });
+          if (q.Search) ml = ml.filter(function (f) { return f.Path.toLowerCase().indexOf(q.Search.toLowerCase()) >= 0; });
+          if (q.Status) ml = ml.filter(function (f) { return q.Status === "problems" ? problemsSt.indexOf(f.Status) >= 0 && !f.Ignored : q.Status === "pending" ? /pending|never/.test(f.Status) : q.Status === "ignored" ? f.Ignored : f.Status === q.Status; });
+        }
+        S.lastMatching = { q: q, n: ml.length };
+        return pub(newJob(q.Group === "problems" ? "All matching problems" : "All matching files", ml));
+      }
+      case "POST FileList/Refresh": S.fl.Running = true; S.flPolls = 0; return { Ok: true };
+      case "POST Check/Group": {
+        if (q.Group === "pending") return pub(newJob("All files not yet hashed", files.filter(function (f) { return (f.Status === "pending" || f.Status === "never_hashed") && !f.Ignored; }))); var gg = groups(q.GroupBy).filter(function (x) { return x.Key === q.Group; })[0]; return pub(newJob(gg ? gg.Label : "?", gg ? files.filter(function (f) { return under(f, gg.Paths); }) : [])); }
       case "POST Check/Cancel": S.jobs.forEach(function (j) { if (j.State === "queued" || j.State === "running") { j.State = "cancelled"; j.Ended = new Date().toISOString(); j.CurrentFile = null; } }); return { Ok: true };
       case "GET Check/Jobs": return S.jobs.slice().reverse().map(pub);
       case "GET Status": {
@@ -137,7 +179,7 @@
           CurrentSize: sc.CurrentSize, CurrentDone: sc.CurrentDone, BytesDone: sc.BytesDone, BytesTotal: sc.BytesTotal, BytesPerSecond: sc.BytesPerSecond,
           SecondsLeft: (sc.BytesTotal - sc.BytesDone) / sc.BytesPerSecond, Percent: 100 * sc.BytesDone / sc.BytesTotal, Matched: sc.Matched, Changed: sc.Changed, Modified: sc.Modified, New: sc.New, Missing: sc.Missing, Unreadable: sc.Unreadable,
           Started: iso(19 * H), Resumable: S.running ? null : S.resumable || null, LastScan: S.scans[0], QueueLength: S.queue, QueueCurrent: null, PlaybackActive: false, Counts: c,
-          Files: files.length, Problems: problemsSt.reduce(function (a, k) { return a + (c[k] || 0); }, 0), Import: S.imp, LastSkipReason: null, LastCompleteVerification: iso(180 * D), RootCount: 4, Now: new Date().toISOString(), Manual: (advance(), manualStatus()) };
+          Files: files.length, Problems: problemsSt.reduce(function (a, k) { return a + (c[k] || 0); }, 0), Import: S.imp, LastSkipReason: null, LastCompleteVerification: iso(180 * D), RootCount: 4, Now: new Date().toISOString(), FileList: (flTick(), S.fl), Manual: (advance(), manualStatus()) };
       }
       case "POST Scan/Start": S.running = true; S.resumable = null; return { Ok: true };
       case "POST Scan/StartFresh": S.running = true; S.resumable = null; S.scan.FileIndex = 0; S.scan.BytesDone = 0; return { Ok: true };
@@ -179,7 +221,14 @@
         var st = +q.StartIndex || 0, lim = +q.Limit || 100;
         return { Total: list.length, StartIndex: st, Items: list.slice(st, st + lim) };
       }
-      case "GET Scans": return S.scans;
+      case "GET Scans": {
+        // finished manual jobs appear as Activity entries (one per job, combined batches included)
+        var fromJobs = S.jobs.filter(function (j) { return (j.State === "done" || j.State === "cancelled") && j.Total > 0; }).map(function (j) {
+          return { Id: 1000 + j.Id, Kind: j.Source === "item" ? "item" : "manual", Trigger: j.Source, Label: j.Label, State: j.State === "done" ? "completed" : "stopped", Started: j.Started || j.Created, Ended: j.Ended, Total: j.Total, Done: j.Done, BytesTotal: j.BytesTotal,
+            Matched: j.Ok, New: j.New, Changed: j.Changed, Modified: j.Modified, Missing: j.Missing, Unreadable: j.Unreadable, Note: j.Batches > 1 ? j.Batches + " batches combined" : "", _job: j };
+        });
+        return fromJobs.reverse().concat(S.scans).map(function (x) { var c = Object.assign({}, x); delete c._job; return c; });
+      }
       case "GET Libraries": return libs.map(function (l) { return Object.assign({}, l, { Included: S.cfg.ExcludedLibraryIds.indexOf(l.Id) < 0 }); });
       case "POST Import": return Object.assign({}, S.imp, { FilesImported: 0, AlreadyPresent: 14316, ChecksImported: 0, Time: new Date().toISOString() });
     }
