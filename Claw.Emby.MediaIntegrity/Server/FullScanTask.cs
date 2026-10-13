@@ -19,7 +19,7 @@ namespace Claw.Emby.MediaIntegrity.Server
 
         public IEnumerable<TaskTriggerInfo> GetDefaultTriggers() => new[]
         {
-            new TaskTriggerInfo { Type = "IntervalTrigger", IntervalTicks = TimeSpan.FromDays(182).Ticks }
+            new TaskTriggerInfo { Type = "IntervalTrigger", IntervalTicks = TimeSpan.FromDays(7).Ticks /* Emby timers cap at ~49 days; the 6-month cadence comes from MinDaysBetweenScheduledScans */ }
         };
 
         public Task Execute(CancellationToken cancellationToken, IProgress<double> progress)

@@ -458,7 +458,7 @@ define([], function () {
         q(".mi-s-auto").value = lines(c.AutoAcceptModifiedExtensions);
         q(".mi-s-new").checked = c.HashNewItems !== false;
         q(".mi-s-throttle").value = c.ThrottleMBps || 0;
-        q(".mi-s-mindays").value = c.MinDaysBetweenScheduledScans != null ? c.MinDaysBetweenScheduledScans : 150;
+        q(".mi-s-mindays").value = c.MinDaysBetweenScheduledScans != null ? c.MinDaysBetweenScheduledScans : 182;
         q(".mi-s-play").checked = c.PauseDuringPlayback !== false;
         q(".mi-s-nsum").checked = c.NotifyScanSummary !== false;
         q(".mi-s-nprob").checked = c.NotifyProblems !== false;

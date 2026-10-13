@@ -4,7 +4,7 @@ Finds silent corruption (bit rot), missing and unreadable files in your Emby lib
 
 - **Scope:** every Emby library path plus extra folders you add in Settings. All file types are checked, except names matching the exclude patterns.
 - **New items:** files of newly added library items are queued for background hashing about 2 minutes after they appear. Hashing waits until a file has gone 60 s without being modified.
-- **Full integrity scan:** a scheduled task that runs every 6 months by default.
+- **Full integrity scan:** a scheduled task. Its trigger fires weekly, but it only scans when the last full verification is older than `MinDaysBetweenScheduledScans` (default 182 days, so about every 6 months). Emby cannot run interval triggers longer than about 49 days.
   - Low priority, one file at a time, with an optional MB/s limit.
   - Pauses automatically during playback.
   - Resumable: Stop or a server restart keeps the position, and "Start over" discards it.

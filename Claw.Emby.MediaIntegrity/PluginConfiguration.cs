@@ -19,7 +19,7 @@ namespace Claw.Emby.MediaIntegrity
         public int ThrottleMBps { get; set; } = 0;
         public bool PauseDuringPlayback { get; set; } = true;
         /// <summary>Scheduled / Emby-dashboard runs are skipped while the last complete verification (incl. the imported one) is newer than this. 0 = never skip. "Start scan" on the plugin page always runs.</summary>
-        public int MinDaysBetweenScheduledScans { get; set; } = 150;
+        public int MinDaysBetweenScheduledScans { get; set; } = 182;
         public bool NotifyScanSummary { get; set; } = true;
         public bool NotifyProblems { get; set; } = true;
         /// <summary>Old get-all-hashes.ps1 database imported once on first start (copied, opened read-only; the original is never changed).</summary>

@@ -187,7 +187,7 @@
               <div class="fieldDescription">0 = never skip. <b>Start scan</b> here always runs.</div></div>
           </div>
           <div class="checkboxContainer"><label><input is="emby-checkbox" type="checkbox" class="mi-s-play" /><span>Pause hashing while anything is playing</span></label></div>
-          <div class="fieldDescription">Schedule: Dashboard → Scheduled tasks → Media Integrity → <i>Full integrity scan</i> (default every 6 months). Scans run at low priority, one file at a time, and resume where they stopped.</div>
+          <div class="fieldDescription">Schedule: Dashboard → Scheduled tasks → Media Integrity → <i>Full integrity scan</i> (checks weekly; a full scan runs when the last full verification is older than the days below, default 182 = about 6 months). Scans run at low priority, one file at a time, and resume where they stopped.</div>
 
           <h3 class="mi-h">Notifications</h3>
           <div class="checkboxContainer"><label><input is="emby-checkbox" type="checkbox" class="mi-s-nsum" /><span>Scan summary when a full scan finishes</span></label></div>
