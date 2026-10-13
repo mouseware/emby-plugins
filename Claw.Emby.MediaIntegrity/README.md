@@ -13,9 +13,21 @@ Finds silent corruption (bit rot), missing and unreadable files in your Emby lib
   - *changed*: same size and modification time but different content, which is typical of bit rot.
   - *modified*: the file was rewritten. Rewrites of metadata extensions (.nfo, artwork) are accepted automatically.
   - Also reported: *missing*, *unreadable* and *new*.
+- **Verify integrity (item "…" menu, 1.0.2):** shown for administrators on movies, episodes, series, seasons, folders, libraries and other media items, and for several selected items at once.
+  - A file item is checked together with its companion files (same base name: `.nfo`, subtitles, `-poster.jpg`).
+  - A series, season, folder or library is checked recursively from its folder on disk, plus tracked files that have since disappeared (these are reported as missing).
+  - A toast shows the result (OK / new / CHANGED / missing / unreadable) with an **Open Media Integrity** link.
+  - The menu entry is added by a small script that the plugin writes into Emby's `dashboard-ui` folder, the same way Default Chapters does.
+- **Manual checks (1.0.2):** "Verify integrity", **Check now**, **Check selected** and **Check this library/folder** run in their own background queue.
+  - They are separate from the full scan, so they also run while the scan is paused or stopped.
+  - Only the speed limit applies to them; they don't pause for playback, because you asked for them.
+  - Progress shows in the same panel as the scan: file x of y, current file, speed, time left, result counts, and a Cancel button.
 - **Page:** Main menu → Media Integrity.
-  - Problems: accept new hash, re-check, ignore.
-  - Browse: by library or by drive/folder, with a searchable, paged file table and per-file history.
+  - Problems: accept new hash, **Check now** (a live hash; the row updates in place), ignore.
+  - Browse:
+    - search across all files with a status filter (OK, never verified, changed, modified, missing, unreadable, problems, ignored);
+    - grouped by library or by drive/folder, each with a **Check this library/folder** button;
+    - a searchable, paged file table with row checkboxes, **Check selected**, a per-row **Check now** that shows the percentage and speed in the row, and per-file history.
   - Activity: past scans and the legacy import.
   - Settings.
 - **Notifications:** "Integrity scan summary" and "Integrity problems found" (at most one per scan).
@@ -25,4 +37,22 @@ Data is stored in `<Emby data>\claw-mediaintegrity\integrity.db` (SQLite, throug
 
 Tests:
 - `tests/Claw.Emby.MediaIntegrity.Tests`: `dotnet run`. Set `LEGACY_DB` and `VERIFY_DIR` to also test against a copy of a real database.
-- `tests/web`: `node build-page.js && node test-integrity.js [shotDir]`. Uses fake data only.
+- `tests/web`: `node build-page.js && node test-integrity.js [shotDir]` for the page and `node test-inject.js [shotDir]` for the item menu. Both use fake data only.
+
+## Changes
+
+- **1.0.2.0**
+  - New "Verify integrity" entry in the item "…" menu.
+  - Browse: Check now, Check selected, and Check this library/folder.
+  - Problems: Check now replaces Re-check.
+  - Live in-row progress.
+  - Search across all files with a status filter.
+  - Manual-check queue that is separate from the full scan.
+- **1.0.1.0**
+  - Fix: Emby failed to start with 1.0.0.0, because its interval timers cannot exceed about 49 days. The trigger is now weekly, and the 6-month cadence comes from `MinDaysBetweenScheduledScans` (182 days).
+- **1.0.0.0**
+  - First version.
+
+## Screenshots (fake data)
+
+`docs/screenshots/mediaintegrity-*.png` in the repository root.

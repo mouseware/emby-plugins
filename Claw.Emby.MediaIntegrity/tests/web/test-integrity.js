@@ -49,9 +49,29 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   ok((await p.$$('.mi-prob-t tbody tr[data-id]')).length === 2, 'ignore hides row');
   await p.$eval('.mi-prob-ign', e => e.click()); await sleep(400);
   ok((await p.$$('.mi-prob-t tbody tr[data-id]')).length === 3, 'show ignored');
-  await p.$eval('.mi-prob-t tbody tr[data-id] [data-act=recheck]', e => e.click()); await sleep(300);
-  ok((await p.evaluate(() => __srv.queue)) === 1, 'recheck queued');
   await p.$eval('.mi-prob-ign', e => e.click()); await sleep(300);
+  // ---- live Check now on a Problems row (unreadable file that now reads fine)
+  const upath = await p.evaluate(() => { const tr = [...document.querySelectorAll('.mi-prob-t tbody tr[data-id]')].find(r => !/Missing/.test(r.textContent)); const pth = tr.getAttribute('data-path'); __srv.outcome[pth] = 'match'; __srv.freeze = true; return pth; });
+  console.log('live target', upath);
+  const usel = '.mi-prob-t tr[data-path="' + upath.replace(/\\/g, '\\\\') + '"]';
+  await p.$eval(usel + ' [data-act=checknow]', e => e.click()); await sleep(500);
+  ok(/queued/.test(await txt(usel + ' .mi-live')), 'row shows queued');
+  await p.evaluate(() => { __srv.freeze = false; __srv.step = 0.21; __srv.advance(); __srv.advance(); __srv.advance(); __srv.freeze = true; }); await sleep(1600);
+  const live = await txt(usel + ' .mi-live');
+  ok(/\d+%/.test(live) && /MB\/s/.test(live), 'in-row percent + speed: ' + live);
+  ok(/Checking now/.test(await txt('.mi-man-title')) && await vis('.mi-man-live'), 'manual progress in panel');
+  ok(/of 1/.test(await txt('.mi-man-meta')), 'panel shows file x of y');
+  await shot('checknow-progress');
+  await p.evaluate(() => { __srv.freeze = false; __srv.step = 0.5; }); await sleep(2600);
+  ok(/OK/.test(await txt(usel + ' .mi-live')) && /OK/.test(await txt(usel + ' .mi-pill')), 'row updated to OK without reload');
+  ok((await p.evaluate(() => (__toasts || []).slice(-1)[0])) .startsWith('OK:'), 'toast with result');
+  await sleep(3500);
+  ok(!(await p.$(usel)), 'fixed file drops out of Problems after the check');
+  // a missing file checked live -> Missing
+  const mpath = await p.evaluate(() => __srv.files.find(x => x.Status === 'missing').Path);
+  const msel = '.mi-prob-t tr[data-path="' + mpath.replace(/\\/g, '\\\\') + '"]';
+  await p.$eval(msel + ' [data-act=checknow]', e => e.click()); await sleep(2500);
+  ok(/Missing/.test(await txt(msel + ' .mi-live')), 'missing result in row');
   // browse
   await click('.mi-tab[data-tab=browse]'); await sleep(400);
   ok((await p.$$('.mi-grp-t tr.mi-grp')).length === 4, '4 library groups (3 libs + extra)');
@@ -63,14 +83,51 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   ok((await p.$$('.mi-files-t tbody tr[data-id]')).length === 3, 'search');
   await p.$eval('.mi-f-search', e => { e.value = ''; e.dispatchEvent(new Event('input', { bubbles: true })); }); await sleep(700);
   await p.$eval('.mi-files-t th[data-sort=size]', e => e.click()); await sleep(300); // first click on size = largest first
-  const first = await p.$eval('.mi-files-t tbody tr[data-id] td', e => e.textContent);
+  const first = await p.$eval('.mi-files-t tbody tr[data-id] td:nth-child(2)', e => e.textContent);
   ok(/Bluray/.test(first), 'sort size desc puts videos first');
   await shot('browse-expanded');
+  // row checkboxes + Check selected
+  ok(await p.$eval('[data-box] .mi-bsel-check', e => e.disabled), 'Check selected disabled with none');
+  await p.$$eval('[data-box] tbody tr[data-id] .mi-bsel', a => { a[0].click(); a[1].click(); });
+  ok(/2 selected/.test(await txt('[data-box] .mi-bsel-n')), '2 selected');
+  const selIds = await p.$$eval('[data-box] tbody tr[data-id]', a => a.slice(0, 2).map(r => r.getAttribute('data-id')));
+  await p.evaluate(() => { __srv.step = 0.5; });
+  await p.$eval('[data-box] .mi-bsel-check', e => e.click()); await sleep(5000);
+  for (const id of selIds) ok(/OK/.test(await txt('[data-box] tr[data-id="' + id + '"] .mi-live')), 'selected row ' + id + ' updated');
+  ok(await p.evaluate(() => __srv.calls.includes('POST Check/Files')), 'Check/Files called');
+  // per-row Check now in Browse
+  await p.$eval('[data-box] tbody tr[data-id]:nth-child(3) .mi-checknow', e => e.click()); await sleep(3000);
+  ok(/OK/.test(await txt('[data-box] tbody tr[data-id]:nth-child(3) .mi-live')), 'browse row Check now');
   await p.$eval('.mi-files-t tbody tr[data-id]', e => e.click()); await sleep(400);
   ok(await vis('.mi-modal'), 'history modal opens');
   ok((await p.$$('.mi-hist-t tbody tr')).length === 4, 'history rows');
   await shot('history');
   await click('.mi-dlg-no'); await sleep(200);
+  // Check this library
+  await p.evaluate(() => { __srv.freeze = true; });
+  await p.$eval('.mi-grp-t tr.mi-grp[data-key="lib:102"] .mi-grp-check', e => e.click()); await sleep(2500);
+  ok(await p.evaluate(() => __srv.calls.includes('POST Check/Group')), 'group check posted');
+  await p.evaluate(() => { __srv.freeze = false; __srv.advance(); __srv.advance(); __srv.advance(); __srv.advance(); __srv.advance(); __srv.freeze = true; }); await sleep(2300);
+  ok(/TV Shows/.test(await txt('.mi-man-title')), 'panel shows group check: ' + await txt('.mi-man-title'));
+  await shot('check-library');
+  await p.evaluate(() => { __srv.freeze = false; __srv.step = 1; }); await sleep(2000);
+  await p.evaluate(async () => { for (let i = 0; i < 200; i++) __srv.advance(); }); await sleep(4500);
+  ok(/TV Shows/.test((await p.evaluate(() => (__toasts || []).join('|')))), 'group check finished toast');
+  // global search across all files
+  await p.$eval('.mi-g-search', e => { e.value = 'sintel'; e.dispatchEvent(new Event('input', { bubbles: true })); }); await sleep(800);
+  ok(!(await vis('.mi-grp-t')) && await vis('.mi-gsearch-box'), 'global search replaces groups');
+  ok((await p.$$('.mi-gsearch-box tbody tr[data-id]')).length === 3, 'global search finds 3');
+  await p.$eval('.mi-g-search', e => { e.value = 'Example Show'; e.dispatchEvent(new Event('input', { bubbles: true })); }); await sleep(800);
+  ok(/30 files/.test(await txt('.mi-gsearch-box .mi-f-count')), 'global search across libraries: ' + await txt('.mi-gsearch-box .mi-f-count'));
+  await p.$eval('.mi-g-search', e => { e.value = ''; e.dispatchEvent(new Event('input', { bubbles: true })); }); await sleep(500);
+  await p.evaluate(() => { __srv.files[3].Status = 'never_hashed'; __srv.files[5].Status = 'never_hashed'; });
+  await p.select('.mi-g-status', 'never_hashed'); await sleep(600);
+  ok((await p.$$('.mi-gsearch-box tbody tr[data-id]')).length === 2, 'status filter never verified');
+  await shot('global-search');
+  await p.select('.mi-g-status', 'missing'); await sleep(600);
+  ok((await p.$$('.mi-gsearch-box tbody tr[data-id]')).length === 1, 'status filter missing');
+  await p.$eval('.mi-g-clear', e => e.click()); await sleep(500);
+  ok(await vis('.mi-grp-t'), 'clear restores groups');
   // paging on TV group (38) — set small page via folder group with all D:
   await p.$eval('.mi-seg button[data-group=folder]', e => e.click()); await sleep(400);
   const fg = await p.$$eval('.mi-grp-t tr.mi-grp b', a => a.map(e => e.textContent));

@@ -1,11 +1,12 @@
 # Claw Emby plugins
 
-Four plugins for Emby Server, one per subfolder:
+Five plugins for Emby Server, one per subfolder:
 
 - **Claw Guard**: bans IP addresses after failed sign-ins, nonexistent or instant-ban usernames, or repeated 401/403 API calls. Bans are enforced through Emby's own Remote IP filter. It has a live log, ban management, escalation rules, a whitelist, optional GeoLite2 country lookup, and an import from Emby's existing logs.
 - **Claw IPTV Channel Mapper**: a spreadsheet-style editor for IPTV channels (number, name, group, logo, guide mapping, enabled), with undo, snapshots and bulk actions.
 - **Claw Default Chapters**: generates "Chapter 1, 2 …" interval chapters for movies that have few or no chapters, from the item menu or in bulk (Found movies), with revert.
 - **Claw Custom Item UI**: item-page link tweaks, VLC path links, a rearrangeable admin dashboard, and Activity/Alerts tables on the dashboard.
+- **Media Integrity**: finds bit rot, missing and unreadable files by comparing each library file's MD5 with a stored baseline. It has a resumable, low-priority full scan (scheduled task), background hashing of new items, "Verify integrity" in the item menu, a live **Check now** on any file, folder or library, search across all files, per-file history, and an import of the old `get-all-hashes.ps1` database.
 
 All data tables have resizable columns. The widths are saved per table in the browser.
 
@@ -15,7 +16,7 @@ All data tables have resizable columns. The widths are saved per table in the br
 | Claw IPTV Mapper | `Claw.Emby.IptvMapper` | 1.3.2.0 | `Claw.Emby.IptvMapper\bin\Release\Claw.Emby.IptvMapper.dll` |
 | Claw Guard | `Claw.Emby.Guard` | 1.1.0.0 | `Claw.Emby.Guard\bin\Release\Claw.Emby.Guard.dll` |
 | Claw Default Chapters | `Claw.Emby.DefaultChapters` | 1.1.1.0 | `Claw.Emby.DefaultChapters\bin\Release\Claw.Emby.DefaultChapters.dll` |
-| Media Integrity (not released yet) | `Claw.Emby.MediaIntegrity` | 1.0.1.0 | `Claw.Emby.MediaIntegrity\bin\Release\Claw.Emby.MediaIntegrity.dll` |
+| Media Integrity | `Claw.Emby.MediaIntegrity` | 1.0.2.0 | `Claw.Emby.MediaIntegrity\bin\Release\Claw.Emby.MediaIntegrity.dll` |
 
 Each project builds on its own. Its `refs\` folder holds copies of the Emby SDK DLLs (`MediaBrowser.Common.dll`, `MediaBrowser.Controller.dll`, `MediaBrowser.Model.dll`), and the csproj HintPaths point there through `$(EmbyServerPath)`, which defaults to `refs`.
 
@@ -30,16 +31,21 @@ The screenshots use made-up sample data: documentation IP ranges, fake users and
 | ![Guard import](docs/screenshots/guard-import.png) Guard: import from Emby logs | ![Guard settings](docs/screenshots/guard-settings.png) Guard: settings |
 | ![Guard whitelist](docs/screenshots/guard-whitelist.png) Guard: whitelist | ![IPTV Mapper](docs/screenshots/iptvmapper-channels.png) IPTV Channel Mapper |
 | ![Default Chapters changed](docs/screenshots/defaultchapters-changed.png) Default Chapters: changed movies | ![Default Chapters found](docs/screenshots/defaultchapters-found.png) Default Chapters: found movies |
-| ![Custom Item UI dashboard](docs/screenshots/customitemui-dashboard-tables.png) Custom Item UI: dashboard tables | ![Custom Item UI settings](docs/screenshots/customitemui-settings.png) Custom Item UI: settings |
+| ![Custom Item UI dashboard](docs/screenshots/customitemui-dashboard-tables.png) Custom Item UI: dashboard tables | ![Custom Item UI settings](docs/screenshots/customitemui-settings.png) Custom Item UI: settings (tabs) |
+| ![Media Integrity problems](docs/screenshots/mediaintegrity-problems-running.png) Media Integrity: problems while a full scan runs | ![Media Integrity check now](docs/screenshots/mediaintegrity-checknow-progress.png) Media Integrity: live Check now (in-row progress) |
+| ![Media Integrity browse](docs/screenshots/mediaintegrity-browse-expanded.png) Media Integrity: browse a library | ![Media Integrity check library](docs/screenshots/mediaintegrity-check-library.png) Media Integrity: checking a whole library |
+| ![Media Integrity search](docs/screenshots/mediaintegrity-global-search.png) Media Integrity: search all files by status | ![Media Integrity history](docs/screenshots/mediaintegrity-history.png) Media Integrity: per-file history |
+| ![Media Integrity item menu](docs/screenshots/mediaintegrity-item-menu.png) Media Integrity: "Verify integrity" in the item menu | ![Media Integrity toast](docs/screenshots/mediaintegrity-item-toast-changed.png) Media Integrity: result toast with a link |
+| ![Media Integrity activity](docs/screenshots/mediaintegrity-activity.png) Media Integrity: past scans and import | ![Media Integrity settings](docs/screenshots/mediaintegrity-settings.png) Media Integrity: settings |
 
 ## Install (from a release)
 
 Requires **Emby Server 4.10.1 or newer** (built against the 4.10.1 SDK, .NET 8).
 
-1. Download the DLLs you want from the [latest release](../../releases/latest), or download `claw-emby-plugins-<tag>.zip` with all four.
+1. Download the DLLs you want from the [latest release](../../releases/latest), or download `claw-emby-plugins-<tag>.zip` with all five.
 2. Stop Emby Server, including the tray app.
 3. Copy the `.dll` files into Emby's plugins folder. This is the `plugins` folder in Emby's data folder: `%APPDATA%\Emby-Server\plugins` for a Windows user install, or `/var/lib/emby/plugins` for the Linux packages. Overwrite older versions.
-4. Start Emby Server. The plugins appear under **Dashboard → Plugins**, and Guard also gets a shield entry in the main menu. Hard-refresh the browser (Ctrl+F5) so it doesn't use cached pages.
+4. Start Emby Server. The plugins appear under **Dashboard → Plugins**, Guard (shield) and Media Integrity (health_and_safety) also get main-menu entries. Hard-refresh the browser (Ctrl+F5) so it doesn't use cached pages.
 
 **Guard takes over Emby's Remote IP filter.** On first start it switches *Settings → Network → Remote IP filter* to **blacklist** mode and manages its own entries there. Entries you added yourself are kept. If the filter is an allow-list (whitelist mode) with entries, Guard does not change it and shows "Not enforcing" instead. LAN, loopback and private addresses are never banned. Turning Guard's master switch off removes its entries. Read `Claw.Emby.Guard/README.md` before installing.
 
@@ -102,6 +108,7 @@ Get-ChildItem "$env:APPDATA\Emby-Server\plugins\Claw*.dll" | Select-Object Name,
 ## Tests
 
 - Guard: `cd Claw.Emby.Guard\tests\Claw.Emby.Guard.Tests; dotnet run` runs the offline engine tests. The UI tests (`tests\web`, Puppeteer + Chrome) were run on the build box.
+- Media Integrity: `cd Claw.Emby.MediaIntegrity\tests\Claw.Emby.MediaIntegrity.Tests; dotnet run` runs the engine, import and manual-queue tests. Set `LEGACY_DB` (and `VERIFY_DIR`) to also test against a temporary copy of a real legacy database. The UI tests are in `tests\web` (`test-integrity.js`, `test-inject.js`) and use fake data only.
 
 ## Resizable table columns
 

@@ -42,6 +42,8 @@ namespace Claw.Emby.MediaIntegrity.Server
         public ScanProgress Progress { get; } = new ScanProgress();
         public Gate ScanGate { get; }
         public Gate QueueGate { get; }
+        public ManualGateImpl ManualGate { get; }
+        public ManualCheckQueue Manual { get; private set; }
         public string DataDir { get; private set; }
         public ImportResult Import { get; private set; }
         public string QueueCurrent { get; private set; }
@@ -52,7 +54,7 @@ namespace Claw.Emby.MediaIntegrity.Server
         {
             _config = config; _library = library; _sessions = sessions; _notifications = notifications; _tasks = tasks;
             _log = logManager.GetLogger("MediaIntegrity");
-            ScanGate = new Gate(this, true); QueueGate = new Gate(this, false);
+            ScanGate = new Gate(this, true); QueueGate = new Gate(this, false); ManualGate = new ManualGateImpl(this);
         }
 
         public static PluginConfiguration Cfg => Plugin.Instance?.Configuration ?? new PluginConfiguration();
@@ -74,6 +76,15 @@ namespace Claw.Emby.MediaIntegrity.Server
                     return null;
                 }
             }
+        }
+
+        /// <summary>Manual checks were asked for explicitly: they ignore the scan's pause and playback, only the speed limit applies.</summary>
+        public sealed class ManualGateImpl : IHashGate
+        {
+            private readonly IntegrityHost _h;
+            public ManualGateImpl(IntegrityHost h) { _h = h; }
+            public long BytesPerSecond => Math.Max(0, Cfg.ThrottleMBps) * 1024L * 1024L;
+            public string PauseReason => null;
         }
 
         private DateTime _playChecked; private bool _playing;
@@ -105,6 +116,13 @@ namespace Claw.Emby.MediaIntegrity.Server
             _queueThread = new Thread(QueueLoop) { IsBackground = true, Name = "MediaIntegrity queue", Priority = ThreadPriority.Lowest };
             _queueThread.Start();
             _queueTimer = new Timer(_ => _queueWake.Set(), null, 15000, 30000);
+            Manual = new ManualCheckQueue(Engine, ManualGate)
+            {
+                OnError = (path, ex) => _log.ErrorException("Media Integrity: manual check " + (path ?? ""), ex),
+                JobFinished = j => _log.Info("Media Integrity: manual check \"{0}\" {1}: {2} files, {3} ok, {4} new, {5} changed, {6} modified, {7} missing, {8} unreadable",
+                    j.Label, j.State, j.Done, j.Ok, j.New, j.Changed, j.Modified, j.Missing, j.Unreadable)
+            };
+            Manual.Start();
             _log.Info("Media Integrity started: {0} files, {1} checks, {2} queued", Store.FileCount, Store.CheckCount, Store.QueueLength);
         }
 
@@ -137,6 +155,7 @@ namespace Claw.Emby.MediaIntegrity.Server
             _disposed = true;
             _library.ItemAdded -= OnItemAdded;
             _queueTimer?.Dispose();
+            try { Manual?.Dispose(); } catch { }
             try { _scanStop?.Cancel(); } catch { }
             _queueWake.Set();
             try { _queueThread?.Join(3000); } catch { }
@@ -279,6 +298,47 @@ namespace Claw.Emby.MediaIntegrity.Server
                 Store.Enqueue(item.Path, "added", DateTime.UtcNow.AddMinutes(2), DateTime.UtcNow);
             }
             catch (Exception ex) { _log.ErrorException("Media Integrity: queue new item", ex); }
+        }
+
+        // ---------------- manual checks ----------------
+        private System.Text.RegularExpressions.Regex ExcludeRegex() => ScanEngine.GlobsToRegex(Cfg.Exclude ?? new string[0]);
+
+        public CheckJob CheckPaths(string label, IList<string> files, IList<string> dirs, bool companions)
+        {
+            var paths = ManualCheckQueue.ExpandTargets(files, dirs, ExcludeRegex(), d => Store.PathsUnder(d, null), companions);
+            return Manual.Enqueue(label, paths);
+        }
+
+        /// <summary>Files of a library item: a file item with its companions (.nfo, subtitles, artwork); a folder item
+        /// (series, season, folder, library) recursively by its folder on disk, else by its children's files.</summary>
+        public CheckJob CheckItems(IEnumerable<string> ids)
+        {
+            var files = new List<string>(); var dirs = new List<string>(); var names = new List<string>();
+            var dataPath = _config.ApplicationPaths.ProgramDataPath;
+            bool Usable(string p) => !string.IsNullOrWhiteSpace(p) && !p.StartsWith(dataPath, StringComparison.OrdinalIgnoreCase);
+            foreach (var id in ids)
+            {
+                MediaBrowser.Controller.Entities.BaseItem item = null;
+                if (long.TryParse(id, out var internalId)) item = _library.GetItemById(internalId);
+                if (item == null) item = _library.GetItemById(id);
+                if (item == null) continue;
+                names.Add(item.Name);
+                if (item is MediaBrowser.Controller.Entities.Folder folder)
+                {
+                    var locs = new List<string>();
+                    try { if (folder.GetType().GetProperty("PhysicalLocations")?.GetValue(folder) is IEnumerable<string> pl) locs.AddRange(pl.Where(Usable).Where(Directory.Exists)); } catch { } // libraries (CollectionFolder) list their folders here
+                    if (locs.Count == 0 && Usable(item.Path) && Directory.Exists(item.Path)) locs.Add(item.Path);
+                    if (locs.Count > 0) { dirs.AddRange(locs); continue; }
+                    var kids = _library.GetItemList(new MediaBrowser.Controller.Entities.InternalItemsQuery { AncestorIds = new[] { item.InternalId }, Recursive = true, IsFolder = false });
+                    foreach (var c in kids) if (c.IsFileProtocol && Usable(c.Path)) { if (Directory.Exists(c.Path)) dirs.Add(c.Path); else files.Add(c.Path); }
+                }
+                else if (item.IsFileProtocol && Usable(item.Path))
+                {
+                    if (Directory.Exists(item.Path)) dirs.Add(item.Path); else files.Add(item.Path); // disc folders (BDMV / VIDEO_TS) are directories
+                }
+            }
+            var label = names.Count == 0 ? "Item check" : names.Count == 1 ? names[0] : names[0] + " and " + (names.Count - 1) + " more";
+            return CheckPaths(label, files, dirs, true);
         }
 
         public void Recheck(FileRecord f) { Store.Enqueue(f.Path, "recheck", DateTime.UtcNow, DateTime.UtcNow); _queueWake.Set(); }

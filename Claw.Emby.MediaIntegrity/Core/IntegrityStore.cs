@@ -203,6 +203,23 @@ CREATE TABLE IF NOT EXISTS queue (
             return new PagedFiles { Total = total, Offset = offset, Items = items };
         }
 
+        /// <summary>Known paths under any of the prefixes (or, with prefixes null, not under any of notUnder). For manual group checks.</summary>
+        public List<string> PathsUnder(IList<string> prefixes, IList<string> notUnder)
+        {
+            var where = new List<string>(); var args = new List<(string, object)>();
+            if (prefixes != null)
+            {
+                if (prefixes.Count == 0) return new List<string>();
+                var ors = new List<string>();
+                for (int i = 0; i < prefixes.Count; i++) { ors.Add("substr(path,1,@pl" + i + ")=@p" + i + " COLLATE NOCASE"); var p = WithSep(prefixes[i]); args.Add(("p" + i, p)); args.Add(("pl" + i, (long)p.Length)); }
+                where.Add("(" + string.Join(" OR ", ors) + ")");
+            }
+            if (notUnder != null)
+                for (int i = 0; i < notUnder.Count; i++) { var p = WithSep(notUnder[i]); where.Add("substr(path,1,@nl" + i + ")<>@n" + i + " COLLATE NOCASE"); args.Add(("n" + i, p)); args.Add(("nl" + i, (long)p.Length)); }
+            var w = where.Count > 0 ? " WHERE " + string.Join(" AND ", where) : "";
+            return Db.Query("SELECT path FROM files" + w + " ORDER BY path COLLATE NOCASE", args.ToArray()).Select(r => r.Str("path")).ToList();
+        }
+
         public static string WithSep(string p)
         {
             if (string.IsNullOrEmpty(p)) return p;

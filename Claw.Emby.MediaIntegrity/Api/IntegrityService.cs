@@ -58,8 +58,43 @@ namespace Claw.Emby.MediaIntegrity.Api
     [Authenticated(Roles = "Admin")]
     public class PostImport : IReturn<ImportResult> { }
 
+    [Route("/ClawMediaIntegrity/Check/Items", "POST", Summary = "Media Integrity: check the files of library items now (Ids = comma separated item ids; folders recursively)")]
+    [Authenticated(Roles = "Admin")]
+    public class PostCheckItems : IReturn<CheckJob> { public string Ids { get; set; } }
+
+    [Route("/ClawMediaIntegrity/Check/Files", "POST", Summary = "Media Integrity: check tracked files now (Ids = comma separated file ids)")]
+    [Authenticated(Roles = "Admin")]
+    public class PostCheckFiles : IReturn<CheckJob> { public string Ids { get; set; } }
+
+    [Route("/ClawMediaIntegrity/Check/Group", "POST", Summary = "Media Integrity: check a Browse group (library / drive folder) now")]
+    [Authenticated(Roles = "Admin")]
+    public class PostCheckGroup : IReturn<CheckJob> { public string GroupBy { get; set; } public string Group { get; set; } }
+
+    [Route("/ClawMediaIntegrity/Check/Jobs", "GET", Summary = "Media Integrity: manual check jobs (newest first)")]
+    [Authenticated(Roles = "Admin")]
+    public class GetCheckJobs : IReturn<List<CheckJob>> { }
+
+    [Route("/ClawMediaIntegrity/Check/Jobs/{Id}", "GET", Summary = "Media Integrity: one manual check job")]
+    [Authenticated(Roles = "Admin")]
+    public class GetCheckJob : IReturn<CheckJob> { public long Id { get; set; } }
+
+    [Route("/ClawMediaIntegrity/Check/Cancel", "POST", Summary = "Media Integrity: cancel the running and queued manual checks")]
+    [Authenticated(Roles = "Admin")]
+    public class PostCheckCancel : IReturn<OkResult> { }
+
+    public class ManualStatus
+    {
+        public bool Active { get; set; }
+        public CheckJob Job { get; set; }
+        public int QueuedJobs { get; set; }
+        public int PendingFiles { get; set; }
+        public double BytesPerSecond { get; set; }
+        public double? SecondsLeft { get; set; }
+        public CheckJob LastFinished { get; set; }
+    }
+
     public class OkResult { public bool Ok { get; set; } public string Error { get; set; } }
-    public class ActionResult { public int Done { get; set; } public int Skipped { get; set; } public string Error { get; set; } }
+    public class ActionResult { public int Done { get; set; } public int Skipped { get; set; } public string Error { get; set; } public long? JobId { get; set; } }
 
     public class FileDto
     {
@@ -122,6 +157,7 @@ namespace Claw.Emby.MediaIntegrity.Api
         public DateTime? LastCompleteVerification { get; set; }
         public int RootCount { get; set; }
         public DateTime Now { get; set; }
+        public ManualStatus Manual { get; set; }
     }
 
     public class IntegrityService : IService
@@ -141,9 +177,50 @@ namespace Claw.Emby.MediaIntegrity.Api
                 Resumable = h.ScanRunning ? null : h.Store.ResumableScan("full"), LastScan = scans.FirstOrDefault(),
                 QueueLength = h.Store.QueueLength, QueueCurrent = h.QueueCurrent, PlaybackActive = h.IsPlaybackActive(),
                 Counts = counts, Files = h.Store.FileCount, Problems = FileStatus.Problems.Sum(s => counts.TryGetValue(s, out var n) ? n : 0),
-                Import = h.Import, LastSkipReason = h.LastSkipReason, LastCompleteVerification = h.LastCompleteVerification(), RootCount = h.Roots().Count, Now = DateTime.UtcNow
+                Import = h.Import, LastSkipReason = h.LastSkipReason, LastCompleteVerification = h.LastCompleteVerification(), RootCount = h.Roots().Count, Now = DateTime.UtcNow,
+                Manual = ManualStatusOf(h)
             };
         }
+
+        public static ManualStatus ManualStatusOf(IntegrityHost h)
+        {
+            var m = h.Manual; if (m == null) return new ManualStatus();
+            var cur = m.Current; var rate = m.BytesPerSecond;
+            long left = 0;
+            foreach (var j in m.Jobs().Where(j => j.State == "queued" || j.State == "running")) left += Math.Max(0, j.BytesTotal - j.BytesDone);
+            return new ManualStatus
+            {
+                Active = cur != null || m.QueuedJobs > 0, Job = cur, QueuedJobs = m.QueuedJobs, PendingFiles = m.PendingFiles, BytesPerSecond = rate,
+                SecondsLeft = rate > 1 && cur != null ? left / rate : (double?)null,
+                LastFinished = m.Jobs().FirstOrDefault(j => j.State == "done" || j.State == "cancelled")
+            };
+        }
+
+        private static List<long> ParseIds(string ids) => (ids ?? "").Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).Select(s => long.TryParse(s.Trim(), out var v) ? v : -1).Where(v => v >= 0).ToList();
+
+        public object Post(PostCheckItems r) => H.CheckItems((r.Ids ?? "").Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim()));
+
+        public object Post(PostCheckFiles r)
+        {
+            var h = H;
+            var paths = ParseIds(r.Ids).Select(id => h.Store.GetFile(id)).Where(f => f != null).Select(f => f.Path).ToList();
+            var label = paths.Count == 1 ? System.IO.Path.GetFileName(paths[0]) : paths.Count + " selected files";
+            return h.CheckPaths(label, paths, null, false);
+        }
+
+        public object Post(PostCheckGroup r)
+        {
+            var h = H;
+            var groups = Groups(h, r.GroupBy, out var allRoots);
+            if (r.Group == "other") return h.Manual.Enqueue("Not in scope (old paths)", h.Store.PathsUnder(null, allRoots));
+            var g = groups.FirstOrDefault(x => x.Key == r.Group);
+            if (g == null) return h.Manual.Enqueue("(unknown group)", new string[0]);
+            return h.CheckPaths(g.Label, null, g.Paths, false);
+        }
+
+        public object Get(GetCheckJobs r) => H.Manual.Jobs();
+        public object Get(GetCheckJob r) => (object)H.Manual.Get(r.Id) ?? new CheckJob { Id = r.Id, State = "unknown" };
+        public object Post(PostCheckCancel r) { H.Manual.CancelAll(); return new OkResult { Ok = true }; }
 
         public object Post(PostScanAction r)
         {
@@ -164,7 +241,7 @@ namespace Claw.Emby.MediaIntegrity.Api
 
         public object Post(PostFilesAction r)
         {
-            var h = H; var res = new ActionResult(); var now = DateTime.UtcNow;
+            var h = H; var res = new ActionResult(); var now = DateTime.UtcNow; var recheck = new List<string>();
             foreach (var s in (r.Ids ?? "").Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
             {
                 if (!long.TryParse(s.Trim(), out var id)) { res.Skipped++; continue; }
@@ -173,13 +250,14 @@ namespace Claw.Emby.MediaIntegrity.Api
                 switch ((r.Action ?? "").ToLowerInvariant())
                 {
                     case "accept": if (h.Store.AcceptCurrent(id, now)) res.Done++; else res.Skipped++; break;
-                    case "recheck": h.Recheck(f); res.Done++; break;
+                    case "recheck": recheck.Add(f.Path); res.Done++; break;
                     case "ignore": h.Store.SetIgnored(id, true); res.Done++; break;
                     case "unignore": h.Store.SetIgnored(id, false); res.Done++; break;
                     case "forget": if (f.Status == FileStatus.Missing && h.Store.DeleteFile(id)) res.Done++; else res.Skipped++; break;
                     default: res.Error = "unknown action"; return res;
                 }
             }
+            if (recheck.Count > 0) res.JobId = h.CheckPaths(recheck.Count == 1 ? "Re-check " + System.IO.Path.GetFileName(recheck[0]) : "Re-check " + recheck.Count + " files", recheck, null, false).Id;
             return res;
         }
 
@@ -249,7 +327,8 @@ namespace Claw.Emby.MediaIntegrity.Api
             var h = H;
             var groups = Groups(h, r.GroupBy, out var allRoots);
             PagedFiles page;
-            if (r.Group == "other") page = h.Store.Browse(null, allRoots, r.Search, r.Status, r.Sort, r.Desc, r.StartIndex, r.Limit);
+            if (string.IsNullOrEmpty(r.Group) || r.Group == "all") page = h.Store.Browse(null, null, r.Search, r.Status, r.Sort, r.Desc, r.StartIndex, r.Limit);
+            else if (r.Group == "other") page = h.Store.Browse(null, allRoots, r.Search, r.Status, r.Sort, r.Desc, r.StartIndex, r.Limit);
             else
             {
                 var g = groups.FirstOrDefault(x => x.Key == r.Group);

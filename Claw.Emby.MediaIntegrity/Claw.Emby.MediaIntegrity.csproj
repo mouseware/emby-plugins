@@ -6,9 +6,9 @@
     <Nullable>disable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
-    <Version>1.0.1</Version>
-    <AssemblyVersion>1.0.1.0</AssemblyVersion>
-    <FileVersion>1.0.1.0</FileVersion>
+    <Version>1.0.2</Version>
+    <AssemblyVersion>1.0.2.0</AssemblyVersion>
+    <FileVersion>1.0.2.0</FileVersion>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
   </PropertyGroup>
@@ -29,5 +29,6 @@
     <EmbeddedResource Include="Web\integrity.html" />
     <EmbeddedResource Include="Web\integrity.js" />
     <EmbeddedResource Include="Images\thumb.png" />
+    <EmbeddedResource Include="Inject\claw-media-integrity.js" />
   </ItemGroup>
 </Project>

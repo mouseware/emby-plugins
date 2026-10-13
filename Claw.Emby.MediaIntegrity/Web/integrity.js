@@ -93,7 +93,8 @@ define([], function () {
   var PLUGIN_ID = "5b0c7f3e-2d4a-4e61-9a8b-6c1f0e7d3a52";
   var API = "ClawMediaIntegrity/";
   var TAB_KEY = "claw.mediaintegrity.tab", GROUP_KEY = "claw.mediaintegrity.groupBy";
-  var PAGE = 100;
+  var PAGE = 100, LIVE_MS = 700;
+  var STATUS_FILTERS = [["", "All statuses"], ["ok", "OK"], ["problems", "Problems"], ["changed", "Changed"], ["modified", "Modified"], ["missing", "Missing"], ["unreadable", "Unreadable"], ["never_hashed", "Never verified"], ["pending", "Not yet hashed (any)"], ["ignored", "Ignored"]];
 
   function esc(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
@@ -155,7 +156,7 @@ define([], function () {
   }
 
   function View(view) {
-    var S = { status: null, problems: [], probSort: { key: "status", dir: 1 }, sel: {}, groupBy: "library", groups: [], open: {}, cfg: null, libs: [], tab: "problems", timer: null, scans: [] };
+    var S = { live: {}, bsel: {}, global: { search: "", status: "", sort: "name", desc: false, start: 0 }, status: null, problems: [], probSort: { key: "status", dir: 1 }, sel: {}, groupBy: "library", groups: [], open: {}, cfg: null, libs: [], tab: "problems", timer: null, scans: [] };
     var q = function (s) { return view.querySelector(s); };
     var qa = function (s) { return Array.prototype.slice.call(view.querySelectorAll(s)); };
     try { S.groupBy = localStorage.getItem(GROUP_KEY) === "folder" ? "folder" : "library"; } catch (e) { }
@@ -233,9 +234,107 @@ define([], function () {
       q(".mi-scan-state").textContent = title; q(".mi-scan-icon").textContent = icon;
       var src = running ? s : (s.Resumable || s.LastScan);
       var chips = [["Matched", "Matched", "mi-ok"], ["New", "New", ""], ["Changed", "Changed", "mi-f"], ["Modified", "Modified", "mi-w"], ["Missing", "Missing", "mi-w"], ["Unreadable", "Unreadable", "mi-f"]];
-      q(".mi-chips").innerHTML = src ? chips.map(function (x) { var n = src[x[1]] || 0; return '<span class="mi-chip">' + x[0] + '<b class="' + (n ? x[2] : "") + '">' + fmtNum(n) + "</b></span>"; }).join("") : "";
+      q(".mi-chips").innerHTML = src ? chipsHtml(src, chips) : "";
+      renderManual(s.Manual || {}, now);
       schedule();
     }
+    function chipsHtml(src, chips) { return chips.map(function (x) { var n = src[x[1]] || 0; return '<span class="mi-chip">' + x[0] + '<b class="' + (n ? x[2] : "") + '">' + fmtNum(n) + "</b></span>"; }).join(""); }
+    var MCHIPS = [["OK", "Ok", "mi-ok"], ["New", "New", ""], ["Changed", "Changed", "mi-f"], ["Modified", "Modified", "mi-w"], ["Missing", "Missing", "mi-w"], ["Unreadable", "Unreadable", "mi-f"]];
+    function jobSummary(j) {
+      var p = (j.Changed || 0) + (j.Modified || 0) + (j.Missing || 0) + (j.Unreadable || 0), parts = [];
+      MCHIPS.forEach(function (x) { if (j[x[1]]) parts.push(fmtNum(j[x[1]]) + " " + x[0].toLowerCase().replace("ok", "OK")); });
+      return { problems: p, text: (j.State === "cancelled" ? "Cancelled: " : p ? "Problems found: " : "OK: ") + (j.Label || "check") + (parts.length ? " (" + parts.join(", ") + ")" : j.Total ? "" : " (no files)") };
+    }
+    function renderManual(m, now) {
+      var box = q(".mi-man"), j = m.Job;
+      if (m.Active && !j) j = { Label: "starting…", Done: 0, Total: m.PendingFiles || 0, BytesDone: 0, BytesTotal: 0, CurrentFile: null };
+      if (m.Active && j) {
+        box.style.display = ""; box.classList.add("mi-man-on");
+        var pct = j.BytesTotal ? 100 * j.BytesDone / j.BytesTotal : (j.Total ? 100 * j.Done / j.Total : 0);
+        q(".mi-man-title").textContent = "Checking now: " + (j.Label || "");
+        q(".mi-man-bar i").style.width = Math.min(100, pct).toFixed(2) + "%";
+        q(".mi-man-meta").innerHTML = "<span>" + pct.toFixed(1) + "%</span><span>File " + fmtNum(Math.min(j.Done + 1, j.Total)) + " of " + fmtNum(j.Total) + "</span><span>" + fmtBytes(j.BytesDone) + " of " + fmtBytes(j.BytesTotal) + "</span>" +
+          (m.BytesPerSecond ? "<span>" + fmtBytes(m.BytesPerSecond) + "/s</span>" : "") + (m.SecondsLeft != null ? "<span>about " + fmtDur(m.SecondsLeft) + " left</span>" : "") +
+          (m.QueuedJobs ? "<span>" + m.QueuedJobs + " more check" + (m.QueuedJobs === 1 ? "" : "s") + " queued</span>" : "");
+        q(".mi-man-cur").textContent = j.CurrentFile ? j.CurrentFile + (j.CurrentSize ? "  (" + Math.floor(100 * j.CurrentDone / j.CurrentSize) + "% of " + fmtBytes(j.CurrentSize) + ")" : "") : "";
+        q(".mi-man-chips").innerHTML = chipsHtml(j, MCHIPS);
+        q(".mi-man-live").style.display = ""; q(".mi-man-last").style.display = "none"; q(".mi-man-cancel").style.display = "";
+        return;
+      }
+      box.classList.remove("mi-man-on"); q(".mi-man-cancel").style.display = "none"; q(".mi-man-live").style.display = "none";
+      var l = m.LastFinished;
+      if (l && l.Ended && (now - new Date(l.Ended)) < 30 * 60e3) {
+        var sm = jobSummary(l); box.style.display = "";
+        q(".mi-man-title").textContent = "Last manual check";
+        q(".mi-man-last").style.display = ""; q(".mi-man-last").innerHTML = '<span class="' + (sm.problems ? "mi-f" : "mi-ok") + '">' + esc(sm.text) + '</span> <span class="mi-dim">' + fmtTime(l.Ended) + "</span>";
+      } else box.style.display = "none";
+    }
+    q(".mi-man-cancel").addEventListener("click", function () { post("Check/Cancel").then(function () { setTimeout(loadStatus, 300); }); });
+
+    // ---------------- live "Check now" ----------------
+    function liveCell(tr, html) { var c = tr.querySelector(".mi-live"); if (c) c.innerHTML = html; }
+    function rowsFor(id) { return qa('tr[data-id="' + id + '"]'); }
+    /** Hash files now in the manual queue and update their rows in place while it runs. */
+    function checkNow(ids, opts) {
+      ids = ids.map(String); opts = opts || {};
+      ids.forEach(function (id) { rowsFor(id).forEach(function (tr) { tr.classList.add("mi-checking"); liveCell(tr, '<span class="mi-dim">queued…</span>'); }); });
+      return post("Check/Files", { Ids: ids.join(",") }).then(function (job) {
+        var w = S.live[job.Id] = { ids: ids, seen: {}, job: job };
+        setTimeout(loadStatus, 200);
+        return pollLive(job.Id).then(function (j) {
+          var sm = jobSummary(j);
+          if (opts.toast !== false) toast(sm.text);
+          setTimeout(loadStatus, 200);
+          if (S.tab === "problems") setTimeout(loadProblems, 3000);
+          return j;
+        });
+      }, function () { ids.forEach(function (id) { rowsFor(id).forEach(function (tr) { tr.classList.remove("mi-checking"); liveCell(tr, '<span class="mi-f">request failed</span>'); }); }); });
+    }
+    function pollLive(jobId) {
+      var w = S.live[jobId];
+      return getJSON("Check/Jobs/" + jobId).then(function (j) {
+        w.job = j;
+        if (S.status && j.State === "running") { var m = S.status.Manual || (S.status.Manual = {}); m.Active = true; m.Job = j; m.BytesPerSecond = j.BytesPerSecond; renderManual(m, new Date()); }
+        var cur = (j.CurrentFile || "").toLowerCase();
+        w.ids.forEach(function (id) {
+          if (w.seen[id]) return;
+          rowsFor(id).forEach(function (tr) {
+            if (cur && (tr.getAttribute("data-path") || "").toLowerCase() === cur) {
+              var pct = j.CurrentSize ? Math.floor(100 * j.CurrentDone / j.CurrentSize) : 0;
+              liveCell(tr, '<span class="mi-livebar"><i style="width:' + pct + '%"></i></span> ' + pct + "%" + (j.BytesPerSecond ? " · " + fmtBytes(j.BytesPerSecond) + "/s" : "") + (j.CurrentSize ? ' <span class="mi-dim">of ' + fmtBytes(j.CurrentSize) + "</span>" : ""));
+            }
+          });
+        });
+        var updates = (j.Results || []).filter(function (r) { var id = String(r.FileId); return w.ids.indexOf(id) >= 0 && !w.seen[id] && (w.seen[id] = true); });
+        return Promise.all(updates.map(function (r) { return refreshRow(String(r.FileId), r.Result); })).then(function () {
+          if (j.State === "done" || j.State === "cancelled" || j.State === "unknown") {
+            w.ids.forEach(function (id) { if (!w.seen[id]) rowsFor(id).forEach(function (tr) { tr.classList.remove("mi-checking"); liveCell(tr, j.State === "cancelled" ? '<span class="mi-dim">cancelled</span>' : ""); }); });
+            delete S.live[jobId];
+            return j;
+          }
+          return new Promise(function (res) { setTimeout(res, LIVE_MS); }).then(function () { return pollLive(jobId); });
+        });
+      });
+    }
+    var RES_TEXT = { match: "OK", "new": "OK (first hash)", baseline: "OK (first hash)", "modified-accepted": "OK (rewritten, accepted)", changed: "Changed", modified: "Modified", missing: "Missing", unreadable: "Unreadable", absent: "Not on disk" };
+    function refreshRow(id, result) {
+      return getJSON("Files/" + id + "/History").then(function (h) {
+        var f = h && h.File;
+        rowsFor(id).forEach(function (tr) {
+          var kind = tr.getAttribute("data-kind");
+          if (f) {
+            var html = kind === "prob" ? probRow(f) : fileRow(f, tr.getAttribute("data-key"));
+            var tmp = document.createElement("tbody"); tmp.innerHTML = html; var nr = tmp.firstChild;
+            tr.parentNode.replaceChild(nr, tr); tr = nr;
+          }
+          tr.classList.add("mi-flash");
+          var bad = /changed|modified|missing|unreadable/.test(result);
+          liveCell(tr, '<span class="' + (bad ? "mi-f" : "mi-ok") + '">' + esc(RES_TEXT[result] || result) + "</span>");
+          setTimeout(function () { tr.classList.remove("mi-flash"); }, 2500);
+        });
+      });
+    }
+
     function scanAct(a) {
       return post("Scan/" + a).then(function (r) { if (r && r.Error) toast(r.Error); setTimeout(loadStatus, 600); });
     }
@@ -247,7 +346,7 @@ define([], function () {
 
     function schedule() {
       if (S.timer) clearTimeout(S.timer);
-      var running = S.status && S.status.State && S.status.State !== "idle";
+      var running = S.status && ((S.status.State && S.status.State !== "idle") || (S.status.Manual && S.status.Manual.Active));
       S.timer = setTimeout(function () { if (!document.hidden) loadStatus(); else schedule(); }, running ? 2000 : 15000);
     }
 
@@ -271,23 +370,24 @@ define([], function () {
       var k = S.probSort.key, d = S.probSort.dir;
       list.sort(function (a, b) { var x = probVal(a, k), y = probVal(b, k); return (x < y ? -1 : x > y ? 1 : 0) * d || (a.Path < b.Path ? -1 : 1); });
       qa(".mi-prob-t th[data-sort]").forEach(function (th) { var s = th.getAttribute("data-sort"); th.innerHTML = th.innerHTML.replace(/ [▲▼]$/, "") + (s === k ? (d > 0 ? " ▲" : " ▼") : ""); });
-      q(".mi-prob-t tbody").innerHTML = list.map(function (f) {
-        var st = STATUS[f.Status] || {};
-        var hashes = f.Status === "missing" ? '<span class="mi-dim">file not found</span>' : f.Status === "unreadable" ? '<span class="mi-f mi-ell mi-err" title="' + esc(f.Error) + '">' + esc(f.Error || "read error") + "</span>"
-          : '<span class="mi-mono">' + esc(shortHash(f.Hash)) + ' → <span class="' + (st.cls || "") + '">' + esc(shortHash(f.LastHash)) + "</span></span>";
-        var acts = (f.Status === "changed" || f.Status === "modified" ? '<button type="button" class="mi-btn mi-mini mi-row-act" data-act="accept" title="Use the current hash as the new baseline">Accept</button>' : "")
-          + '<button type="button" class="mi-btn mi-mini mi-row-act" data-act="recheck" title="Hash again in the background">Re-check</button>'
-          + (f.Ignored ? '<button type="button" class="mi-btn mi-mini mi-row-act" data-act="unignore">Unignore</button>' : '<button type="button" class="mi-btn mi-mini mi-row-act" data-act="ignore" title="Hide from Problems">Ignore</button>')
-          + (f.Status === "missing" ? '<button type="button" class="mi-btn mi-mini mi-row-act" data-act="forget" title="Stop tracking (deletes its history)">Forget</button>' : "");
-        return '<tr data-id="' + f.Id + '"><td><input type="checkbox" class="mi-sel"' + (S.sel[f.Id] ? " checked" : "") + "></td>" +
-          '<td class="mi-nowrap"><i class="md-icon ' + (st.cls || "") + '">' + (st.icon || "") + "</i> " + pill(f.Status, f.Ignored) + "</td>" +
-          '<td class="mi-ell" title="' + esc(f.Name) + '">' + esc(f.Name) + '</td><td class="mi-ell mi-dim" title="' + esc(f.Folder) + '">' + esc(f.Folder) + "</td>" +
-          '<td class="mi-num mi-nowrap">' + fmtBytes(f.Size) + '</td><td class="mi-nowrap">' + fmtTime(f.LastChecked) + "</td><td>" + hashes + '</td><td><div class="mi-acts">' + acts + "</div></td></tr>";
-      }).join("");
+      q(".mi-prob-t tbody").innerHTML = list.map(probRow).join("");
       q(".mi-prob-empty").style.display = list.length ? "none" : "";
       q(".mi-prob-t").style.display = list.length ? "" : "none";
       q(".mi-prob-empty").textContent = S.problems.length ? "Nothing matches the filter." : "No problems. Every checked file matches its baseline.";
       updateBulk();
+    }
+    function probRow(f) {
+        var st = STATUS[f.Status] || {};
+        var hashes = f.Status === "missing" ? '<span class="mi-dim">file not found</span>' : f.Status === "unreadable" ? '<span class="mi-f mi-ell mi-err" title="' + esc(f.Error) + '">' + esc(f.Error || "read error") + "</span>"
+          : '<span class="mi-mono">' + esc(shortHash(f.Hash)) + ' → <span class="' + (st.cls || "") + '">' + esc(shortHash(f.LastHash)) + "</span></span>";
+        var acts = (f.Status === "changed" || f.Status === "modified" ? '<button type="button" class="mi-btn mi-mini mi-row-act" data-act="accept" title="Use the current hash as the new baseline">Accept</button>' : "")
+          + '<button type="button" class="mi-btn mi-mini mi-row-act" data-act="checknow" title="Hash this file now and show the result here">Check now</button>'
+          + (f.Ignored ? '<button type="button" class="mi-btn mi-mini mi-row-act" data-act="unignore">Unignore</button>' : '<button type="button" class="mi-btn mi-mini mi-row-act" data-act="ignore" title="Hide from Problems">Ignore</button>')
+          + (f.Status === "missing" ? '<button type="button" class="mi-btn mi-mini mi-row-act" data-act="forget" title="Stop tracking (deletes its history)">Forget</button>' : "");
+        return '<tr data-kind="prob" data-id="' + f.Id + '" data-path="' + esc(f.Path) + '"><td><input type="checkbox" class="mi-sel"' + (S.sel[f.Id] ? " checked" : "") + "></td>" +
+          '<td class="mi-nowrap"><i class="md-icon ' + (st.cls || "") + '">' + (st.icon || "") + "</i> " + pill(f.Status, f.Ignored) + '<div class="mi-live"></div></td>' +
+          '<td class="mi-ell" title="' + esc(f.Name) + '">' + esc(f.Name) + '</td><td class="mi-ell mi-dim" title="' + esc(f.Folder) + '">' + esc(f.Folder) + "</td>" +
+          '<td class="mi-num mi-nowrap">' + fmtBytes(f.Size) + '</td><td class="mi-nowrap">' + fmtTime(f.LastChecked) + "</td><td>" + hashes + '</td><td><div class="mi-acts">' + acts + "</div></td></tr>";
     }
     function selectedIds() { return Object.keys(S.sel).filter(function (k) { return S.sel[k]; }); }
     function updateBulk() {
@@ -309,7 +409,7 @@ define([], function () {
       var tr = e.target.closest("tr"); if (!tr) return;
       var id = tr.getAttribute("data-id");
       var b = e.target.closest(".mi-row-act");
-      if (b) { e.stopPropagation(); fileAction([id], b.getAttribute("data-act")); return; }
+      if (b) { e.stopPropagation(); if (b.getAttribute("data-act") === "checknow") checkNow([id]); else fileAction([id], b.getAttribute("data-act")); return; }
       if (e.target.classList.contains("mi-sel")) { S.sel[id] = e.target.checked; updateBulk(); return; }
       showHistory(id);
     });
@@ -317,7 +417,11 @@ define([], function () {
       qa(".mi-prob-t tbody tr").forEach(function (tr) { S.sel[tr.getAttribute("data-id")] = e.target.checked; tr.querySelector(".mi-sel").checked = e.target.checked; });
       updateBulk();
     });
-    qa(".mi-bulk").forEach(function (b) { b.addEventListener("click", function () { fileAction(selectedIds(), b.getAttribute("data-act")); }); });
+    qa(".mi-bulk").forEach(function (b) { b.addEventListener("click", function () {
+      var ids = selectedIds(), act = b.getAttribute("data-act");
+      if (act === "recheck") { ids.forEach(function (i) { delete S.sel[i]; }); updateBulk(); qa(".mi-prob-t .mi-sel").forEach(function (c) { c.checked = false; }); q(".mi-sel-all").checked = false; checkNow(ids); return; }
+      fileAction(ids, act);
+    }); });
     q(".mi-prob-t thead").addEventListener("click", function (e) {
       var th = e.target.closest("th[data-sort]"); if (!th || e.target.classList.contains("cr-h")) return;
       var k = th.getAttribute("data-sort"); S.probSort = { key: k, dir: S.probSort.key === k ? -S.probSort.dir : 1 }; renderProblems();
@@ -338,7 +442,7 @@ define([], function () {
           var bad = /changed|modified|missing|unreadable|differs/.test(c.Result);
           return "<tr><td class=\"mi-nowrap\">" + fmtTime(c.Time) + '</td><td class="' + (bad ? "mi-f" : c.Result === "match" || c.Result === "legacy-match" ? "mi-ok" : "") + '">' + esc(RESULT[c.Result] || c.Result) +
             '</td><td class="mi-mono">' + esc(c.Md5 || "") + '</td><td class="mi-num mi-nowrap">' + fmtBytes(c.Size) + '</td><td class="mi-num">' + (c.Seconds != null ? c.Seconds.toFixed(c.Seconds < 10 ? 1 : 0) + " s" : "") +
-            "</td><td>" + esc({ scan: "Full scan", added: "New item", recheck: "Re-check", legacy: "Old script", user: "You" }[c.Source] || c.Source) + '</td><td class="mi-dim">' + esc(c.Note || "") + "</td></tr>";
+            "</td><td>" + esc({ scan: "Full scan", added: "New item", recheck: "Re-check", manual: "Check now", legacy: "Old script", user: "You" }[c.Source] || c.Source) + '</td><td class="mi-dim">' + esc(c.Note || "") + "</td></tr>";
         }).join("");
         modal(f.Name, '<table class="mi-kv"><tbody>' + kv.map(function (x) { return "<tr><td>" + x[0] + "</td><td>" + x[1] + "</td></tr>"; }).join("") + "</tbody></table>" +
           '<h3 class="mi-h">History (' + (h.Checks || []).length + ")</h3>" +
@@ -349,7 +453,21 @@ define([], function () {
 
     // ---------------- browse ----------------
     function loadGroups() {
-      qa(".mi-seg button").forEach(function (b) { b.classList.toggle("mi-on", b.getAttribute("data-group") === S.groupBy); });
+      // global search across all files
+    function globalActive() { return !!(S.global.search || S.global.status); }
+    function applyGlobal() {
+      var on = globalActive();
+      q(".mi-grp-t").style.display = on ? "none" : ""; q(".mi-gsearch-box").style.display = on ? "" : "none"; q(".mi-groupby").style.display = on ? "none" : "";
+      q(".mi-g-clear").style.display = on ? "" : "none";
+      if (on) { S.global.start = 0; var box = q(".mi-gsearch-box"); if (!box.getAttribute("data-box")) renderBox(box, "all", S.global, true); else loadFiles(box); }
+    }
+    var gTimer = null;
+    q(".mi-g-search").addEventListener("input", function (e) { clearTimeout(gTimer); gTimer = setTimeout(function () { S.global.search = e.target.value.trim(); applyGlobal(); }, 300); });
+    q(".mi-g-status").innerHTML = statusOptions(""); q(".mi-g-status").options[0].text = "Any status";
+    q(".mi-g-status").addEventListener("change", function (e) { S.global.status = e.target.value; applyGlobal(); });
+    q(".mi-g-clear").addEventListener("click", function () { q(".mi-g-search").value = ""; q(".mi-g-status").value = ""; S.global.search = S.global.status = ""; applyGlobal(); });
+
+    qa(".mi-seg button").forEach(function (b) { b.classList.toggle("mi-on", b.getAttribute("data-group") === S.groupBy); });
       return getJSON("Groups", { GroupBy: S.groupBy }).then(function (g) { S.groups = g || []; renderGroups(); });
     }
     function renderGroups() {
@@ -360,46 +478,67 @@ define([], function () {
         return '<tr class="mi-grp' + (open ? " mi-open" : "") + '" data-key="' + esc(g.Key) + '"><td><span class="mi-caret">▶</span> <b>' + esc(g.Label) + "</b>" +
           (g.Paths && g.Paths.length && S.groupBy === "library" ? ' <span class="mi-dim">' + esc(g.Paths.join(", ")) + "</span>" : "") + '</td><td class="mi-num">' + fmtNum(g.Files) + '</td><td class="mi-num mi-nowrap">' + fmtBytes(g.Bytes) +
           '</td><td class="mi-num mi-ok">' + fmtNum(g.Ok) + '</td><td class="mi-num ' + (g.Problems ? "mi-f" : "mi-dim") + '">' + fmtNum(g.Problems) + '</td><td class="mi-num ' + (g.Pending ? "" : "mi-dim") + '">' + fmtNum(g.Pending) +
-          '</td><td class="mi-nowrap mi-dim">' + range + "</td></tr>" + (open ? '<tr class="mi-sub" data-for="' + esc(g.Key) + '"><td colspan="7"></td></tr>' : "");
-      }).join("") || '<tr><td colspan="7" class="mi-empty">No files yet.</td></tr>';
+          '</td><td class="mi-nowrap mi-dim">' + range + '</td><td class="mi-nowrap"><button type="button" class="mi-btn mi-mini mi-grp-check" title="Hash every file of this ' + (S.groupBy === "library" ? "library" : "folder") + ' now, in the background">' +
+          '<i class="md-icon">health_and_safety</i>Check this ' + (g.Key === "other" ? "group" : S.groupBy === "library" ? (g.Key === "extra" ? "folder set" : "library") : "folder") + "</button></td></tr>" + (open ? '<tr class="mi-sub" data-for="' + esc(g.Key) + '"><td colspan="8"></td></tr>' : "");
+      }).join("") || '<tr><td colspan="8" class="mi-empty">No files yet.</td></tr>';
       qa(".mi-grp-t tr.mi-sub").forEach(function (tr) { renderSub(tr); });
     }
     function subState(key) {
       var k = S.groupBy + "|" + key;
       return S.open[k] || (S.open[k] = { search: "", status: "", sort: "name", desc: false, start: 0 });
     }
-    function renderSub(tr) {
-      var key = tr.getAttribute("data-for"), st = subState(key), td = tr.cells[0];
-      td.innerHTML = '<div class="mi-bar2"><input type="text" class="mi-f-search" placeholder="Search in this group" value="' + esc(st.search) + '" style="min-width:20em" />' +
-        '<select class="mi-f-status">' + [["", "All statuses"], ["ok", "OK"], ["problems", "Problems"], ["changed", "Changed"], ["modified", "Modified"], ["missing", "Missing"], ["unreadable", "Unreadable"], ["pending", "Not yet hashed"], ["ignored", "Ignored"]]
-          .map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === st.status ? " selected" : "") + ">" + o[1] + "</option>"; }).join("") + "</select>" +
-        '<span class="mi-dim mi-f-count"></span></div>' +
-        '<table class="mi-t mi-files-t"><thead><tr><th data-sort="name">Name</th><th data-sort="size" class="mi-num">Size</th><th data-sort="hash">MD5</th><th data-sort="checked">Last checked</th><th data-sort="status">Status</th></tr></thead><tbody class="mi-click"></tbody></table>' +
+    function renderSub(tr) { renderBox(tr.cells[0], tr.getAttribute("data-for"), subState(tr.getAttribute("data-for")), false); }
+    function statusOptions(cur) {
+      return STATUS_FILTERS.map(function (o) { return '<option value="' + o[0] + '"' + (o[0] === cur ? " selected" : "") + ">" + o[1] + "</option>"; }).join("");
+    }
+    function renderBox(td, key, st, global) {
+      td.setAttribute("data-box", key); td.classList.add("mi-box");
+      var tr = td;
+      td.innerHTML = '<div class="mi-bar2">' + (global ? "" : '<input type="text" class="mi-f-search" placeholder="Search in this group" value="' + esc(st.search) + '" style="min-width:20em" />' +
+        '<select class="mi-f-status">' + statusOptions(st.status) + "</select>") +
+        '<span class="mi-dim mi-f-count"></span><span style="margin-left:auto" class="mi-dim mi-bsel-n">0 selected</span><button type="button" class="mi-btn mi-mini mi-bsel-check" disabled><i class="md-icon">health_and_safety</i>Check selected</button></div>' +
+        '<table class="mi-t mi-files-t"><thead><tr><th class="mi-ns" data-col="sel"><input type="checkbox" class="mi-bsel-all" /></th><th data-sort="name">Name</th><th data-sort="size" class="mi-num">Size</th><th data-sort="hash">MD5</th><th data-sort="checked">Last checked</th><th data-sort="status">Status</th><th class="mi-ns" data-col="act"></th></tr></thead><tbody class="mi-click"></tbody></table>' +
         '<div class="mi-pager"><button type="button" class="mi-btn mi-mini mi-f-prev">‹ Previous</button><span class="mi-f-page"></span><button type="button" class="mi-btn mi-mini mi-f-next">Next ›</button></div>';
-      ClawColResize.attach(td.querySelector("table"), "claw.mediaintegrity.cols.files");
+      ClawColResize.attach(td.querySelector("table"), "claw.mediaintegrity.cols." + (global ? "search" : "files"));
       var timer = null;
-      td.querySelector(".mi-f-search").addEventListener("input", function (e) { clearTimeout(timer); timer = setTimeout(function () { st.search = e.target.value; st.start = 0; loadFiles(tr); }, 300); });
-      td.querySelector(".mi-f-status").addEventListener("change", function (e) { st.status = e.target.value; st.start = 0; loadFiles(tr); });
+      if (!global) {
+        td.querySelector(".mi-f-search").addEventListener("input", function (e) { clearTimeout(timer); timer = setTimeout(function () { st.search = e.target.value; st.start = 0; loadFiles(tr); }, 300); });
+        td.querySelector(".mi-f-status").addEventListener("change", function (e) { st.status = e.target.value; st.start = 0; loadFiles(tr); });
+      }
+      function bsel() { return qa('[data-box="' + key + '"] .mi-bsel:checked').map(function (c) { return c.closest("tr").getAttribute("data-id"); }); }
+      function updB() { var n = bsel().length; td.querySelector(".mi-bsel-n").textContent = n + " selected"; td.querySelector(".mi-bsel-check").disabled = !n; }
+      td.querySelector(".mi-bsel-all").addEventListener("change", function (e) { td.querySelectorAll("tbody .mi-bsel").forEach(function (c) { c.checked = e.target.checked; }); updB(); });
+      td.querySelector(".mi-bsel-check").addEventListener("click", function () { var ids = bsel(); td.querySelectorAll(".mi-bsel").forEach(function (c) { c.checked = false; }); td.querySelector(".mi-bsel-all").checked = false; updB(); checkNow(ids); });
       td.querySelector(".mi-f-prev").addEventListener("click", function () { st.start = Math.max(0, st.start - PAGE); loadFiles(tr); });
       td.querySelector(".mi-f-next").addEventListener("click", function () { st.start += PAGE; loadFiles(tr); });
       td.querySelector("thead").addEventListener("click", function (e) {
         var th = e.target.closest("th[data-sort]"); if (!th || e.target.classList.contains("cr-h")) return;
         var k = th.getAttribute("data-sort"); st.desc = st.sort === k ? !st.desc : (k === "size" || k === "checked"); st.sort = k; st.start = 0; loadFiles(tr);
       });
-      td.querySelector("tbody").addEventListener("click", function (e) { var r = e.target.closest("tr[data-id]"); if (r) showHistory(r.getAttribute("data-id")); });
+      td.querySelector("tbody").addEventListener("click", function (e) {
+        var r = e.target.closest("tr[data-id]"); if (!r) return;
+        if (e.target.classList.contains("mi-bsel")) { updB(); return; }
+        if (e.target.closest(".mi-checknow")) { e.stopPropagation(); checkNow([r.getAttribute("data-id")]); return; }
+        showHistory(r.getAttribute("data-id"));
+      });
+      td._st = st; td._updB = updB;
       loadFiles(tr);
     }
+    function fileRow(f, key) {
+      return '<tr data-kind="file" data-key="' + esc(key) + '" data-id="' + f.Id + '" data-path="' + esc(f.Path) + '"><td><input type="checkbox" class="mi-bsel" /></td><td class="mi-ell" title="' + esc(f.Path) + '">' + esc(f.Name) + ' <span class="mi-dim">' + esc(rel(f.Folder, key)) + "</span>" +
+        '</td><td class="mi-num mi-nowrap">' + fmtBytes(f.Size) + '</td><td class="mi-mono">' + esc(f.Hash || "–") + '</td><td class="mi-nowrap">' + fmtTime(f.LastChecked) + '</td><td class="mi-nowrap">' + pill(f.Status, f.Ignored) + '<div class="mi-live"></div></td>' +
+        '<td><button type="button" class="mi-btn mi-mini mi-checknow" title="Hash this file now">Check now</button></td></tr>';
+    }
     function loadFiles(tr) {
-      var key = tr.getAttribute("data-for"), st = subState(key), td = tr.cells[0];
-      return getJSON("Files", { GroupBy: S.groupBy, Group: key, Search: st.search, Status: st.status, Sort: st.sort, Desc: st.desc, StartIndex: st.start, Limit: PAGE }).then(function (r) {
+      var td = tr.cells ? tr.cells[0] : tr, key = td.getAttribute("data-box"), st = td._st || subState(key);
+      var gb = key === "all" ? "library" : S.groupBy;
+      return getJSON("Files", { GroupBy: gb, Group: key, Search: st.search, Status: st.status, Sort: st.sort, Desc: st.desc, StartIndex: st.start, Limit: PAGE }).then(function (r) {
         var items = r.Items || [];
         td.querySelectorAll(".mi-files-t th[data-sort]").forEach(function (th) {
           var s = th.getAttribute("data-sort"); th.innerHTML = th.innerHTML.replace(/ [▲▼]$/, "") + (s === st.sort ? (st.desc ? " ▼" : " ▲") : "");
         });
-        td.querySelector("tbody").innerHTML = items.map(function (f) {
-          return '<tr data-id="' + f.Id + '"><td class="mi-ell" title="' + esc(f.Path) + '">' + esc(f.Name) + ' <span class="mi-dim">' + esc(rel(f.Folder, key)) + "</span>" +
-            '</td><td class="mi-num mi-nowrap">' + fmtBytes(f.Size) + '</td><td class="mi-mono">' + esc(f.Hash || "–") + '</td><td class="mi-nowrap">' + fmtTime(f.LastChecked) + "</td><td>" + pill(f.Status, f.Ignored) + "</td></tr>";
-        }).join("") || '<tr><td colspan="5" class="mi-empty">No files match.</td></tr>';
+        td.querySelector("tbody").innerHTML = items.map(function (f) { return fileRow(f, key); }).join("") || '<tr><td colspan="7" class="mi-empty">No files match.</td></tr>';
+        if (td._updB) td._updB();
         var from = r.Total ? r.StartIndex + 1 : 0, to = r.StartIndex + items.length;
         td.querySelector(".mi-f-count").textContent = fmtNum(r.Total) + " file" + (r.Total === 1 ? "" : "s");
         td.querySelector(".mi-f-page").textContent = fmtNum(from) + "–" + fmtNum(to) + " of " + fmtNum(r.Total);
@@ -414,6 +553,15 @@ define([], function () {
       return r ? "· " + r : "";
     }
     q(".mi-grp-t tbody").addEventListener("click", function (e) {
+      var gb = e.target.closest(".mi-grp-check");
+      if (gb) {
+        e.stopPropagation(); var gk = gb.closest("tr").getAttribute("data-key"), g = S.groups.filter(function (x) { return x.Key === gk; })[0];
+        if (g && g.Files > 2000 && !confirm("Check all " + fmtNum(g.Files) + " files (" + fmtBytes(g.Bytes) + ") of " + g.Label + " now? It runs in the background; progress shows above.")) return;
+        gb.disabled = true;
+        post("Check/Group", { GroupBy: S.groupBy, Group: gk }).then(function (j) { toast("Checking " + fmtNum(j.Total) + " files of " + (j.Label || "group") + " in the background"); loadStatus(); watchJob(j.Id, function () { loadGroups(); }); }, function () { gb.disabled = false; });
+        return;
+      }
+      if (e.target.closest(".mi-sub")) return;
       var tr = e.target.closest("tr.mi-grp"); if (!tr) return;
       var k = S.groupBy + "|" + tr.getAttribute("data-key");
       if (S.open[k]) delete S.open[k]; else subState(tr.getAttribute("data-key"));
@@ -422,6 +570,13 @@ define([], function () {
     qa(".mi-seg button").forEach(function (b) {
       b.addEventListener("click", function () { S.groupBy = b.getAttribute("data-group"); try { localStorage.setItem(GROUP_KEY, S.groupBy); } catch (e) { } loadGroups(); });
     });
+
+    function watchJob(id, done) {
+      getJSON("Check/Jobs/" + id).then(function (j) {
+        if (j.State === "done" || j.State === "cancelled" || j.State === "unknown") { toast(jobSummary(j).text); done && done(j); loadStatus(); return; }
+        setTimeout(function () { watchJob(id, done); }, 2000);
+      });
+    }
 
     // ---------------- activity ----------------
     function loadScans() {

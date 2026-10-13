@@ -52,6 +52,44 @@
     imp: { Ran: true, Source: "D:\\Tools\\filehashes.db", Time: iso(20 * H), FilesImported: 14316, ChecksImported: 82291, CaseDuplicatesMerged: 16, AlreadyPresent: 0, Ok: 12977, Changed: 0, NeverHashed: 1339, OldestCheck: iso(1140 * D), NewestCheck: iso(100 * D), Seconds: 2.1 }
   };
   var S = window.__srv;
+
+  // ---- manual check jobs (simulated: each poll advances the running job) ----
+  S.jobs = []; S.jobSeq = 0; S.freeze = false; S.step = 0.34; S.outcome = {};
+  function newJob(label, list) {
+    var j = { Id: ++S.jobSeq, Label: label, Source: "manual", State: "queued", Created: new Date().toISOString(), Total: list.length, Done: 0, BytesTotal: list.reduce(function (a, f) { return a + (f.Status === "missing" ? 0 : f.Size || 0); }, 0), BytesDone: 0,
+      CurrentFile: null, CurrentSize: 0, CurrentDone: 0, Ok: 0, New: 0, Changed: 0, Modified: 0, Missing: 0, Unreadable: 0, Absent: 0, Findings: [], Results: [], BytesPerSecond: 0, _files: list };
+    if (!list.length) { j.State = "done"; j.Ended = j.Created; }
+    S.jobs.push(j); return j;
+  }
+  function advance() {
+    if (S.freeze) return;
+    var j = S.jobs.filter(function (x) { return x.State === "running"; })[0] || S.jobs.filter(function (x) { return x.State === "queued"; })[0];
+    if (!j) return;
+    if (j.State === "queued") { j.State = "running"; j.Started = new Date().toISOString(); }
+    var f = j._files[j.Done];
+    if (!j.CurrentFile) { j.CurrentFile = f.Path; j.CurrentSize = f.Status === "missing" ? 0 : f.Size; j.CurrentDone = 0; }
+    var inc = Math.max(1, Math.ceil(j.CurrentSize * S.step));
+    j.CurrentDone = Math.min(j.CurrentSize, j.CurrentDone + inc); j.BytesDone += inc; j.BytesPerSecond = 187.4e6;
+    if (j.CurrentDone >= j.CurrentSize) {
+      var res = S.outcome[f.Path] || (f.Status === "missing" ? "missing" : f.Status === "changed" ? "changed" : f.Status === "unreadable" ? "unreadable" : (f.Status === "pending" || f.Status === "never_hashed") ? "new" : "match");
+      f.LastChecked = new Date().toISOString(); f.LastResult = res;
+      if (res === "match" || res === "new") { f.Status = "ok"; f.Hash = f.Hash || md5(f.Id + 31); f.LastHash = f.Hash; }
+      else if (res === "changed") { f.Status = "changed"; f.LastHash = md5(f.Id + 4242); }
+      else f.Status = res;
+      var key = { match: "Ok", "new": "New", changed: "Changed", modified: "Modified", missing: "Missing", unreadable: "Unreadable" }[res]; j[key]++;
+      j.Results.push({ FileId: f.Id, Path: f.Path, Result: res });
+      if (res !== "match" && res !== "new") j.Findings.push({ FileId: f.Id, Path: f.Path, Result: res });
+      j.Done++; j.CurrentFile = null;
+      if (j.Done >= j.Total) { j.State = "done"; j.Ended = new Date().toISOString(); }
+    }
+  }
+  function pub(j) { var c = JSON.parse(JSON.stringify(j)); delete c._files; return c; }
+  function manualStatus() {
+    var cur = S.jobs.filter(function (x) { return x.State === "running"; })[0] || null, queued = S.jobs.filter(function (x) { return x.State === "queued"; });
+    var fin = S.jobs.filter(function (x) { return x.State === "done" || x.State === "cancelled"; }).slice(-1)[0] || null;
+    return { Active: !!cur || queued.length > 0, Job: cur && pub(cur), QueuedJobs: queued.length, PendingFiles: 0, BytesPerSecond: cur ? 187.4e6 : 0, SecondsLeft: cur ? (cur.BytesTotal - cur.BytesDone) / 187.4e6 : null, LastFinished: fin && pub(fin) };
+  }
+  S.newJob = newJob; S.advance = advance;
   function parse(u) { var p = u.split("?"), q = {}; (p[1] || "").split("&").forEach(function (kv) { if (!kv) return; var a = kv.split("="); q[decodeURIComponent(a[0])] = decodeURIComponent(a[1] || ""); }); return { path: p[0], q: q }; }
   function counts() { var c = {}; files.forEach(function (f) { if (f.Ignored) { c.ignored = (c.ignored || 0) + 1; return; } c[f.Status] = (c[f.Status] || 0) + 1; }); return c; }
   function under(f, paths) { return paths.some(function (p) { return (f.Folder + "\\").toLowerCase().indexOf((p + "\\").toLowerCase()) === 0; }); }
@@ -68,6 +106,7 @@
     var r = parse(u), q = r.q, path = r.path.replace(/^ClawMediaIntegrity\//, "");
     S.calls.push(method + " " + path);
     var m;
+    if (method === "GET" && (m = /^Check\/Jobs\/(\d+)$/.exec(path))) { advance(); var jj = S.jobs.filter(function (x) { return x.Id === +m[1]; })[0]; return jj ? pub(jj) : { Id: +m[1], State: "unknown" }; }
     if (method === "GET" && (m = /^Files\/(\d+)\/History$/.exec(path))) {
       var f = files.filter(function (x) { return x.Id === +m[1]; })[0];
       var checks = [
@@ -79,6 +118,11 @@
       return { File: f, Checks: f.Status === "never_hashed" ? [] : checks };
     }
     switch (method + " " + path) {
+      case "POST Check/Files": { var fl = q.Ids.split(",").map(Number).map(function (i) { return files.filter(function (x) { return x.Id === i; })[0]; }).filter(Boolean); return pub(newJob(fl.length === 1 ? fl[0].Name : fl.length + " selected files", fl)); }
+      case "POST Check/Items": return pub(newJob("Sintel (2010)", files.filter(function (f) { return /Sintel/.test(f.Path); })));
+      case "POST Check/Group": { var gg = groups(q.GroupBy).filter(function (x) { return x.Key === q.Group; })[0]; return pub(newJob(gg ? gg.Label : "?", gg ? files.filter(function (f) { return under(f, gg.Paths); }) : [])); }
+      case "POST Check/Cancel": S.jobs.forEach(function (j) { if (j.State === "queued" || j.State === "running") { j.State = "cancelled"; j.Ended = new Date().toISOString(); j.CurrentFile = null; } }); return { Ok: true };
+      case "GET Check/Jobs": return S.jobs.slice().reverse().map(pub);
       case "GET Status": {
         var c = counts(), sc = S.scan;
         var st = S.running ? (sc.UserPaused ? "paused" : sc.State) : "idle";
@@ -86,7 +130,7 @@
           CurrentSize: sc.CurrentSize, CurrentDone: sc.CurrentDone, BytesDone: sc.BytesDone, BytesTotal: sc.BytesTotal, BytesPerSecond: sc.BytesPerSecond,
           SecondsLeft: (sc.BytesTotal - sc.BytesDone) / sc.BytesPerSecond, Percent: 100 * sc.BytesDone / sc.BytesTotal, Matched: sc.Matched, Changed: sc.Changed, Modified: sc.Modified, New: sc.New, Missing: sc.Missing, Unreadable: sc.Unreadable,
           Started: iso(19 * H), Resumable: S.running ? null : S.resumable || null, LastScan: S.scans[0], QueueLength: S.queue, QueueCurrent: null, PlaybackActive: false, Counts: c,
-          Files: files.length, Problems: problemsSt.reduce(function (a, k) { return a + (c[k] || 0); }, 0), Import: S.imp, LastSkipReason: null, LastCompleteVerification: iso(180 * D), RootCount: 4, Now: new Date().toISOString() };
+          Files: files.length, Problems: problemsSt.reduce(function (a, k) { return a + (c[k] || 0); }, 0), Import: S.imp, LastSkipReason: null, LastCompleteVerification: iso(180 * D), RootCount: 4, Now: new Date().toISOString(), Manual: (advance(), manualStatus()) };
       }
       case "POST Scan/Start": S.running = true; S.resumable = null; return { Ok: true };
       case "POST Scan/StartFresh": S.running = true; S.resumable = null; S.scan.FileIndex = 0; S.scan.BytesDone = 0; return { Ok: true };
@@ -120,7 +164,7 @@
       }
       case "GET Files": {
         var g = groups(q.GroupBy).filter(function (x) { return x.Key === q.Group; })[0];
-        var list = files.filter(function (f) { return g && under(f, g.Paths); });
+        var list = q.Group === "all" ? files.slice() : files.filter(function (f) { return g && under(f, g.Paths); });
         if (q.Search) list = list.filter(function (f) { return f.Path.toLowerCase().indexOf(q.Search.toLowerCase()) >= 0; });
         if (q.Status) list = list.filter(function (f) { return q.Status === "problems" ? problemsSt.indexOf(f.Status) >= 0 && !f.Ignored : q.Status === "pending" ? /pending|never/.test(f.Status) : q.Status === "ignored" ? f.Ignored : f.Status === q.Status; });
         var key = { name: "Name", size: "Size", hash: "Hash", checked: "LastChecked", status: "Status" }[q.Sort || "name"], d = q.Desc === "true" ? -1 : 1;

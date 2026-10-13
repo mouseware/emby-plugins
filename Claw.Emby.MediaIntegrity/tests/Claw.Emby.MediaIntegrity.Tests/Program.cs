@@ -22,7 +22,7 @@ static class Program
         var keep = new List<string>();
         try
         {
-            SqliteBasics(); Hashing(); Import(); Checks(); FullScan(); Browse();
+            SqliteBasics(); Hashing(); Import(); Checks(); FullScan(); Browse(); Manual(); Patcher();
             var legacy = Environment.GetEnvironmentVariable("LEGACY_DB");
             if (!string.IsNullOrEmpty(legacy)) RealDb(legacy, Environment.GetEnvironmentVariable("VERIFY_DIR"));
         }
@@ -252,6 +252,79 @@ static class Program
             var fs = s.FolderStats(); Ok(fs.Count == 252 && fs.Sum(r => r.Long("problems")) == 6, "folder stats");
         }
         Directory.Delete(d, true);
+    }
+
+    static void Manual()
+    {
+        var d = Tmp();
+        var movie = Path.Combine(d, "Movies", "Sintel (2010)");
+        var v = Path.Combine(movie, "Sintel (2010).mkv");
+        Write(v, new string('a', 3_000_000));
+        Write(Path.Combine(movie, "Sintel (2010).nfo"), "<movie/>");
+        Write(Path.Combine(movie, "Sintel (2010).en.srt"), "1");
+        Write(Path.Combine(movie, "Sintel (2010)-poster.jpg"), "jpg");
+        Write(Path.Combine(movie, "Sintel (2010) extras.txt"), "not a companion");
+        Write(Path.Combine(movie, "Thumbs.db"), "x");
+        var show = Path.Combine(d, "TV", "Show", "Season 01");
+        for (int i = 1; i <= 3; i++) Write(Path.Combine(show, "Show - S01E0" + i + ".mkv"), "ep" + i);
+        var ex = ScanEngine.GlobsToRegex(new[] { "Thumbs.db" });
+        var comp = ManualCheckQueue.Companions(v, ex).Select(Path.GetFileName).OrderBy(x => x).ToList();
+        Ok(string.Join("|", comp) == "Sintel (2010)-poster.jpg|Sintel (2010).en.srt|Sintel (2010).nfo", "companions of a movie file: " + string.Join("|", comp));
+        using (var s = new IntegrityStore(Path.Combine(d, "m.db")))
+        {
+            var e = new ScanEngine(s);
+            var gone = Path.Combine(d, "TV", "Show", "Season 01", "Show - S01E09.mkv");
+            s.InsertFile(new FileRecord { Path = gone, Status = FileStatus.Ok, BaselineMd5 = "AA" });
+            s.InsertFile(new FileRecord { Path = Path.Combine(d, "TVX", "other.mkv"), Status = FileStatus.Ok });
+            Ok(s.PathsUnder(new[] { Path.Combine(d, "TV") }, null).Count == 1, "PathsUnder prefix (TV, not TVX)");
+            Ok(s.PathsUnder(null, new[] { Path.Combine(d, "TV") }).Count == 1, "PathsUnder not-under");
+            var item = ManualCheckQueue.ExpandTargets(new[] { v }, null, ex, x => s.PathsUnder(x, null));
+            Ok(item.Count == 4, "item targets = file + 3 companions (" + item.Count + ")");
+            var folder = ManualCheckQueue.ExpandTargets(null, new[] { Path.Combine(d, "TV", "Show"), show }, ex, x => s.PathsUnder(x, null));
+            Ok(folder.Count == 4 && folder.Contains(gone), "series folder: 3 episodes on disk + 1 tracked-but-gone, nested dirs once (" + folder.Count + ")");
+
+            // full scan stuck in pause on another thread; the manual queue still runs
+            var paused = new G { PauseReason = "paused" };
+            var cts = new CancellationTokenSource();
+            var scan = new Thread(() => { try { e.RunFull(new[] { new ScanRoot(Path.Combine(d, "Movies"), "Movies") }, paused, new ScanProgress(), cts.Token); } catch (OperationCanceledException) { } });
+            scan.Start(); Thread.Sleep(300);
+            var finished = new List<CheckJob>();
+            using (var q = new ManualCheckQueue(e, new G()) { JobFinished = j => finished.Add(j) })
+            {
+                var j1 = q.Enqueue("Sintel (2010)", item);
+                var j2 = q.Enqueue("Show", folder);
+                Ok(q.Busy && q.QueuedJobs == 2 && q.PendingFiles == 8, "two jobs queued, 8 files pending");
+                Ok(j1.BytesTotal >= 3_000_000, "job byte total from disk");
+                q.Drain();
+                Ok(j1.State == "done" && j1.Done == 4 && j1.New == 4 && j1.Results.Count == 4, "item job: 4 new baselines");
+                Ok(j2.State == "done" && j2.New == 3 && j2.Missing == 1 && j2.Findings.Count == 1 && j2.Findings[0].Path == gone, "folder job: 3 new + 1 missing reported");
+                Ok(finished.Count == 2 && !q.Busy, "JobFinished fired; queue idle");
+                Ok(scan.IsAlive, "full scan is still paused while manual checks ran");
+                var hist = s.History(s.GetFile(v).Id);
+                Ok(hist.Count == 1 && hist[0].Source == "manual" && hist[0].ScanId == null, "manual check recorded with source=manual, no scan id");
+                File.AppendAllText(v, "x");
+                var j3 = q.Enqueue("again", new[] { v }); q.Drain();
+                Ok(j3.Modified == 1 && j3.Findings[0].Result == CheckResult.Modified, "re-check detects modification");
+                var j4 = q.Enqueue("empty", new string[0]);
+                Ok(j4.State == "done" && j4.Total == 0, "empty job finishes immediately");
+                var j5 = q.Enqueue("cancel me", item); q.CancelAll(); q.Drain();
+                Ok(j5.State == "cancelled" && j5.Done == 0, "cancel drops queued jobs");
+                Ok(ManualCheckQueue.Distinct(new[] { "a", "A", " a ", "b", null }).Count == 2, "distinct paths (case-insensitive)");
+            }
+            cts.Cancel(); scan.Join(5000);
+            Ok(!scan.IsAlive, "paused scan stops on cancel");
+        }
+        Directory.Delete(d, true);
+    }
+
+    static void Patcher()
+    {
+        var html = "<html><body><script src=\"apploader.js\" defer></script></body></html>";
+        var a = IndexHtmlPatcher.AddScriptTag(html, "claw-media-integrity.js");
+        Ok(a.IndexOf("claw-media-integrity.js") < a.IndexOf("apploader.js"), "script tag before apploader.js");
+        Ok(IndexHtmlPatcher.AddScriptTag(a, "claw-media-integrity.js") == a, "idempotent");
+        var b = IndexHtmlPatcher.AddScriptTag(a.Replace("apploader.js", "x.js"), "claw-default-chapters.js");
+        Ok(b.Contains("claw-media-integrity.js") && b.Contains("claw-default-chapters.js"), "coexists with other plugin tags");
     }
 
     static void RealDb(string legacy, string verifyDir)

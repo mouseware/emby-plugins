@@ -5,6 +5,11 @@
 #clawMediaIntegrityPage .mi-tab.mi-on{opacity:1;border-bottom-color:#52b54b}
 #clawMediaIntegrityPage .mi-badge{display:inline-block;min-width:1.2em;text-align:center;background:rgba(128,128,128,.3);border-radius:1em;padding:0 .45em;margin-left:.35em;font-size:.82em}
 #clawMediaIntegrityPage .mi-badge.mi-red{background:#8a2a2a}
+#clawMediaIntegrityPage .mi-man{margin-top:.7em;padding-top:.7em;border-top:1px solid rgba(128,128,128,.25)}
+#clawMediaIntegrityPage .mi-man-bar i{background:#3d8fd6}
+#clawMediaIntegrityPage .mi-livebar{display:inline-block;width:5em;height:.45em;border-radius:.3em;background:rgba(128,128,128,.3);vertical-align:middle;overflow:hidden}#clawMediaIntegrityPage .mi-livebar i{display:block;height:100%;background:#3d8fd6}
+#clawMediaIntegrityPage .mi-live{font-size:.85em;margin-top:.15em}#clawMediaIntegrityPage .mi-live:empty{display:none}
+#clawMediaIntegrityPage tr.mi-checking{background:rgba(61,143,214,.08)}#clawMediaIntegrityPage tr.mi-flash{background:rgba(82,181,75,.16);transition:background 1s}
 #clawMediaIntegrityPage .mi-panel{display:none}#clawMediaIntegrityPage .mi-panel.mi-on{display:block}
 #clawMediaIntegrityPage .mi-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(11em,1fr));gap:.8em;margin-bottom:1em}
 #clawMediaIntegrityPage .mi-card{background:rgba(128,128,128,.1);border-radius:.4em;padding:.7em 1em}
@@ -105,6 +110,12 @@
         </div>
         <div class="mi-scan-idle secondaryText"></div>
         <div class="mi-chips"></div>
+        <div class="mi-man" style="display:none">
+          <div class="mi-scan-head"><div class="mi-scan-title"><i class="md-icon">health_and_safety</i><span class="mi-man-title">Checking now</span></div>
+            <div class="mi-scan-btns"><button type="button" class="mi-btn mi-man-cancel" style="display:none"><i class="md-icon">close</i>Cancel check</button></div></div>
+          <div class="mi-man-live"><div class="mi-bar mi-man-bar"><i></i></div><div class="mi-scan-meta mi-man-meta"></div><div class="mi-cur mi-man-cur"></div><div class="mi-chips mi-man-chips"></div></div>
+          <div class="mi-man-last" style="display:none"></div>
+        </div>
       </div>
 
       <div class="mi-tabs">
@@ -122,7 +133,7 @@
           <label class="mi-nowrap"><input type="checkbox" class="mi-prob-ign" /> Show ignored</label>
           <span style="margin-left:auto" class="mi-prob-bulk mi-dim">0 selected</span>
           <button type="button" class="mi-btn mi-mini mi-bulk" data-act="accept" disabled><i class="md-icon">done_all</i>Accept new hash</button>
-          <button type="button" class="mi-btn mi-mini mi-bulk" data-act="recheck" disabled><i class="md-icon">refresh</i>Re-check</button>
+          <button type="button" class="mi-btn mi-mini mi-bulk" data-act="recheck" disabled><i class="md-icon">health_and_safety</i>Check now</button>
           <button type="button" class="mi-btn mi-mini mi-bulk" data-act="ignore" disabled><i class="md-icon">visibility_off</i>Ignore</button>
         </div>
         <table class="mi-t mi-prob-t"><thead><tr>
@@ -131,18 +142,22 @@
           <th data-sort="checked">Last checked</th><th class="mi-ns" data-col="hashes">Baseline → current</th><th class="mi-ns" data-col="actions">Actions</th>
         </tr></thead><tbody class="mi-click"></tbody></table>
         <div class="mi-empty mi-prob-empty" style="display:none">No problems. Every checked file matches its baseline.</div>
-        <div class="fieldDescription"><b>Changed</b>: content differs but size and modified time did not: typical of bit rot or a bad copy. <b>Modified</b>: the file was rewritten (size or time changed). Accept the new hash if that was intended. <b>Re-check</b> hashes the file again in the background.</div>
+        <div class="fieldDescription"><b>Changed</b>: content differs but size and modified time did not: typical of bit rot or a bad copy. <b>Modified</b>: the file was rewritten (size or time changed). Accept the new hash if that was intended. <b>Check now</b> hashes the file right away (separate from the full scan, also while it is paused) and updates the row when done.</div>
       </div>
 
       <!-- Browse -->
       <div class="mi-panel" data-panel="browse">
         <div class="mi-bar2">
-          <span class="mi-dim">Group by</span>
-          <div class="mi-seg"><button type="button" class="mi-on" data-group="library">Library</button><button type="button" data-group="folder">Drive / folder</button></div>
+          <input type="search" class="mi-g-search" placeholder="Search all files (name or path)" style="min-width:22em" />
+          <select class="mi-g-status" title="Status"></select>
+          <button type="button" class="mi-btn mi-mini mi-g-clear" style="display:none"><i class="md-icon">close</i>Clear</button>
+          <span class="mi-groupby" style="margin-left:auto;display:flex;align-items:center;gap:.6em"><span class="mi-dim">Group by</span>
+          <div class="mi-seg"><button type="button" class="mi-on" data-group="library">Library</button><button type="button" data-group="folder">Drive / folder</button></div></span>
         </div>
+        <div class="mi-gsearch-box" style="display:none"></div>
         <table class="mi-t mi-grp-t"><thead><tr>
           <th class="mi-ns" data-col="group">Group</th><th class="mi-ns mi-num" data-col="files">Files</th><th class="mi-ns mi-num" data-col="size">Size</th><th class="mi-ns mi-num" data-col="ok">OK</th>
-          <th class="mi-ns mi-num" data-col="problems">Problems</th><th class="mi-ns mi-num" data-col="pending">Not yet hashed</th><th class="mi-ns" data-col="checked">Checked</th>
+          <th class="mi-ns mi-num" data-col="problems">Problems</th><th class="mi-ns mi-num" data-col="pending">Not yet hashed</th><th class="mi-ns" data-col="checked">Checked</th><th class="mi-ns" data-col="act"></th>
         </tr></thead><tbody></tbody></table>
       </div>
 

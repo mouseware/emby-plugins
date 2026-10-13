@@ -20,6 +20,7 @@ namespace Claw.Emby.MediaIntegrity
 
         public Stream GetThumbImage() => GetType().Assembly.GetManifestResourceStream(GetType().Namespace + ".Images.thumb.png");
         public ImageFormat ThumbImageFormat => ImageFormat.Png;
+        internal Stream GetInjectScriptStream() => GetType().Assembly.GetManifestResourceStream(GetType().Namespace + ".Inject.claw-media-integrity.js");
 
         public IEnumerable<PluginPageInfo> GetPages()
         {
