@@ -921,7 +921,7 @@
     return line.replace(/\s+(\d{1,3}(\.\d{1,3}){3}|[0-9a-f:]{6,})$/i, "").trim();
   }
 
-  // "javid is playing Show - S3, Ep8 - Title on iPhone" -> user/action/item/device.
+  // "alice is playing Show - S3, Ep8 - Title on iPhone" -> user/action/item/device.
   function tblParse(e, users) {
     var text = String(e.Name || "").trim();
     var u = (e.UserId && users[e.UserId]) || tblUserFromText(text, users);

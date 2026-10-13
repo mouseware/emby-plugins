@@ -21,13 +21,13 @@ const SHOTS = process.env.SHOTS !== '0';
   ok(await p.$eval('.cg-c-failed', e => e.textContent) === '4' && await p.$eval('.cg-c-api', e => e.textContent) === '2', 'summary cards');
   ok(await p.$eval('.cg-c-state', e => e.textContent) === 'On', 'enforcement card');
   ok(await p.$eval('.cg-bans-count', e => e.textContent) === '3', 'Bans tab badge');
-  const ghost = r.find(x => x[2] === '2a02:4780:1:2::99'); ok(ghost && /no such user/.test(ghost[3]), 'nonexistent user tagged');
+  const ghost = r.find(x => x[2] === '2001:db8:4:2::99'); ok(ghost && /no such user/.test(ghost[3]), 'nonexistent user tagged');
   const iconW = await p.$$eval('.cg-live-t td.cg-ic .md-icon', a => a.map(i => i.getBoundingClientRect().width));
   ok(iconW.every(w => w > 0 && w < 30), 'icons render as glyphs');
   if (SHOTS) await p.screenshot({ path: '/workspace/guard-live.png' });
   // filter
-  await p.type('.cg-filter', 'javid'); await sleep(50); r = await rows();
-  ok(r.length === 1 && r[0][3].startsWith('javid'), 'text filter');
+  await p.type('.cg-filter', 'bob'); await sleep(50); r = await rows();
+  ok(r.length === 1 && r[0][3].startsWith('bob'), 'text filter');
   await p.$eval('.cg-filter', e => { e.value = ''; e.dispatchEvent(new Event('input')); });
   await p.select('.cg-kind', 'api'); await sleep(50); r = await rows();
   ok(r.length === 2 && r.every(x => /API/.test(x[4])), 'event-type filter');
@@ -41,10 +41,10 @@ const SHOTS = process.env.SHOTS !== '0';
   await clickRow('192.168.1.40');
   let menu = await p.$$eval('.cg-menu button', a => a.map(x => [x.textContent.trim(), x.disabled]));
   ok(menu.filter(x => /^.*Ban/.test(x[0])).every(x => x[1]) && /LAN/.test(await p.$eval('.cg-menu .cg-mh', e => e.textContent)), 'LAN row: ban actions disabled');
-  await clickRow('45.148.10.92');
+  await clickRow('203.0.113.92');
   menu = await p.$$eval('.cg-menu button', a => a.map(x => x.textContent.trim()));
   ok(menu.some(x => /Ban 1 hour/.test(x)) && menu.some(x => /Ban 1 day/.test(x)) && menu.some(x => /Ban 30 days/.test(x)) && menu.some(x => /Ban permanently/.test(x)) &&
-     menu.some(x => /Whitelist this IP/.test(x)) && menu.some(x => /Watch username.*javid/.test(x)) && menu.some(x => /Show only this IP/.test(x)), 'row menu has all actions');
+     menu.some(x => /Whitelist this IP/.test(x)) && menu.some(x => /Watch username.*bob/.test(x)) && menu.some(x => /Show only this IP/.test(x)), 'row menu has all actions');
   if (SHOTS) await p.screenshot({ path: '/workspace/guard-live-menu.png' });
   // ban 1 day from row
   const menuClick = async re => { const h = await p.evaluateHandle(re => [...document.querySelectorAll('.cg-menu button')].find(x => new RegExp(re).test(x.textContent)), re); await h.asElement().click(); await sleep(80); };
@@ -52,21 +52,21 @@ const SHOTS = process.env.SHOTS !== '0';
   ok(await p.$eval('.cg-modal', e => e.classList.contains('cg-on')) && /1 day/.test(await p.$eval('.cg-dlg-body', e => e.textContent)), 'confirm dialog before ban');
   await p.click('.cg-dlg-yes'); await sleep(200);
   let srv = await p.evaluate(() => __srv.bans.map(b => b.Key));
-  ok(srv.includes('45.148.10.92'), 'ban posted');
-  r = await rows(); ok(r.some(x => x[2] === '45.148.10.92' && x[4] === 'Banned'), 'ban appears in live log');
+  ok(srv.includes('203.0.113.92'), 'ban posted');
+  r = await rows(); ok(r.some(x => x[2] === '203.0.113.92' && x[4] === 'Banned'), 'ban appears in live log');
   // own address
-  await clickRow('73.124.221.68'); ok(/this is you/.test(await p.$eval('.cg-menu .cg-mh', e => e.textContent)), 'menu marks your own address');
+  await clickRow('198.51.100.68'); ok(/this is you/.test(await p.$eval('.cg-menu .cg-mh', e => e.textContent)), 'menu marks your own address');
   await menuClick('Ban 1 hour'); await p.click('.cg-dlg-yes'); await sleep(200);
   ok(/your own address/i.test(await p.$eval('.cg-dlg-title', e => e.textContent)) && await p.$eval('.cg-modal', e => e.classList.contains('cg-on')), 'own address: second explicit confirm');
-  ok(!(await p.evaluate(() => __srv.bans.some(b => b.Key === '73.124.221.68'))), 'not banned before the extra confirm');
+  ok(!(await p.evaluate(() => __srv.bans.some(b => b.Key === '198.51.100.68'))), 'not banned before the extra confirm');
   await p.click('.cg-dlg-no'); await sleep(100);
-  ok(!(await p.evaluate(() => __srv.bans.some(b => b.Key === '73.124.221.68'))), 'cancel keeps you unbanned');
+  ok(!(await p.evaluate(() => __srv.bans.some(b => b.Key === '198.51.100.68'))), 'cancel keeps you unbanned');
   // watch username
-  await clickRow('45.148.10.92', 'javid'); await menuClick('Watch username'); await p.click('.cg-dlg-yes'); await sleep(150);
-  ok(await p.evaluate(() => __srv.cfg.InstantBanUsernames.includes('javid')), 'watch username -> instant list');
+  await clickRow('203.0.113.92', 'bob'); await menuClick('Watch username'); await p.click('.cg-dlg-yes'); await sleep(150);
+  ok(await p.evaluate(() => __srv.cfg.InstantBanUsernames.includes('bob')), 'watch username -> instant list');
   // show only this IP
-  await clickRow('185.220.101.34'); await menuClick('Show only this IP'); r = await rows();
-  ok(r.length === 2 && r.every(x => x[2] === '185.220.101.34'), 'show only this IP');
+  await clickRow('203.0.113.34'); await menuClick('Show only this IP'); r = await rows();
+  ok(r.length === 2 && r.every(x => x[2] === '203.0.113.34'), 'show only this IP');
   await p.click('.cg-clear-ip'); await sleep(50);
   // whitelist from row
   await clickRow('198.51.100.23'); await menuClick('Whitelist this IP'); await p.click('.cg-dlg-yes'); await sleep(150);
@@ -99,18 +99,18 @@ const SHOTS = process.env.SHOTS !== '0';
   const brows = () => p.$$eval('.cg-bans-t tbody tr', t => t.map(r => [...r.cells].map(c => c.textContent.trim())));
   let br = await brows();
   ok(br.length === 4, 'active bans listed (' + br.length + ')');
-  ok(br.some(x => x[0] === '103.77.20.0/24' && /permanent/.test(x[4])), 'CIDR + permanent shown');
+  ok(br.some(x => x[0] === '198.51.100.0/24' && /permanent/.test(x[4])), 'CIDR + permanent shown');
   if (SHOTS) await p.screenshot({ path: '/workspace/guard-bans.png' });
   const banBtn = async (key, act) => { const h = await p.evaluateHandle((k, a) => document.querySelector('.cg-bans-t tr[data-key="' + k + '"] button[data-act="' + a + '"]'), key, act); await h.asElement().click(); await sleep(120); };
-  const before = await p.evaluate(() => __srv.bans.find(b => b.Key === '45.155.205.233').Expires);
-  await banBtn('45.155.205.233', 'extend'); await sleep(150);
-  const after = await p.evaluate(() => __srv.bans.find(b => b.Key === '45.155.205.233').Expires);
+  const before = await p.evaluate(() => __srv.bans.find(b => b.Key === '203.0.113.233').Expires);
+  await banBtn('203.0.113.233', 'extend'); await sleep(150);
+  const after = await p.evaluate(() => __srv.bans.find(b => b.Key === '203.0.113.233').Expires);
   ok(new Date(after) - new Date(before) === 864e5, 'extend +1 day');
-  await banBtn('45.155.205.233', 'perm'); await p.click('.cg-dlg-yes'); await sleep(200);
-  ok(await p.evaluate(() => __srv.bans.find(b => b.Key === '45.155.205.233').Expires === null), 'make permanent');
-  await banBtn('185.220.101.34', 'unban'); await p.click('.cg-dlg-yes'); await sleep(200);
-  br = await brows(); ok(!br.some(x => x[0] === '185.220.101.34'), 'unban removes row');
-  ok(await p.$$eval('.cg-hist-t tbody tr', t => t.some(r => /185.220.101.34/.test(r.textContent))), 'unbanned goes to history');
+  await banBtn('203.0.113.233', 'perm'); await p.click('.cg-dlg-yes'); await sleep(200);
+  ok(await p.evaluate(() => __srv.bans.find(b => b.Key === '203.0.113.233').Expires === null), 'make permanent');
+  await banBtn('203.0.113.34', 'unban'); await p.click('.cg-dlg-yes'); await sleep(200);
+  br = await brows(); ok(!br.some(x => x[0] === '203.0.113.34'), 'unban removes row');
+  ok(await p.$$eval('.cg-hist-t tbody tr', t => t.some(r => /203.0.113.34/.test(r.textContent))), 'unbanned goes to history');
   await p.type('.cg-ban-ip', '192.168.1.9'); await p.click('.cg-ban-add'); await sleep(80); await p.click('.cg-dlg-yes'); await sleep(200);
   ok(/LAN/.test(await p.$eval('.cg-dlg-body', e => e.textContent)), 'manual LAN ban refused with explanation');
   await p.click('.cg-dlg-yes'); await sleep(80);
@@ -154,7 +154,7 @@ const SHOTS = process.env.SHOTS !== '0';
   await p.click('.cg-wl-mine'); await sleep(50);
   await p.click('.cg-wl-save'); await sleep(200);
   cfg = await p.evaluate(() => __srv.cfg);
-  ok(cfg.Whitelist.some(w => w.Cidr === '203.0.113.0/24' && w.Note === 'office') && cfg.Whitelist.some(w => w.Cidr === '73.124.221.68'), 'whitelist saved (incl. my IP on request)');
+  ok(cfg.Whitelist.some(w => w.Cidr === '203.0.113.0/24' && w.Note === 'office') && cfg.Whitelist.some(w => w.Cidr === '198.51.100.68'), 'whitelist saved (incl. my IP on request)');
   ok(await p.$eval('.cg-wl-count', e => e.textContent) === String(cfg.Whitelist.length), 'whitelist badge');
 
   // ---- settings ----

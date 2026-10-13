@@ -39,3 +39,8 @@ system.xml
 bans.json
 imported-keys.txt
 GeoLite2-*.mmdb
+
+# Release staging at the repo root (attach to GitHub releases, don't commit)
+/*.dll
+/*.zip
+/release/

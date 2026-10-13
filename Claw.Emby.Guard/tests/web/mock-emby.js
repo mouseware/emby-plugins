@@ -8,24 +8,24 @@
     cfg: { Enabled: true, SigninFailThreshold: 5, SigninWindowMinutes: 10, UnknownUserFailThreshold: 2, BanUnknownUsersInstantly: false, WatchApiFailures: true, ApiFailThreshold: 30, ApiWindowMinutes: 10,
       EscalationMinutes: [60, 1440, 43200, 0], EscalationResetDays: 30, InstantBanUsernames: ["root", "admin", "administrator", "emby", "test", "guest", "user", "sa"],
       Ipv6Prefix: 64, Whitelist: [], NotifyOnBan: true, MaxMindAccountId: "", MaxMindLicenseKey: "" },
-    country: false, yourIp: "73.124.221.68", filterState: "enforcing", calls: [], saved: [],
+    country: false, yourIp: "198.51.100.68", filterState: "enforcing", calls: [], saved: [],
     events: [
-      ev({ Time: iso(240), Kind: "signin-ok", Ip: "192.168.1.40", Key: "192.168.1.40", Username: "claw", UserExists: true, Client: "Emby Web 4.10.1", Device: "Edge Windows", Note: "lan", Country: null }),
-      ev({ Time: iso(200), Kind: "api-401", Ip: "45.148.10.92", Key: "45.148.10.92", Request: "GET /emby/System/Info", Count: 1, Country: "NL", Status: 401 }),
-      ev({ Time: iso(64), Kind: "signin-failed", Ip: "185.220.101.34", Key: "185.220.101.34", Username: "root", UserExists: false, Client: "python-requests", Count: 1, Note: "banned", Rule: "instant-username", Country: "DE" }),
-      ev({ Time: iso(64), Kind: "banned", Ip: "185.220.101.34", Key: "185.220.101.34", Username: "root", Note: "1 h", Rule: "instant-username", Country: "DE" }),
-      ev({ Time: iso(30), Kind: "signin-ok", Ip: "73.124.221.68", Key: "73.124.221.68", Username: "katy", UserExists: true, Client: "Emby for Android", Device: "Smart TV Pro", Country: "US" }),
-      ev({ Time: iso(12), Kind: "signin-failed", Ip: "45.148.10.92", Key: "45.148.10.92", Username: "javid", UserExists: true, Client: "Emby Web 4.10.1", Device: "Chrome Windows", Count: 3, Country: "NL" }),
-      ev({ Time: iso(9), Kind: "signin-forbidden", Ip: "103.77.20.5", Key: "103.77.20.5", Username: null, Client: "POST /emby/Users/AuthenticateByName", Count: 2, Country: "VN" }),
-      ev({ Time: iso(6), Kind: "signin-failed", Ip: "2a02:4780:1:2::99", Key: "2a02:4780:1:2::/64", Username: "ghostuser", UserExists: false, Client: "Infuse", Count: 1, Country: "LT" }),
+      ev({ Time: iso(240), Kind: "signin-ok", Ip: "192.168.1.40", Key: "192.168.1.40", Username: "alice", UserExists: true, Client: "Emby Web 4.10.1", Device: "Edge Windows", Note: "lan", Country: null }),
+      ev({ Time: iso(200), Kind: "api-401", Ip: "203.0.113.92", Key: "203.0.113.92", Request: "GET /emby/System/Info", Count: 1, Country: "NL", Status: 401 }),
+      ev({ Time: iso(64), Kind: "signin-failed", Ip: "203.0.113.34", Key: "203.0.113.34", Username: "root", UserExists: false, Client: "python-requests", Count: 1, Note: "banned", Rule: "instant-username", Country: "DE" }),
+      ev({ Time: iso(64), Kind: "banned", Ip: "203.0.113.34", Key: "203.0.113.34", Username: "root", Note: "1 h", Rule: "instant-username", Country: "DE" }),
+      ev({ Time: iso(30), Kind: "signin-ok", Ip: "198.51.100.68", Key: "198.51.100.68", Username: "carol", UserExists: true, Client: "Emby for Android", Device: "Smart TV Pro", Country: "US" }),
+      ev({ Time: iso(12), Kind: "signin-failed", Ip: "203.0.113.92", Key: "203.0.113.92", Username: "bob", UserExists: true, Client: "Emby Web 4.10.1", Device: "Chrome Windows", Count: 3, Country: "NL" }),
+      ev({ Time: iso(9), Kind: "signin-forbidden", Ip: "198.51.100.5", Key: "198.51.100.5", Username: null, Client: "POST /emby/Users/AuthenticateByName", Count: 2, Country: "VN" }),
+      ev({ Time: iso(6), Kind: "signin-failed", Ip: "2001:db8:4:2::99", Key: "2001:db8:4:2::/64", Username: "ghostuser", UserExists: false, Client: "Infuse", Count: 1, Country: "LT" }),
       ev({ Time: iso(3), Kind: "api-403", Ip: "198.51.100.23", Key: "198.51.100.23", Request: "GET /emby/Plugins", Count: 7, Country: "US", Status: 403 })
     ],
     bans: [
-      { Key: "185.220.101.34", Ip: "185.220.101.34", Created: iso(64), Expires: new Date(now - 64 * m + 120 * m).toISOString(), Reason: "Instant-ban username", Rule: "instant-username", Step: 0, Usernames: ["root"], Country: "DE", Hits: 4 },
-      { Key: "103.77.20.0/24", Ip: "103.77.20.5", Created: iso(3000), Expires: null, Reason: "Manual", Rule: "manual", Manual: true, Usernames: [], Country: "VN", Hits: 31 },
-      { Key: "45.155.205.233", Ip: "45.155.205.233", Created: iso(1500), Expires: new Date(now + 2 * 864e5).toISOString(), Reason: "Too many failed sign-ins", Rule: "signin-failures", Step: 2, Usernames: ["javid", "admin2"], Country: "RU", Hits: 0 }
+      { Key: "203.0.113.34", Ip: "203.0.113.34", Created: iso(64), Expires: new Date(now - 64 * m + 120 * m).toISOString(), Reason: "Instant-ban username", Rule: "instant-username", Step: 0, Usernames: ["root"], Country: "DE", Hits: 4 },
+      { Key: "198.51.100.0/24", Ip: "198.51.100.5", Created: iso(3000), Expires: null, Reason: "Manual", Rule: "manual", Manual: true, Usernames: [], Country: "VN", Hits: 31 },
+      { Key: "203.0.113.233", Ip: "203.0.113.233", Created: iso(1500), Expires: new Date(now + 2 * 864e5).toISOString(), Reason: "Too many failed sign-ins", Rule: "signin-failures", Step: 2, Usernames: ["bob", "testuser"], Country: "RU", Hits: 0 }
     ],
-    history: [{ Key: "45.155.205.233", Reason: "Too many failed sign-ins", Created: iso(5000), Ended: iso(3500), EndReason: "expired" }],
+    history: [{ Key: "203.0.113.233", Reason: "Too many failed sign-ins", Created: iso(5000), Ended: iso(3500), EndReason: "expired" }],
     push: function (o) { this.events.unshift(ev(o)); }
   };
   var S = window.__srv;
@@ -39,7 +39,7 @@
         Failed24h: S.events.filter(function (e) { return /signin-(failed|forbidden)/.test(e.Kind); }).length, ApiFailures24h: S.events.filter(function (e) { return /^api/.test(e.Kind); }).length,
         DistinctIps24h: 6, Bans24h: 1, YourIp: S.yourIp, YourIpIsLan: false, RetentionText: "Forever (Emby keeps the activity log forever; no retention setting in this version)", RetentionDays: 0,
         LogFileRetentionDays: 3, CountryEnabled: S.country, GeoStatus: S.country ? "GeoLite2-Country loaded (build 2026-10-09). This product includes GeoLite Data created by MaxMind, available from https://www.maxmind.com" : "No MaxMind key: Country column hidden",
-        TailStatus: "following C:\\Users\\claw\\AppData\\Roaming\\Emby-Server\\logs\\embyserver.txt", LanNote: "", Now: new Date().toISOString(), LastEventId: id };
+        TailStatus: "following <Emby logs>\\embyserver.txt", LanNote: "", Now: new Date().toISOString(), LastEventId: id };
       case "GET ClawGuard/Events":
         if (q.SinceId != null) return S.events.filter(function (e) { return e.Id > +q.SinceId; });
         return S.events.slice();
@@ -62,7 +62,7 @@
         S.importRuns = (S.importRuns || 0) + 1;
         if (S.importRuns > 1) return { Files: 9, LinesScanned: 418233, Found: 543, Imported: 0, AlreadyImported: 537, AlreadyLogged: 6, SigninFailures: 0, Forbidden: 0, ApiFailures: 0, LanOrWhitelisted: 0, NewBans: 0, StillActiveBans: 0, From: iso(4 * 1440), To: iso(1) };
         var t0 = now - 18 * 60 * m;
-        [0, 1500, 3000].forEach(function (d) { S.push({ Time: new Date(t0 + d).toISOString(), Kind: "signin-failed", Ip: "107.175.140.110", Key: "107.175.140.110", Username: "admin", UserExists: false, Client: "imported from log", Count: 1, Note: d ? "banned, imported" : "banned, imported", Rule: d ? null : "instant-username" }); });
+        [0, 1500, 3000].forEach(function (d) { S.push({ Time: new Date(t0 + d).toISOString(), Kind: "signin-failed", Ip: "203.0.113.110", Key: "203.0.113.110", Username: "admin", UserExists: false, Client: "imported from log", Count: 1, Note: d ? "banned, imported" : "banned, imported", Rule: d ? null : "instant-username" }); });
         S.push({ Time: new Date(t0 + 4000).toISOString(), Kind: "api-401", Ip: "::1", Key: "::1", Request: "GET /emby/System/ActivityLogEntries", Note: "lan, imported" });
         return { Files: 9, LinesScanned: 418233, Found: 543, Imported: 537, AlreadyImported: 0, AlreadyLogged: 6, SigninFailures: 61, Forbidden: 3, ApiFailures: 473, LanOrWhitelisted: 402, NewBans: 4, StillActiveBans: 1, From: iso(4 * 1440), To: iso(1) };
       }

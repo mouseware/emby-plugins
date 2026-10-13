@@ -1,6 +1,13 @@
-# Emby plugins (LAWMC)
+# Claw Emby plugins
 
-This folder holds the source for the Claw Emby plugins. Do all plugin work here.
+Four plugins for Emby Server, one per subfolder:
+
+- **Claw Guard**: bans IP addresses after failed sign-ins, nonexistent or instant-ban usernames, or repeated 401/403 API calls. Bans are enforced through Emby's own Remote IP filter. It has a live log, ban management, escalation rules, a whitelist, optional GeoLite2 country lookup, and an import from Emby's existing logs.
+- **Claw IPTV Channel Mapper**: a spreadsheet-style editor for IPTV channels (number, name, group, logo, guide mapping, enabled), with undo, snapshots and bulk actions.
+- **Claw Default Chapters**: generates "Chapter 1, 2 …" interval chapters for movies that have few or no chapters, from the item menu or in bulk (Found movies), with revert.
+- **Claw Custom Item UI**: item-page link tweaks, VLC path links, a rearrangeable admin dashboard, and Activity/Alerts tables on the dashboard.
+
+All data tables have resizable columns. The widths are saved per table in the browser.
 
 | Project | Folder | Version | Output DLL |
 |---------|--------|---------|------------|
@@ -11,7 +18,29 @@ This folder holds the source for the Claw Emby plugins. Do all plugin work here.
 
 Each project builds on its own. Its `refs\` folder holds copies of the Emby SDK DLLs (`MediaBrowser.Common.dll`, `MediaBrowser.Controller.dll`, `MediaBrowser.Model.dll`), and the csproj HintPaths point there through `$(EmbyServerPath)`, which defaults to `refs`.
 
-The old `E:\APPS\emby-patches\...` folders are a backup only. Don't edit or build there.
+## Screenshots
+
+The screenshots use made-up sample data: documentation IP ranges, fake users and generic titles.
+
+| | |
+|---|---|
+| ![Guard live log](docs/screenshots/guard-live-log.png) Guard: live log | ![Guard row menu](docs/screenshots/guard-row-menu.png) Guard: actions on a log row |
+| ![Guard bans](docs/screenshots/guard-bans.png) Guard: bans and history | ![Guard rules](docs/screenshots/guard-rules.png) Guard: rules and escalation |
+| ![Guard import](docs/screenshots/guard-import.png) Guard: import from Emby logs | ![Guard settings](docs/screenshots/guard-settings.png) Guard: settings |
+| ![Guard whitelist](docs/screenshots/guard-whitelist.png) Guard: whitelist | ![IPTV Mapper](docs/screenshots/iptvmapper-channels.png) IPTV Channel Mapper |
+| ![Default Chapters changed](docs/screenshots/defaultchapters-changed.png) Default Chapters: changed movies | ![Default Chapters found](docs/screenshots/defaultchapters-found.png) Default Chapters: found movies |
+| ![Custom Item UI dashboard](docs/screenshots/customitemui-dashboard-tables.png) Custom Item UI: dashboard tables | ![Custom Item UI settings](docs/screenshots/customitemui-settings.png) Custom Item UI: settings |
+
+## Install (from a release)
+
+Requires **Emby Server 4.10.1 or newer** (built against the 4.10.1 SDK, .NET 8).
+
+1. Download the DLLs you want from the [latest release](../../releases/latest), or download `claw-emby-plugins-<tag>.zip` with all four.
+2. Stop Emby Server, including the tray app.
+3. Copy the `.dll` files into Emby's plugins folder. This is the `plugins` folder in Emby's data folder: `%APPDATA%\Emby-Server\plugins` for a Windows user install, or `/var/lib/emby/plugins` for the Linux packages. Overwrite older versions.
+4. Start Emby Server. The plugins appear under **Dashboard → Plugins**, and Guard also gets a shield entry in the main menu. Hard-refresh the browser (Ctrl+F5) so it doesn't use cached pages.
+
+**Guard takes over Emby's Remote IP filter.** On first start it switches *Settings → Network → Remote IP filter* to **blacklist** mode and manages its own entries there. Entries you added yourself are kept. If the filter is an allow-list (whitelist mode) with entries, Guard does not change it and shows "Not enforcing" instead. LAN, loopback and private addresses are never banned. Turning Guard's master switch off removes its entries. Read `Claw.Emby.Guard/README.md` before installing.
 
 ## Build
 
@@ -41,7 +70,7 @@ Check the version:
 (Get-Item .\bin\Release\Claw.Emby.CustomItemUI.dll).VersionInfo.FileVersion
 ```
 
-## Install
+## Install (from source)
 
 Emby locks plugin DLLs while it runs, and the tray app (`embytray.exe`) restarts the server. Stop both before copying.
 

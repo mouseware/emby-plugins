@@ -8,7 +8,7 @@ using Claw.Emby.Guard.Core;
 class FakeHost : IGuardHost
 {
     public DateTimeOffset Now { get; set; } = new DateTimeOffset(2026, 10, 13, 12, 0, 0, TimeSpan.Zero);
-    public HashSet<string> Users = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "javid", "katy", "guest", "claw" };
+    public HashSet<string> Users = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "bob", "carol", "guest", "alice" };
     public List<string> LocalSubnets = new List<string>();
     public List<BanRecord> Notified = new List<BanRecord>();
     public int Changes;
@@ -61,32 +61,32 @@ static class Program
         Ok(IpUtil.BanKey(IpUtil.Parse("::ffff:198.51.100.7"), 64) == "198.51.100.7", "mapped v6 bans as v4");
         foreach (var lan in new[] { "127.0.0.1", "::1", "10.1.2.3", "172.20.1.1", "192.168.1.44", "169.254.3.3", "100.101.102.103", "fd00::1", "fe80::1", "::ffff:192.168.1.5" })
             Ok(IpUtil.IsAlwaysSafe(IpUtil.Parse(lan)), "always safe: " + lan);
-        Ok(!IpUtil.IsAlwaysSafe(IpUtil.Parse("73.124.221.68")), "public v4 not safe");
+        Ok(!IpUtil.IsAlwaysSafe(IpUtil.Parse("198.51.100.68")), "public v4 not safe");
         Ok(IpUtil.InCidr(IpUtil.Parse("203.0.113.77"), "203.0.113.0/24") && !IpUtil.InCidr(IpUtil.Parse("203.0.114.1"), "203.0.113.0/24"), "CIDR match");
         Ok(IpUtil.InCidr(IpUtil.Parse("203.0.113.77"), "203.0.113.0/255.255.255.0"), "dotted netmask");
 
         // ---------- rules: threshold + escalation ----------
         {
             var (e, h, s, dir) = New();
-            Fail(e, "198.51.100.10", "javid", 4);
+            Fail(e, "198.51.100.10", "bob", 4);
             Ok(!s.ActiveBans(h.Now).Any(), "4 failures (real user): no ban yet");
-            Fail(e, "198.51.100.10", "javid");
+            Fail(e, "198.51.100.10", "bob");
             var b = s.FindActive("198.51.100.10", h.Now);
             Ok(b != null && b.Rule == "signin-failures" && (b.Expires - b.Created) == TimeSpan.FromHours(1) && b.Step == 0, "5th failure in 10 min: 1 h ban");
             Ok(h.Notified.Count == 1 && h.Changes >= 1, "one notification + filter sync per ban");
-            Ok(b.Usernames.Contains("javid"), "ban records username tried");
+            Ok(b.Usernames.Contains("bob"), "ban records username tried");
             // window: failures spread beyond 10 min don't add up
-            Fail(e, "198.51.100.11", "katy", 4); h.Now = h.Now.AddMinutes(11); Fail(e, "198.51.100.11", "katy");
+            Fail(e, "198.51.100.11", "carol", 4); h.Now = h.Now.AddMinutes(11); Fail(e, "198.51.100.11", "carol");
             Ok(s.FindActive("198.51.100.11", h.Now) == null, "failures older than the window drop out");
             // escalate: after expiry, next offence 1 d, then 30 d, then permanent
             h.Now = h.Now.AddHours(2); Ok(e.Sweep() == 1 && s.FindActive("198.51.100.10", h.Now) == null, "expiry sweep lifts the 1 h ban");
-            Fail(e, "198.51.100.10", "javid", 5); b = s.FindActive("198.51.100.10", h.Now);
+            Fail(e, "198.51.100.10", "bob", 5); b = s.FindActive("198.51.100.10", h.Now);
             Ok(b != null && b.Expires - b.Created == TimeSpan.FromDays(1) && b.Step == 1, "2nd offence: 1 day");
-            h.Now = h.Now.AddDays(2); e.Sweep(); Fail(e, "198.51.100.10", "javid", 5); b = s.FindActive("198.51.100.10", h.Now);
+            h.Now = h.Now.AddDays(2); e.Sweep(); Fail(e, "198.51.100.10", "bob", 5); b = s.FindActive("198.51.100.10", h.Now);
             Ok(b != null && b.Expires - b.Created == TimeSpan.FromDays(30), "3rd offence: 30 days");
-            h.Now = h.Now.AddDays(31); e.Sweep(); Fail(e, "198.51.100.10", "javid", 5); b = s.FindActive("198.51.100.10", h.Now);
+            h.Now = h.Now.AddDays(31); e.Sweep(); Fail(e, "198.51.100.10", "bob", 5); b = s.FindActive("198.51.100.10", h.Now);
             Ok(b != null && b.Expires == null, "4th offence: permanent " + (b==null?"null":b.Step+" "+b.Expires));
-            Fail(e, "198.51.100.10", "javid"); Ok(b.Hits == 1, "attempts while banned counted as hits, no new ban");
+            Fail(e, "198.51.100.10", "bob"); Ok(b.Hits == 1, "attempts while banned counted as hits, no new ban");
             // persistence across restart
             var s2 = new GuardStore(dir); s2.Load();
             Ok(s2.FindActive("198.51.100.10", h.Now) != null && s2.FindActive("198.51.100.10", h.Now).Expires == null, "bans persist across restart");
@@ -96,17 +96,17 @@ static class Program
         }
         {   // escalation reset window
             var (e, h, s, dir) = New(new GuardRules { EscalationResetDays = 30 });
-            Fail(e, "198.51.100.20", "javid", 5); h.Now = h.Now.AddDays(40); e.Sweep();
-            Fail(e, "198.51.100.20", "javid", 5);
+            Fail(e, "198.51.100.20", "bob", 5); h.Now = h.Now.AddDays(40); e.Sweep();
+            Fail(e, "198.51.100.20", "bob", 5);
             var b = s.FindActive("198.51.100.20", h.Now);
             Ok(b != null && b.Step == 0, "offence older than reset window: back to step 1");
             Directory.Delete(dir, true);
         }
         {   // customised steps + thresholds
             var (e, h, s, dir) = New(new GuardRules { SigninFailThreshold = 3, SigninWindowMinutes = 5, EscalationMinutes = new[] { 15, 0 } });
-            Fail(e, "198.51.100.30", "javid", 3); var b = s.FindActive("198.51.100.30", h.Now);
+            Fail(e, "198.51.100.30", "bob", 3); var b = s.FindActive("198.51.100.30", h.Now);
             Ok(b != null && b.Expires - b.Created == TimeSpan.FromMinutes(15), "custom: 3 fails -> 15 min");
-            h.Now = h.Now.AddMinutes(20); e.Sweep(); Fail(e, "198.51.100.30", "javid", 3);
+            h.Now = h.Now.AddMinutes(20); e.Sweep(); Fail(e, "198.51.100.30", "bob", 3);
             Ok(s.FindActive("198.51.100.30", h.Now).Expires == null, "custom: 2nd step permanent");
             Directory.Delete(dir, true);
         }
@@ -126,7 +126,7 @@ static class Program
             Ok(b != null && b.Rule == "unknown-username", "nonexistent username: 2nd try bans (default 2)");
             var ev = s.Recent(0, 50).First(x => x.Ip == "203.0.113.52" && x.Kind == EventKinds.SigninFailed);
             Ok(ev.UserExists == false, "event tags 'no such user'");
-            Ok(e.AddInstantUsername("javid2") && e.Rules.InstantBanUsernames.Contains("javid2") && !e.AddInstantUsername("JAVID2"), "watch username adds to the instant list once");
+            Ok(e.AddInstantUsername("bob2") && e.Rules.InstantBanUsernames.Contains("bob2") && !e.AddInstantUsername("BOB2"), "watch username adds to the instant list once");
             Directory.Delete(dir, true);
         }
         {
@@ -160,13 +160,13 @@ static class Program
         }
         {   // own-address confirm
             var (e, h, s, dir) = New();
-            var r = e.ManualBan("73.124.221.68", 60, null, "::ffff:73.124.221.68", false);
+            var r = e.ManualBan("198.51.100.68", 60, null, "::ffff:198.51.100.68", false);
             Ok(!r.Ok && r.NeedsConfirm, "banning your own address needs confirm");
-            r = e.ManualBan("73.124.221.68", 60, null, "73.124.221.68", true);
+            r = e.ManualBan("198.51.100.68", 60, null, "198.51.100.68", true);
             Ok(r.Ok, "...and works with confirm");
             r = e.ManualBan("2001:db8:5:6::77", 1440, null, "2001:db8:5:6::1", false);
             Ok(!r.Ok && r.NeedsConfirm, "own IPv6 /64 also needs confirm");
-            Ok(e.Extend("73.124.221.68", 0) && s.FindActive("73.124.221.68", h.Now).Expires == null, "make permanent");
+            Ok(e.Extend("198.51.100.68", 0) && s.FindActive("198.51.100.68", h.Now).Expires == null, "make permanent");
             var e2 = e.ManualBan("198.51.100.200", 60, null, null, false); var exp = e2.Ban.Expires;
             Ok(e.Extend("198.51.100.200", 1440) && s.FindActive("198.51.100.200", h.Now).Expires == exp.Value.AddDays(1), "extend by 1 day");
             Ok(e.Unban("198.51.100.200") && s.FindActive("198.51.100.200", h.Now) == null, "unban");
@@ -175,7 +175,7 @@ static class Program
         }
         {   // master off
             var (e, h, s, dir) = New();
-            Fail(e, "198.51.100.40", "javid", 5);
+            Fail(e, "198.51.100.40", "bob", 5);
             Ok(e.DesiredFilterEntries().SequenceEqual(new[] { "198.51.100.40" }), "desired filter = active bans");
             var r = e.Rules; r.Enabled = false; e.UpdateRules(r);
             Ok(e.DesiredFilterEntries().Count == 0, "disabled: nothing enforced");
@@ -206,12 +206,12 @@ static class Program
         {   // success clears counter; IPv6 prefix grouping; geo
             var (e, h, s, dir) = New();
             h.Geo = ip => ip.ToString().StartsWith("198.51.100.") ? "US" : null;
-            Fail(e, "198.51.100.60", "javid", 4);
-            e.OnAuth(new AuthAttempt { Ip = "198.51.100.60", Username = "javid", Success = true });
-            Fail(e, "198.51.100.60", "javid", 4);
+            Fail(e, "198.51.100.60", "bob", 4);
+            e.OnAuth(new AuthAttempt { Ip = "198.51.100.60", Username = "bob", Success = true });
+            Fail(e, "198.51.100.60", "bob", 4);
             Ok(s.FindActive("198.51.100.60", h.Now) == null, "successful sign-in resets the failure counter");
             Ok(s.Recent(0, 1)[0].Country == "US", "country stored on events");
-            Fail(e, "2001:db8:aa:bb::1", "javid", 3); Fail(e, "2001:db8:aa:bb::2", "javid", 2);
+            Fail(e, "2001:db8:aa:bb::1", "bob", 3); Fail(e, "2001:db8:aa:bb::2", "bob", 2);
             Ok(s.FindActive("2001:db8:aa:bb::/64", h.Now) != null, "IPv6 failures counted per /64");
             Directory.Delete(dir, true);
         }
@@ -295,7 +295,7 @@ static class Program
             Fail(e, "198.51.100.81", "nosuchperson");
             var b = s.FindActive("198.51.100.81", h.Now);
             Ok(b != null && b.Rule == "unknown-username-instant" && b.Expires - b.Created == TimeSpan.FromHours(1), "instant-unknown on: first try bans (1 h step)");
-            Fail(e, "198.51.100.82", "javid");
+            Fail(e, "198.51.100.82", "bob");
             Ok(s.FindActive("198.51.100.82", h.Now) == null, "instant-unknown on: real user mistyping not banned");
             Fail(e, "192.168.1.70", "nosuchperson"); Fail(e, "::1", "nosuchperson");
             Ok(!s.Bans.Any(x => x.Key == "192.168.1.70" || x.Key == "::1"), "instant-unknown on: LAN/loopback never banned");
@@ -308,13 +308,13 @@ static class Program
             string Z(string ip) => "\u200C\u200D\u200D" + ip + "\u200C"; // Emby's marks
             var rot = new List<string>
             {
-                "2026-10-12 22:52:02.990 Warn ConnectService-0HNP8CJGIAV1Q:00000002: AUTH-ERROR: " + Z("107.175.140.110") + " - Access token is invalid or expired.",
-                "2026-10-12 22:52:02.990 Info ConnectService-0HNP8CJGIAV1Q:00000002: http/1.1 Response 401 to " + Z("107.175.140.110") + ". Time: 1ms. GET https://" + Z("home.example.com") + ":8920/Connect/Exchange?format=json&ConnectUserId=abc&api_key=SECRET. ",
+                "2026-10-12 22:52:02.990 Warn ConnectService-0HNP8CJGIAV1Q:00000002: AUTH-ERROR: " + Z("203.0.113.110") + " - Access token is invalid or expired.",
+                "2026-10-12 22:52:02.990 Info ConnectService-0HNP8CJGIAV1Q:00000002: http/1.1 Response 401 to " + Z("203.0.113.110") + ". Time: 1ms. GET https://" + Z("home.example.com") + ":8920/Connect/Exchange?format=json&ConnectUserId=abc&api_key=SECRET. ",
                 "2026-10-12 22:52:07.701 Error DefaultAuthenticationProvider: Invalid username or password. No user named admin exists",
-                "2026-10-12 22:52:07.703 Warn UserService-0HNP8CJGIAV1Q:00000006: AUTH-ERROR: " + Z("107.175.140.110") + " - Invalid username or password entered.",
-                "2026-10-12 22:52:07.704 Info UserService-0HNP8CJGIAV1Q:00000006: http/1.1 Response 401 to " + Z("107.175.140.110") + ". Time: 3ms. POST https://home.example.com:8920/Users/AuthenticateByName. ",
+                "2026-10-12 22:52:07.703 Warn UserService-0HNP8CJGIAV1Q:00000006: AUTH-ERROR: " + Z("203.0.113.110") + " - Invalid username or password entered.",
+                "2026-10-12 22:52:07.704 Info UserService-0HNP8CJGIAV1Q:00000006: http/1.1 Response 401 to " + Z("203.0.113.110") + ". Time: 3ms. POST https://home.example.com:8920/Users/AuthenticateByName. ",
                 "2026-10-12 22:52:09.214 Error DefaultAuthenticationProvider: Invalid username or password. No user named admin exists",
-                "2026-10-12 22:52:09.214 Warn UserService-0HNP8CJGIAV1Q:00000007: AUTH-ERROR: \u200E\u202A107.175.140.110\u202C - Invalid username or password entered.",
+                "2026-10-12 22:52:09.214 Warn UserService-0HNP8CJGIAV1Q:00000007: AUTH-ERROR: \u200E\u202A203.0.113.110\u202C - Invalid username or password entered.",
                 "2026-10-12 23:10:00.000 Info Something unrelated happened",
                 "2026-10-12 09:24:01.866 Warn ActivityLogService-0HNP686MUPBOM:00000001: AUTH-ERROR: ::1 - Access token is invalid or expired.",
                 "2026-10-12 09:24:01.867 Info ActivityLogService-0HNP686MUPBOM:00000001: http/1.1 Response 401 to " + Z("::1") + ". Time: 0ms. GET http://localhost:8096/emby/System/ActivityLogEntries",
@@ -329,27 +329,27 @@ static class Program
             var scan = LogImporter.Scan(new[] { ("embyserver-1.txt", (IEnumerable<string>)rot), ("embyserver.txt", (IEnumerable<string>)cur) });
             var it = scan.Items;
             Ok(scan.Files == 2 && scan.Lines == rot.Count + cur.Count, "import: scans all files and lines");
-            Ok(it.Count(x => x.Kind == LogImporter.ItemKind.SigninFailed && x.Ip == "107.175.140.110") == 2, "import: AUTH-ERROR invalid password -> failed sign-in (401 of same request not double counted)");
-            Ok(it.Where(x => x.Ip == "107.175.140.110" && x.Kind == LogImporter.ItemKind.SigninFailed).All(x => x.Username == "admin"), "import: username from 'No user named' line");
+            Ok(it.Count(x => x.Kind == LogImporter.ItemKind.SigninFailed && x.Ip == "203.0.113.110") == 2, "import: AUTH-ERROR invalid password -> failed sign-in (401 of same request not double counted)");
+            Ok(it.Where(x => x.Ip == "203.0.113.110" && x.Kind == LogImporter.ItemKind.SigninFailed).All(x => x.Username == "admin"), "import: username from 'No user named' line");
             Ok(it.Count(x => x.Kind == LogImporter.ItemKind.Api && x.Path == "/Connect/Exchange") == 1, "import: token AUTH-ERROR + its 401 -> one API failure");
             Ok(it.All(x => x.Path == null || !x.Path.Contains("SECRET")), "import: query strings / keys never kept");
             Ok(it.Any(x => x.Kind == LogImporter.ItemKind.Forbidden && x.Ip == "203.0.113.50"), "import: 403 on sign-in -> forbidden sign-in");
-            Ok(it.Any(x => x.Ip == "107.175.140.110" && x.Kind == LogImporter.ItemKind.SigninFailed && x.Time == new DateTimeOffset(new DateTime(2026, 10, 12, 22, 52, 9, 214, DateTimeKind.Local))), "import: bidi marks stripped, original local timestamp kept");
+            Ok(it.Any(x => x.Ip == "203.0.113.110" && x.Kind == LogImporter.ItemKind.SigninFailed && x.Time == new DateTimeOffset(new DateTime(2026, 10, 12, 22, 52, 9, 214, DateTimeKind.Local))), "import: bidi marks stripped, original local timestamp kept");
             Ok(it.Select(x => x.DedupeKey).Distinct().Count() == it.Count, "import: dedupe keys unique");
 
             var (e, h, s, dir) = New();
             h.Now = new DateTimeOffset(2026, 10, 13, 16, 0, 0, TimeSpan.Zero);
             // a manual permanent ban created now must not swallow the older events
-            e.ManualBan("107.175.140.110", 0, "Manual", null, false);
+            e.ManualBan("203.0.113.110", 0, "Manual", null, false);
             // the 203.0.113.50 forbidden sign-in was already logged live (auth event a second later)
             s.AddEvent(new GuardEvent { Time = new DateTimeOffset(new DateTime(2026, 10, 13, 7, 30, 1, DateTimeKind.Local)), Kind = EventKinds.Forbidden, Ip = "203.0.113.50", Key = "203.0.113.50" });
             h.Notified.Clear(); var ch = h.Changes;
             var r1 = GuardImport.Run(e, scan);
             Ok(r1.Found == it.Count && r1.AlreadyLogged == 1 && r1.Imported == it.Count - 1, $"import: imported {r1.Imported}, 1 already logged live");
-            var auto = s.Bans.Where(b => b.Key == "107.175.140.110" && !b.Manual).ToList();
+            var auto = s.Bans.Where(b => b.Key == "203.0.113.110" && !b.Manual).ToList();
             Ok(auto.Count == 1 && auto[0].Rule == "instant-username" && auto[0].Created.LocalDateTime == new DateTime(2026, 10, 12, 22, 52, 7, 703), "import: ban rules applied at original time (instant 'admin')");
             Ok(auto[0].Ended == auto[0].Expires && auto[0].EndReason == "expired", "import: historical ban that ran out ends at its original expiry");
-            Ok(s.FindActive("107.175.140.110", h.Now)?.Manual == true, "import: manual permanent ban still active");
+            Ok(s.FindActive("203.0.113.110", h.Now)?.Manual == true, "import: manual permanent ban still active");
             Ok(!s.Bans.Any(b => b.Key == "192.168.1.44"), "import: LAN address never banned (6 failures)");
             Ok(r1.LanOrWhitelisted == 7, "import: LAN/loopback items counted (" + r1.LanOrWhitelisted + ")");
             Ok(h.Notified.Count == 0, "import: no notification storm for historical bans");
@@ -361,8 +361,8 @@ static class Program
             Ok(r2.Imported == 0 && r2.AlreadyImported == it.Count, "import: second run imports nothing (dedupe)");
             // escalation continues from the imported history
             h.Now = new DateTimeOffset(2026, 10, 13, 17, 0, 0, TimeSpan.Zero);
-            Fail(e, "107.175.140.111", "root");
-            var (min, step) = e.NextDuration("107.175.140.110", h.Now);
+            Fail(e, "203.0.113.111", "root");
+            var (min, step) = e.NextDuration("203.0.113.110", h.Now);
             Ok(step == 1 && min == 1440, "import: imported ban counts for escalation (next = 1 day)");
             // current-file dedupe against live tail events (API 403 already logged live)
             var (e2, h2, s2, dir2) = New(); h2.Now = h.Now;
