@@ -5,6 +5,13 @@
 #clawMediaIntegrityPage .mi-tab.mi-on{opacity:1;border-bottom-color:#52b54b}
 #clawMediaIntegrityPage .mi-badge{display:inline-block;min-width:1.2em;text-align:center;background:rgba(128,128,128,.3);border-radius:1em;padding:0 .45em;margin-left:.35em;font-size:.82em}
 #clawMediaIntegrityPage .mi-badge.mi-red{background:#8a2a2a}
+#clawMediaIntegrityPage .mi-filebar{margin:.45em 0 .2em 1.2em;padding-left:.7em;border-left:2px solid rgba(128,128,128,.35)}
+#clawMediaIntegrityPage .mi-fb-top{display:flex;align-items:center;gap:.8em;font-size:.88em;min-width:0}
+#clawMediaIntegrityPage .mi-fb-top .md-icon{font-size:1.15em;opacity:.7;flex:none}
+#clawMediaIntegrityPage .mi-fb-name{font-family:Consolas,monospace;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.9}
+#clawMediaIntegrityPage .mi-fb-pct,#clawMediaIntegrityPage .mi-fb-speed{flex:none;white-space:nowrap}#clawMediaIntegrityPage .mi-fb-speed{opacity:.75}
+#clawMediaIntegrityPage .mi-bar.mi-bar-thin{height:.35em;margin-top:.3em}#clawMediaIntegrityPage .mi-bar.mi-bar-thin i{background:#8fd18a}
+#clawMediaIntegrityPage .mi-man .mi-bar.mi-bar-thin i{background:#8ec0ec}
 #clawMediaIntegrityPage .mi-man{margin-top:.7em;padding-top:.7em;border-top:1px solid rgba(128,128,128,.25)}
 #clawMediaIntegrityPage .mi-man-bar i{background:#3d8fd6}
 #clawMediaIntegrityPage .mi-livebar{display:inline-block;width:5em;height:.45em;border-radius:.3em;background:rgba(128,128,128,.3);vertical-align:middle;overflow:hidden}#clawMediaIntegrityPage .mi-livebar i{display:block;height:100%;background:#3d8fd6}
@@ -105,15 +112,15 @@
         </div>
         <div class="mi-scan-live" style="display:none">
           <div class="mi-bar"><i></i></div>
-          <div class="mi-scan-meta"><span class="mi-m-pct"></span><span class="mi-m-files"></span><span class="mi-m-bytes"></span><span class="mi-m-speed"></span><span class="mi-m-left"></span></div>
-          <div class="mi-cur"></div>
+          <div class="mi-scan-meta"><span class="mi-m-pct"></span><span class="mi-m-files"></span><span class="mi-m-bytes"></span><span class="mi-m-left"></span></div>
+          <div class="mi-filebar mi-scan-fb"><div class="mi-fb-top"><i class="md-icon">description</i><span class="mi-fb-name"></span><span class="mi-fb-pct"></span><span class="mi-fb-speed"></span></div><div class="mi-bar mi-bar-thin"><i></i></div></div>
         </div>
         <div class="mi-scan-idle secondaryText"></div>
         <div class="mi-chips"></div>
         <div class="mi-man" style="display:none">
           <div class="mi-scan-head"><div class="mi-scan-title"><i class="md-icon">health_and_safety</i><span class="mi-man-title">Checking now</span></div>
             <div class="mi-scan-btns"><button type="button" class="mi-btn mi-man-cancel" style="display:none"><i class="md-icon">close</i>Cancel check</button></div></div>
-          <div class="mi-man-live"><div class="mi-bar mi-man-bar"><i></i></div><div class="mi-scan-meta mi-man-meta"></div><div class="mi-cur mi-man-cur"></div><div class="mi-chips mi-man-chips"></div></div>
+          <div class="mi-man-live"><div class="mi-bar mi-man-bar"><i></i></div><div class="mi-scan-meta mi-man-meta"></div><div class="mi-filebar mi-man-fb"><div class="mi-fb-top"><i class="md-icon">description</i><span class="mi-fb-name"></span><span class="mi-fb-pct"></span><span class="mi-fb-speed"></span></div><div class="mi-bar mi-bar-thin"><i></i></div></div><div class="mi-chips mi-man-chips"></div></div>
           <div class="mi-man-last" style="display:none"></div>
         </div>
       </div>

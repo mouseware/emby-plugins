@@ -40,6 +40,22 @@ namespace Claw.Emby.MediaIntegrity.Core
         public double BytesPerSecond { get; set; }
         [JsonIgnore] public List<string> Paths { get; set; } = new List<string>();
         public int Problems => Changed + Modified + Missing + Unreadable;
+        /// <summary>How many requests were merged into this job (a later "Check selected" appends to the active job).</summary>
+        public int Batches { get; set; } = 1;
+        /// <summary>Files added by the last merged batch (0 when it brought nothing new).</summary>
+        public int LastBatchAdded { get; set; }
+        /// <summary>Index into Results where this response starts (GET .../Jobs/{id}?Since=n returns only newer results).</summary>
+        public int ResultsOffset { get; set; }
+        [JsonIgnore] public HashSet<string> Pending { get; set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        [JsonIgnore] public string FirstLabel { get; set; }
+
+        public CheckJob CopyFrom(int since)
+        {
+            var c = (CheckJob)MemberwiseClone();
+            since = Math.Max(0, Math.Min(since, Results.Count));
+            c.ResultsOffset = since; c.Results = Results.Skip(since).ToList(); c.Findings = Findings.ToList();
+            return c;
+        }
     }
 
     public sealed class JobFinding { public long FileId { get; set; } public string Path { get; set; } public string Result { get; set; } }
@@ -77,18 +93,41 @@ namespace Claw.Emby.MediaIntegrity.Core
             _thread.Start();
         }
 
-        public CheckJob Enqueue(string label, IEnumerable<string> paths, string source = "manual")
+        /// <summary>
+        /// Queues files for checking. If a manual job is already queued or running, the files are appended to it
+        /// (its total grows; files already pending in it are not added twice) and that job is returned, so the
+        /// progress panel shows one combined "x of y". Otherwise a new job starts.
+        /// </summary>
+        public CheckJob Enqueue(string label, IEnumerable<string> paths, string source = "manual", bool append = true)
         {
             var list = Distinct(paths);
-            var job = new CheckJob { Id = Interlocked.Increment(ref _nextId), Label = label, Source = source, Created = _now(), Paths = list, Total = list.Count };
-            foreach (var p in list) { try { var fi = new FileInfo(p); if (fi.Exists) job.BytesTotal += fi.Length; } catch { } }
+            var sizes = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+            foreach (var p in list) { try { var fi = new FileInfo(p); sizes[p] = fi.Exists ? fi.Length : 0; } catch { sizes[p] = 0; } }
+            CheckJob job;
             lock (_l)
             {
-                _jobs.Add(job);
-                if (list.Count == 0) { job.State = "done"; job.Started = job.Ended = job.Created; }
-                Trim();
+                job = append ? _jobs.Where(x => x.State == "running" || x.State == "queued").OrderBy(x => x.Id).FirstOrDefault() : null;
+                if (job != null && list.Count > 0)
+                {
+                    int added = 0;
+                    foreach (var p in list)
+                    {
+                        if (!job.Pending.Add(p)) continue;
+                        job.Paths.Add(p); job.BytesTotal += sizes[p]; added++;
+                    }
+                    job.Total += added; job.Batches++; job.LastBatchAdded = added;
+                    job.Label = job.FirstLabel + " + " + (job.Batches - 1) + " more batch" + (job.Batches == 2 ? "" : "es");
+                }
+                else
+                {
+                    job = new CheckJob { Id = Interlocked.Increment(ref _nextId), Label = label, FirstLabel = label, Source = source, Created = _now(), Paths = list, Total = list.Count, LastBatchAdded = list.Count };
+                    foreach (var p in list) { job.Pending.Add(p); job.BytesTotal += sizes[p]; }
+                    _jobs.Add(job);
+                    if (list.Count == 0) { job.State = "done"; job.Started = job.Ended = job.Created; }
+                    Trim();
+                }
             }
-            if (list.Count == 0) JobFinished?.Invoke(job); else _wake.Set();
+            if (job.Total == 0 && job.State == "done") JobFinished?.Invoke(job); else _wake.Set();
             return job;
         }
 
@@ -99,9 +138,10 @@ namespace Claw.Emby.MediaIntegrity.Core
             return outp;
         }
 
-        public CheckJob Get(long id) { lock (_l) return _jobs.FirstOrDefault(j => j.Id == id); }
-        public List<CheckJob> Jobs() { lock (_l) return _jobs.OrderByDescending(j => j.Id).ToList(); }
-        public CheckJob Current { get { lock (_l) return _jobs.FirstOrDefault(j => j.State == "running"); } }
+        /// <summary>Snapshot of a job (safe to serialize while the worker updates it). since: only results after this index.</summary>
+        public CheckJob Get(long id, int since = 0) { lock (_l) return _jobs.FirstOrDefault(j => j.Id == id)?.CopyFrom(since); }
+        public List<CheckJob> Jobs() { lock (_l) return _jobs.OrderByDescending(j => j.Id).Select(j => j.CopyFrom(j.Results.Count)).ToList(); }
+        public CheckJob Current { get { lock (_l) return _jobs.FirstOrDefault(j => j.State == "running")?.CopyFrom(int.MaxValue); } }
         public int QueuedJobs { get { lock (_l) return _jobs.Count(j => j.State == "queued"); } }
         public int PendingFiles { get { lock (_l) return _jobs.Where(j => j.State == "queued" || j.State == "running").Sum(j => j.Total - j.Done); } }
         public double BytesPerSecond => _rate;
@@ -149,8 +189,15 @@ namespace Claw.Emby.MediaIntegrity.Core
             _rateT = _now(); _rateB = 0;
             try
             {
-                foreach (var path in job.Paths)
+                for (int idx = 0; ; idx++)
                 {
+                    string path;
+                    lock (_l)
+                    {
+                        // finish under the lock so a batch appended at this moment is never lost
+                        if (idx >= job.Paths.Count) { job.State = "done"; break; }
+                        path = job.Paths[idx];
+                    }
                     ct.ThrowIfCancellationRequested();
                     long size = 0; try { var fi = new FileInfo(path); if (fi.Exists) size = fi.Length; } catch { }
                     lock (_l) { job.CurrentFile = path; job.CurrentSize = size; job.CurrentDone = 0; }
@@ -160,6 +207,7 @@ namespace Claw.Emby.MediaIntegrity.Core
                     catch (Exception ex) { OnError?.Invoke(path, ex); }
                     lock (_l)
                     {
+                        job.Pending.Remove(path);
                         job.Done++;
                         switch (o?.Result)
                         {
@@ -174,10 +222,9 @@ namespace Claw.Emby.MediaIntegrity.Core
                         }
                         if (o?.File != null && (o.Result == CheckResult.Changed || o.Result == CheckResult.Modified || o.Result == CheckResult.Missing || o.Result == CheckResult.Unreadable) && job.Findings.Count < 50)
                             job.Findings.Add(new JobFinding { FileId = o.File.Id, Path = path, Result = o.Result });
-                        if (job.Results.Count < 500) job.Results.Add(new JobFinding { FileId = o?.File?.Id ?? 0, Path = path, Result = o?.Result ?? "error" });
+                        if (job.Results.Count < 100000) job.Results.Add(new JobFinding { FileId = o?.File?.Id ?? 0, Path = path, Result = o?.Result ?? "error" });
                     }
                 }
-                lock (_l) { job.State = "done"; }
             }
             catch (OperationCanceledException) { lock (_l) job.State = "cancelled"; }
             finally { lock (_l) { job.Ended = _now(); job.CurrentFile = null; job.CurrentSize = job.CurrentDone = 0; Trim(); } }

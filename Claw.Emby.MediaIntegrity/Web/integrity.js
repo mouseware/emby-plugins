@@ -219,10 +219,8 @@ define([], function () {
         q(".mi-m-pct").textContent = (s.Percent || 0).toFixed(1) + "%";
         q(".mi-m-files").textContent = "File " + fmtNum(s.FileIndex) + " of " + fmtNum(s.FileCount);
         q(".mi-m-bytes").textContent = fmtBytes(s.BytesDone) + " of " + fmtBytes(s.BytesTotal);
-        q(".mi-m-speed").textContent = s.BytesPerSecond ? fmtBytes(s.BytesPerSecond) + "/s" : "";
         q(".mi-m-left").textContent = s.SecondsLeft != null ? "about " + fmtDur(s.SecondsLeft) + " left" : "";
-        q(".mi-cur").textContent = s.CurrentFile ? s.CurrentFile + (s.CurrentSize ? "  (" + Math.floor(100 * s.CurrentDone / s.CurrentSize) + "% of " + fmtBytes(s.CurrentSize) + ")" : "") : "";
-        q(".mi-cur").title = s.CurrentFile || "";
+        fileBar(q(".mi-scan-fb"), s.CurrentFile, s.CurrentDone, s.CurrentSize, s.BytesPerSecond, paused);
       } else {
         var l = s.LastScan, txt = "";
         if (s.Resumable) txt = "Unfinished scan from " + fmtTime(s.Resumable.Started) + " (" + s.Resumable.State + "), stopped at " + fmtNum(s.Resumable.Done) + " of " + fmtNum(s.Resumable.Total) + " files. Start resumes it.";
@@ -237,6 +235,16 @@ define([], function () {
       q(".mi-chips").innerHTML = src ? chipsHtml(src, chips) : "";
       renderManual(s.Manual || {}, now);
       schedule();
+    }
+    /** Child bar: the file being hashed right now (name, % of bytes read, speed). */
+    function fileBar(el, path, done, size, bps, paused) {
+      if (!path) { el.style.display = "none"; return; }
+      el.style.display = "";
+      var pct = size ? Math.min(100, 100 * (done || 0) / size) : 0;
+      var nm = el.querySelector(".mi-fb-name"); nm.textContent = String(path).split(/[\\\/]/).pop(); nm.title = path;
+      el.querySelector(".mi-fb-pct").textContent = Math.floor(pct) + "%" + (size ? " of " + fmtBytes(size) : "");
+      el.querySelector(".mi-fb-speed").textContent = paused ? "paused" : bps ? fmtBytes(bps) + "/s" : "";
+      el.querySelector(".mi-bar i").style.width = pct.toFixed(2) + "%";
     }
     function chipsHtml(src, chips) { return chips.map(function (x) { var n = src[x[1]] || 0; return '<span class="mi-chip">' + x[0] + '<b class="' + (n ? x[2] : "") + '">' + fmtNum(n) + "</b></span>"; }).join(""); }
     var MCHIPS = [["OK", "Ok", "mi-ok"], ["New", "New", ""], ["Changed", "Changed", "mi-f"], ["Modified", "Modified", "mi-w"], ["Missing", "Missing", "mi-w"], ["Unreadable", "Unreadable", "mi-f"]];
@@ -253,10 +261,11 @@ define([], function () {
         var pct = j.BytesTotal ? 100 * j.BytesDone / j.BytesTotal : (j.Total ? 100 * j.Done / j.Total : 0);
         q(".mi-man-title").textContent = "Checking now: " + (j.Label || "");
         q(".mi-man-bar i").style.width = Math.min(100, pct).toFixed(2) + "%";
-        q(".mi-man-meta").innerHTML = "<span>" + pct.toFixed(1) + "%</span><span>File " + fmtNum(Math.min(j.Done + 1, j.Total)) + " of " + fmtNum(j.Total) + "</span><span>" + fmtBytes(j.BytesDone) + " of " + fmtBytes(j.BytesTotal) + "</span>" +
-          (m.BytesPerSecond ? "<span>" + fmtBytes(m.BytesPerSecond) + "/s</span>" : "") + (m.SecondsLeft != null ? "<span>about " + fmtDur(m.SecondsLeft) + " left</span>" : "") +
-          (m.QueuedJobs ? "<span>" + m.QueuedJobs + " more check" + (m.QueuedJobs === 1 ? "" : "s") + " queued</span>" : "");
-        q(".mi-man-cur").textContent = j.CurrentFile ? j.CurrentFile + (j.CurrentSize ? "  (" + Math.floor(100 * j.CurrentDone / j.CurrentSize) + "% of " + fmtBytes(j.CurrentSize) + ")" : "") : "";
+        q(".mi-man-meta").innerHTML = "<span>" + pct.toFixed(1) + "%</span><span class=\"mi-man-files\">File " + fmtNum(Math.min(j.Done + 1, j.Total)) + " of " + fmtNum(j.Total) + "</span><span>" + fmtBytes(j.BytesDone) + " of " + fmtBytes(j.BytesTotal) + "</span>" +
+          (m.SecondsLeft != null ? "<span>about " + fmtDur(m.SecondsLeft) + " left</span>" : "") +
+          (j.Batches > 1 ? '<span class="mi-man-batches">' + j.Batches + " batches combined</span>" : "") +
+          (m.QueuedJobs ? '<span class="mi-man-queued">' + m.QueuedJobs + " more check" + (m.QueuedJobs === 1 ? "" : "s") + " queued</span>" : "");
+        fileBar(q(".mi-man-fb"), j.CurrentFile, j.CurrentDone, j.CurrentSize, m.BytesPerSecond || j.BytesPerSecond, false);
         q(".mi-man-chips").innerHTML = chipsHtml(j, MCHIPS);
         q(".mi-man-live").style.display = ""; q(".mi-man-last").style.display = "none"; q(".mi-man-cancel").style.display = "";
         return;
@@ -279,21 +288,28 @@ define([], function () {
       ids = ids.map(String); opts = opts || {};
       ids.forEach(function (id) { rowsFor(id).forEach(function (tr) { tr.classList.add("mi-checking"); liveCell(tr, '<span class="mi-dim">queued…</span>'); }); });
       return post("Check/Files", { Ids: ids.join(",") }).then(function (job) {
-        var w = S.live[job.Id] = { ids: ids, seen: {}, job: job };
         setTimeout(loadStatus, 200);
-        return pollLive(job.Id).then(function (j) {
+        var w = S.live[job.Id];
+        if (w) {
+          // the server appended this batch to the running job: track the extra rows with the same poller
+          ids.forEach(function (id) { if (w.ids.indexOf(id) < 0) w.ids.push(id); delete w.seen[id]; });
+          toast("Added " + fmtNum(job.LastBatchAdded || 0) + " file" + (job.LastBatchAdded === 1 ? "" : "s") + " to the running check (" + fmtNum(job.Total) + " in total)");
+          return w.promise;
+        }
+        w = S.live[job.Id] = { ids: ids, seen: {}, job: job, since: 0 };
+        return (w.promise = pollLive(job.Id).then(function (j) {
           var sm = jobSummary(j);
           if (opts.toast !== false) toast(sm.text);
           setTimeout(loadStatus, 200);
           if (S.tab === "problems") setTimeout(loadProblems, 3000);
           return j;
-        });
+        }));
       }, function () { ids.forEach(function (id) { rowsFor(id).forEach(function (tr) { tr.classList.remove("mi-checking"); liveCell(tr, '<span class="mi-f">request failed</span>'); }); }); });
     }
     function pollLive(jobId) {
       var w = S.live[jobId];
-      return getJSON("Check/Jobs/" + jobId).then(function (j) {
-        w.job = j;
+      return getJSON("Check/Jobs/" + jobId, { Since: w.since || 0 }).then(function (j) {
+        w.job = j; w.since = (j.ResultsOffset || 0) + (j.Results || []).length;
         if (S.status && j.State === "running") { var m = S.status.Manual || (S.status.Manual = {}); m.Active = true; m.Job = j; m.BytesPerSecond = j.BytesPerSecond; renderManual(m, new Date()); }
         var cur = (j.CurrentFile || "").toLowerCase();
         w.ids.forEach(function (id) {

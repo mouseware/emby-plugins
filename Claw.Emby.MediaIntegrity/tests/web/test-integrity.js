@@ -23,9 +23,12 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   ok(iw > 15 && iw < 30, 'health_and_safety glyph renders as single icon (w=' + iw + ')');
   // status / cards
   ok(/6,182/.test(await txt('.mi-m-files')), 'file x of y');
-  ok(/MB\/s/.test(await txt('.mi-m-speed')), 'speed');
+  ok(/MB\/s/.test(await txt('.mi-scan-fb .mi-fb-speed')), 'child bar: speed');
+  ok(/Tears of Steel/.test(await txt('.mi-scan-fb .mi-fb-name')) && /45% of/.test(await txt('.mi-scan-fb .mi-fb-pct')), 'child bar: file name + % of bytes');
+  ok(await p.$eval('.mi-scan-fb .mi-bar i', e => e.style.width) === '45.31%', 'child bar width = current file progress');
+  ok(await p.$eval('.mi-scan-live > .mi-bar i', e => parseFloat(e.style.width)) > 40, 'overall bar');
   ok(/left/.test(await txt('.mi-m-left')), 'eta');
-  ok(/Tears of Steel/.test(await txt('.mi-cur')), 'current file');
+
   ok((await txt('.mi-c-problems')) === '4', 'problems card = 4');
   ok(await vis('.mi-act-pause') && await vis('.mi-act-stop') && !(await vis('.mi-act-start')), 'running buttons');
   // problems
@@ -61,6 +64,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   ok(/\d+%/.test(live) && /MB\/s/.test(live), 'in-row percent + speed: ' + live);
   ok(/Checking now/.test(await txt('.mi-man-title')) && await vis('.mi-man-live'), 'manual progress in panel');
   ok(/of 1/.test(await txt('.mi-man-meta')), 'panel shows file x of y');
+  ok(await vis('.mi-man-fb') && /Hero/.test(await txt('.mi-man-fb .mi-fb-name')) && /MB\/s/.test(await txt('.mi-man-fb .mi-fb-speed')), 'manual child bar: file + speed');
   await shot('checknow-progress');
   await p.evaluate(() => { __srv.freeze = false; __srv.step = 0.5; }); await sleep(2600);
   ok(/OK/.test(await txt(usel + ' .mi-live')) && /OK/.test(await txt(usel + ' .mi-pill')), 'row updated to OK without reload');
@@ -103,6 +107,28 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   ok((await p.$$('.mi-hist-t tbody tr')).length === 4, 'history rows');
   await shot('history');
   await click('.mi-dlg-no'); await sleep(200);
+  // ---- two batches from two libraries merge into one job
+  await p.evaluate(() => { __srv.freeze = true; });
+  await p.$$eval('[data-box] tbody tr[data-id] .mi-bsel', a => { a[3].click(); a[4].click(); });
+  const batchA = await p.$$eval('[data-box] tbody tr[data-id]', a => a.slice(3, 5).map(r => r.getAttribute('data-id')));
+  await p.$eval('[data-box] .mi-bsel-check', e => e.click()); await sleep(700);
+  await p.$eval('.mi-grp-t tr.mi-grp[data-key="lib:102"]', e => e.click()); await sleep(700);
+  const tvBox = '[data-box="lib:102"]';
+  await p.$$eval(tvBox + ' tbody tr[data-id] .mi-bsel', a => { a[0].click(); a[1].click(); a[2].click(); });
+  const batchB = await p.$$eval(tvBox + ' tbody tr[data-id]', a => a.slice(0, 3).map(r => r.getAttribute('data-id')));
+  await p.$eval(tvBox + ' .mi-bsel-check', e => e.click()); await sleep(700);
+  ok((await p.evaluate(() => __srv.jobs.filter(j => j.State === 'queued' || j.State === 'running').length)) === 1, 'second batch appended to the active job (one job)');
+  ok(/Added 3 files to the running check \(5 in total\)/.test(await p.evaluate(() => __toasts.slice(-1)[0])), 'toast for appended batch');
+  for (const id of batchB) ok(/queued/.test(await txt(tvBox + ' tr[data-id="' + id + '"] .mi-live')), 'second-batch row ' + id + ' shows queued');
+  await p.evaluate(() => { __srv.freeze = false; __srv.step = 0.5; __srv.advance(); __srv.advance(); __srv.advance(); __srv.freeze = true; }); await sleep(2400);
+  ok(/of 5/.test(await txt('.mi-man-files')), 'combined x of y: ' + await txt('.mi-man-files'));
+  ok(/2 batches combined/.test(await txt('.mi-man-meta')) && !(await p.$('.mi-man-queued')), 'batches shown, no stale "more queued"');
+  ok(await vis('.mi-man-fb'), 'manual child bar visible');
+  await shot('two-batches');
+  await p.evaluate(() => { __srv.freeze = false; __srv.step = 1; }); await sleep(6500);
+  for (const id of batchA.concat(batchB)) ok(/OK/.test(await txt('tr[data-id="' + id + '"] .mi-live')), 'row ' + id + ' updated after combined job');
+  ok((await p.evaluate(() => __srv.jobs.filter(j => j.State === 'done').slice(-1)[0].Total)) === 5, 'combined job total 5');
+  await p.$eval('.mi-grp-t tr.mi-grp[data-key="lib:102"]', e => e.click()); await sleep(500);
   // Check this library
   await p.evaluate(() => { __srv.freeze = true; });
   await p.$eval('.mi-grp-t tr.mi-grp[data-key="lib:102"] .mi-grp-check', e => e.click()); await sleep(2500);

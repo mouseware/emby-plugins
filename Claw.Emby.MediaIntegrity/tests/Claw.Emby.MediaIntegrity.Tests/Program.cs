@@ -293,12 +293,17 @@ static class Program
             {
                 var j1 = q.Enqueue("Sintel (2010)", item);
                 var j2 = q.Enqueue("Show", folder);
-                Ok(q.Busy && q.QueuedJobs == 2 && q.PendingFiles == 8, "two jobs queued, 8 files pending");
+                Ok(ReferenceEquals(j1, j2) && q.QueuedJobs == 1 && q.PendingFiles == 8, "second batch appended to the active job: one job, 8 files pending");
+                Ok(j1.Total == 8 && j1.Batches == 2 && j1.LastBatchAdded == 4 && j1.Label == "Sintel (2010) + 1 more batch", "combined total, batch count and label");
+                var j2b = q.Enqueue("Sintel again", item);
+                Ok(ReferenceEquals(j1, j2b) && j1.Total == 8 && j1.LastBatchAdded == 0 && j1.Batches == 3, "files already pending are not queued twice");
                 Ok(j1.BytesTotal >= 3_000_000, "job byte total from disk");
                 q.Drain();
-                Ok(j1.State == "done" && j1.Done == 4 && j1.New == 4 && j1.Results.Count == 4, "item job: 4 new baselines");
-                Ok(j2.State == "done" && j2.New == 3 && j2.Missing == 1 && j2.Findings.Count == 1 && j2.Findings[0].Path == gone, "folder job: 3 new + 1 missing reported");
-                Ok(finished.Count == 2 && !q.Busy, "JobFinished fired; queue idle");
+                Ok(j1.State == "done" && j1.Done == 8 && j1.New == 7 && j1.Missing == 1 && j1.Results.Count == 8, "combined job: 7 new + 1 missing, every file has a result");
+                Ok(j1.Findings.Count == 1 && j1.Findings[0].Path == gone, "missing file reported");
+                var snap = q.Get(j1.Id, 6);
+                Ok(snap != null && !ReferenceEquals(snap, j1) && snap.ResultsOffset == 6 && snap.Results.Count == 2, "Get(since) returns a snapshot with newer results only");
+                Ok(finished.Count == 1 && !q.Busy, "JobFinished fired; queue idle");
                 Ok(scan.IsAlive, "full scan is still paused while manual checks ran");
                 var hist = s.History(s.GetFile(v).Id);
                 Ok(hist.Count == 1 && hist[0].Source == "manual" && hist[0].ScanId == null, "manual check recorded with source=manual, no scan id");

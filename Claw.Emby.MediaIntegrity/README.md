@@ -41,6 +41,11 @@ Tests:
 
 ## Changes
 
+- **1.0.3.0**
+  - Fix: a second Check selected or Check this library/folder batch now joins the running manual check instead of starting a hidden separate job. The total grows (file x of y), the panel shows "N batches combined", and rows in every batch update live. Files that are already queued are not added again.
+  - The progress panel now has two bars for both the full scan and manual checks. The top bar shows overall progress (file x of y, percent, time left). The bar under it shows the file being hashed (name, percent of bytes read, speed).
+  - Job polling returns snapshots, with `?Since=n` for only the newer results.
+
 - **1.0.2.0**
   - New "Verify integrity" entry in the item "…" menu.
   - Browse: Check now, Check selected, and Check this library/folder.

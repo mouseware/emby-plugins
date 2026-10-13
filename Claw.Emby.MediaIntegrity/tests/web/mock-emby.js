@@ -56,7 +56,14 @@
   // ---- manual check jobs (simulated: each poll advances the running job) ----
   S.jobs = []; S.jobSeq = 0; S.freeze = false; S.step = 0.34; S.outcome = {};
   function newJob(label, list) {
-    var j = { Id: ++S.jobSeq, Label: label, Source: "manual", State: "queued", Created: new Date().toISOString(), Total: list.length, Done: 0, BytesTotal: list.reduce(function (a, f) { return a + (f.Status === "missing" ? 0 : f.Size || 0); }, 0), BytesDone: 0,
+    var act = S.jobs.filter(function (x) { return x.State === "running" || x.State === "queued"; })[0];
+    if (act && list.length) {
+      var added = 0;
+      list.forEach(function (f) { var pending = act._files.slice(act.Done).indexOf(f) >= 0; if (!pending) { act._files.push(f); act.Total++; act.BytesTotal += f.Status === "missing" ? 0 : f.Size || 0; added++; } });
+      act.Batches++; act.LastBatchAdded = added; act.Label = act._first + " + " + (act.Batches - 1) + " more batch" + (act.Batches === 2 ? "" : "es");
+      return act;
+    }
+    var j = { Batches: 1, LastBatchAdded: list.length, _first: label, Id: ++S.jobSeq, Label: label, Source: "manual", State: "queued", Created: new Date().toISOString(), Total: list.length, Done: 0, BytesTotal: list.reduce(function (a, f) { return a + (f.Status === "missing" ? 0 : f.Size || 0); }, 0), BytesDone: 0,
       CurrentFile: null, CurrentSize: 0, CurrentDone: 0, Ok: 0, New: 0, Changed: 0, Modified: 0, Missing: 0, Unreadable: 0, Absent: 0, Findings: [], Results: [], BytesPerSecond: 0, _files: list };
     if (!list.length) { j.State = "done"; j.Ended = j.Created; }
     S.jobs.push(j); return j;
@@ -83,7 +90,7 @@
       if (j.Done >= j.Total) { j.State = "done"; j.Ended = new Date().toISOString(); }
     }
   }
-  function pub(j) { var c = JSON.parse(JSON.stringify(j)); delete c._files; return c; }
+  function pub(j) { var c = JSON.parse(JSON.stringify(j)); delete c._files; delete c._first; return c; }
   function manualStatus() {
     var cur = S.jobs.filter(function (x) { return x.State === "running"; })[0] || null, queued = S.jobs.filter(function (x) { return x.State === "queued"; });
     var fin = S.jobs.filter(function (x) { return x.State === "done" || x.State === "cancelled"; }).slice(-1)[0] || null;
@@ -106,7 +113,7 @@
     var r = parse(u), q = r.q, path = r.path.replace(/^ClawMediaIntegrity\//, "");
     S.calls.push(method + " " + path);
     var m;
-    if (method === "GET" && (m = /^Check\/Jobs\/(\d+)$/.exec(path))) { advance(); var jj = S.jobs.filter(function (x) { return x.Id === +m[1]; })[0]; return jj ? pub(jj) : { Id: +m[1], State: "unknown" }; }
+    if (method === "GET" && (m = /^Check\/Jobs\/(\d+)$/.exec(path))) { advance(); var jj = S.jobs.filter(function (x) { return x.Id === +m[1]; })[0]; if (!jj) return { Id: +m[1], State: "unknown" }; var pj = pub(jj), since = Math.min(+q.Since || 0, pj.Results.length); pj.ResultsOffset = since; pj.Results = pj.Results.slice(since); return pj; }
     if (method === "GET" && (m = /^Files\/(\d+)\/History$/.exec(path))) {
       var f = files.filter(function (x) { return x.Id === +m[1]; })[0];
       var checks = [

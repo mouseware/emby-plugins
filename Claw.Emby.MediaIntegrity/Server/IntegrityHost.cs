@@ -306,8 +306,10 @@ namespace Claw.Emby.MediaIntegrity.Server
         public CheckJob CheckPaths(string label, IList<string> files, IList<string> dirs, bool companions)
         {
             var paths = ManualCheckQueue.ExpandTargets(files, dirs, ExcludeRegex(), d => Store.PathsUnder(d, null), companions);
-            return Manual.Enqueue(label, paths);
+            return Snap(Manual.Enqueue(label, paths));
         }
+        /// <summary>Serializable snapshot of a job (the live object keeps changing on the worker thread).</summary>
+        public CheckJob Snap(CheckJob j) => Manual.Get(j.Id, int.MaxValue) ?? j;
 
         /// <summary>Files of a library item: a file item with its companions (.nfo, subtitles, artwork); a folder item
         /// (series, season, folder, library) recursively by its folder on disk, else by its children's files.</summary>

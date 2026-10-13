@@ -76,7 +76,7 @@ namespace Claw.Emby.MediaIntegrity.Api
 
     [Route("/ClawMediaIntegrity/Check/Jobs/{Id}", "GET", Summary = "Media Integrity: one manual check job")]
     [Authenticated(Roles = "Admin")]
-    public class GetCheckJob : IReturn<CheckJob> { public long Id { get; set; } }
+    public class GetCheckJob : IReturn<CheckJob> { public long Id { get; set; } public int Since { get; set; } }
 
     [Route("/ClawMediaIntegrity/Check/Cancel", "POST", Summary = "Media Integrity: cancel the running and queued manual checks")]
     [Authenticated(Roles = "Admin")]
@@ -212,14 +212,14 @@ namespace Claw.Emby.MediaIntegrity.Api
         {
             var h = H;
             var groups = Groups(h, r.GroupBy, out var allRoots);
-            if (r.Group == "other") return h.Manual.Enqueue("Not in scope (old paths)", h.Store.PathsUnder(null, allRoots));
+            if (r.Group == "other") return h.Snap(h.Manual.Enqueue("Not in scope (old paths)", h.Store.PathsUnder(null, allRoots)));
             var g = groups.FirstOrDefault(x => x.Key == r.Group);
-            if (g == null) return h.Manual.Enqueue("(unknown group)", new string[0]);
+            if (g == null) return h.Snap(h.Manual.Enqueue("(unknown group)", new string[0]));
             return h.CheckPaths(g.Label, null, g.Paths, false);
         }
 
         public object Get(GetCheckJobs r) => H.Manual.Jobs();
-        public object Get(GetCheckJob r) => (object)H.Manual.Get(r.Id) ?? new CheckJob { Id = r.Id, State = "unknown" };
+        public object Get(GetCheckJob r) => (object)H.Manual.Get(r.Id, r.Since) ?? new CheckJob { Id = r.Id, State = "unknown" };
         public object Post(PostCheckCancel r) { H.Manual.CancelAll(); return new OkResult { Ok = true }; }
 
         public object Post(PostScanAction r)
