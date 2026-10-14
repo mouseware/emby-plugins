@@ -4,7 +4,7 @@ const path = require('path'), fs = require('fs');
 const shots = process.argv[2]; let pass = 0, fail = 0;
 function ok(c, m) { if (c) pass++; else { fail++; console.log('FAIL ' + m); } }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const font = 'file://' + path.resolve(__dirname, 'mi.woff2');
+const font = require('url').pathToFileURL(path.resolve(__dirname, 'mi.woff2')).href;
 const html = `<!doctype html><html><head><style>@font-face{font-family:MI;src:url(${font})}.md-icon{font-family:MI;font-style:normal;font-feature-settings:'liga';font-size:1.4em}
 body{margin:0;background:#101010;color:#ddd;font-family:Segoe UI,Arial,sans-serif;height:600px}.det{padding:2em}.det h1{margin:.2em 0}.menu{position:absolute;left:22em;top:7em;background:#262626;border-radius:.3em;padding:.4em 0;min-width:15em;box-shadow:0 .3em 1em #000}
 .menu div{padding:.55em 1em;display:flex;gap:.7em;align-items:center}.menu div.hl{background:#3a3a3a}</style></head><body>
@@ -21,13 +21,13 @@ window.ApiClient={getUrl:function(p){return p;},serverId:function(){return 's1';
   getJSON:function(u){calls.push('GET '+u);polls++;
     if(window.__mode==='bad') return Promise.resolve({Id:7,Label:'Sintel (2010)',State:polls<2?'running':'done',Total:3,Done:3,Ok:2,Changed:1,Findings:[{FileId:1,Path:'D:\\\\Media\\\\Movies\\\\Sintel (2010)\\\\Sintel (2010).mkv',Result:'changed'}]});
     return Promise.resolve(polls<2?{Id:7,Label:'Sintel (2010)',State:'running',Total:3,Done:1,BytesTotal:5100000000}:{Id:7,Label:'Sintel (2010)',State:'done',Total:3,Done:3,Ok:2,New:1});}};
-</script><script src="${'file://' + path.resolve(__dirname, '../../Inject/claw-media-integrity.js')}"></script></body></html>`;
+</script><script src="${require('url').pathToFileURL(path.resolve(__dirname, '../../Inject/claw-media-integrity.js')).href}"></script></body></html>`;
 (async () => {
   fs.writeFileSync(path.join(__dirname, 'inject-page.html'), html);
   const b = await puppeteer.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--no-sandbox', '--allow-file-access-from-files'] });
   const p = await b.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
   await p.setViewport({ width: 1100, height: 600 });
-  await p.goto('file://' + path.join(__dirname, 'inject-page.html')); await sleep(800);
+  await p.goto(require('url').pathToFileURL(path.join(__dirname, 'inject-page.html')).href); await sleep(800);
   ok(await p.evaluate(() => !!window.__registered), 'command source registered');
   const admin = { users: { s1: { Policy: { IsAdministrator: true } } } }, user = { users: { s1: { Policy: { IsAdministrator: false } } } };
   const cmds = (items, o) => p.evaluate((items, o) => window.__registered.getCommands(Object.assign({ items }, o)), items, o);

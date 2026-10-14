@@ -10,7 +10,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const p = await b.newPage(); const errs = [];
   p.on('pageerror', e => errs.push(e.message)); p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
   await p.setViewport({ width: 1500, height: 1000 });
-  const url = 'file://' + path.resolve(__dirname, 'integrity-page.html');
+  const url = require('url').pathToFileURL(path.resolve(__dirname, 'integrity-page.html')).href;
   await p.goto(url); await p.evaluate(() => localStorage.clear()); await p.reload();
   await p.evaluate(() => document.fonts.ready); await sleep(600);
   const click = (s) => p.$eval(s, e => e.click());
@@ -318,27 +318,24 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   // restore recommended merges with own patterns
   await p.$eval('.mi-s-exclude', e => e.value = 'MyJunk.dat\n*.nfo');
   await click('.mi-skip-restore'); await sleep(300);
-  const ex = await p.$eval('.mi-s-exclude', e => e.value.split('\n').filter(Boolean));
-  ok(ex.indexOf('MyJunk.dat') >= 0 && ex.indexOf('*.jpg') >= 0 && ex.filter(x => x === '*.nfo').length === 1, 'restore recommended merges, keeps own patterns, no duplicates');
+  const exl = await p.$eval('.mi-s-exclude', e => e.value.split('\n').filter(Boolean));
+  ok(exl.indexOf('MyJunk.dat') >= 0 && exl.indexOf('*.jpg') >= 0 && exl.filter(x => x === '*.nfo').length === 1, 'restore recommended merges, keeps own patterns, no duplicates');
   ok((await p.$eval('.mi-skip-note', e => e.textContent)).length > 0, 'restore shows a note');
   // >1,000 removal confirm: cancel = not saved, OK = saved
   await p.evaluate(() => { __srv.skipWould = 2500; });
   const nSaved = await p.evaluate(() => __srv.saved.length);
-  let dlg = '';
-  p.once('dialog', d => { dlg = d.message(); d.dismiss(); });
+  await p.evaluate(() => { window.__conf = []; window.__confAns = false; window.confirm = (m) => { window.__conf.push(m); return window.__confAns; }; });
   await p.$eval('.mi-settings-form', f => f.requestSubmit()); await sleep(400);
-  ok(/2,500/.test(dlg) && /not touched/.test(dlg), 'confirm above 1,000 removals names the count');
+  const dlg = await p.evaluate(() => window.__conf[0] || '');
+  ok(/2,500/.test(dlg) && /not touched/.test(dlg), 'confirm above 1,000 removals names the count: ' + dlg);
   ok(await p.evaluate(() => __srv.saved.length) === nSaved, 'cancelled confirm does not save');
-  p.once('dialog', d => d.accept());
+  await p.evaluate(() => { window.__confAns = true; });
   await p.$eval('.mi-settings-form', f => f.requestSubmit()); await sleep(400);
   ok(await p.evaluate(() => __srv.saved.length) === nSaved + 1, 'accepted confirm saves');
   ok(await p.evaluate(() => /MyJunk\.dat/.test(__srv.previews[__srv.previews.length - 1])), 'preview gets the new patterns');
-  await p.evaluate(() => { __srv.skipWould = 40; });
-  let dlg2 = false; const h2 = () => { dlg2 = true; }; p.on('dialog', h2);
+  await p.evaluate(() => { __srv.skipWould = 40; window.__conf = []; });
   await p.$eval('.mi-settings-form', f => f.requestSubmit()); await sleep(400);
-  p.off('dialog', h2);
-  ok(!dlg2 && await p.evaluate(() => __srv.saved.length) === nSaved + 2, 'no confirm at or below 1,000');
-  // column resize
+  ok(await p.evaluate(() => window.__conf.length === 0 && __srv.saved.length) === nSaved + 2, 'no confirm at or below 1,000');  // column resize
   await click('.mi-tab[data-tab=problems]'); await sleep(300);
   const h = await p.$$('.mi-prob-t th .cr-h');
   ok(h.length >= 5, 'resize handles present');
