@@ -6,7 +6,7 @@ Five plugins for Emby Server, one per subfolder:
 - **Claw IPTV Channel Mapper**: a spreadsheet-style editor for IPTV channels (number, name, group, logo, guide mapping, enabled), with undo, snapshots and bulk actions.
 - **Claw Default Chapters**: generates "Chapter 1, 2 …" interval chapters for movies that have few or no chapters, from the item menu or in bulk (Found movies), with revert.
 - **Claw Custom Item UI**: item-page link tweaks, VLC path links, a rearrangeable admin dashboard, and Activity/Alerts tables on the dashboard.
-- **Media Integrity**: finds bit rot, missing and unreadable files by comparing each library file's MD5 with a stored baseline. It has a resumable, low-priority full scan (scheduled task), background hashing of new items, "Verify integrity" in the item menu, a live **Check now** on any file, folder or library, search across all files, per-file history, and an import of the old `get-all-hashes.ps1` database.
+- **Media Integrity**: finds bit rot, missing and unreadable files by comparing each library file's MD5 with a stored baseline. It has a resumable, low-priority full scan (scheduled task), background hashing of new items, "Verify integrity" in the item menu, a live **Check now** on any file, folder or library, search across all files, per-file history, and an import of the old `get-all-hashes.ps1` database. 1.0.5 skips Emby metadata and artwork by default (subtitles and media stay hashed), and a file-list refresh drops skipped rows from tracking without touching the files on disk.
 
 All data tables have resizable columns. The widths are saved per table in the browser.
 
@@ -16,7 +16,7 @@ All data tables have resizable columns. The widths are saved per table in the br
 | Claw IPTV Mapper | `Claw.Emby.IptvMapper` | 1.3.2.0 | `Claw.Emby.IptvMapper\bin\Release\Claw.Emby.IptvMapper.dll` |
 | Claw Guard | `Claw.Emby.Guard` | 1.1.0.0 | `Claw.Emby.Guard\bin\Release\Claw.Emby.Guard.dll` |
 | Claw Default Chapters | `Claw.Emby.DefaultChapters` | 1.1.1.0 | `Claw.Emby.DefaultChapters\bin\Release\Claw.Emby.DefaultChapters.dll` |
-| Media Integrity | `Claw.Emby.MediaIntegrity` | 1.0.4.0 | `Claw.Emby.MediaIntegrity\bin\Release\Claw.Emby.MediaIntegrity.dll` |
+| Media Integrity | `Claw.Emby.MediaIntegrity` | 1.0.5.0 | `Claw.Emby.MediaIntegrity\bin\Release\Claw.Emby.MediaIntegrity.dll` |
 
 Each project builds on its own. Its `refs\` folder holds copies of the Emby SDK DLLs (`MediaBrowser.Common.dll`, `MediaBrowser.Controller.dll`, `MediaBrowser.Model.dll`), and the csproj HintPaths point there through `$(EmbyServerPath)`, which defaults to `refs`.
 

@@ -11,8 +11,10 @@ namespace Claw.Emby.MediaIntegrity
         public string[] ExcludedLibraryIds { get; set; } = Array.Empty<string>();
         /// <summary>Extra folders scanned in addition to the library folders.</summary>
         public string[] ExtraFolders { get; set; } = Array.Empty<string>();
-        /// <summary>File-name globs never hashed.</summary>
-        public string[] Exclude { get; set; } = { "Thumbs.db", "desktop.ini", ".DS_Store", "*.tmp", "*.part", "*.partial", "*.crdownload", "*.!qB" };
+        /// <summary>Recommended skip list (1.0.5): Emby/Kodi metadata and artwork plus download/OS junk. Subtitles and all media stay hashed.</summary>
+        public static string[] RecommendedExclude => Core.SkipDefaults.Recommended;
+        /// <summary>File-name globs that are skipped: never hashed, not listed, and removed from tracking (with their history) when added here.</summary>
+        public string[] Exclude { get; set; } = (string[])RecommendedExclude.Clone();
         /// <summary>When these were rewritten (size or modified time changed) the new hash is accepted silently. Emby/Kodi metadata files.</summary>
         public string[] AutoAcceptModifiedExtensions { get; set; } = { ".nfo", ".xml", ".jpg", ".jpeg", ".png", ".webp", ".tbn", ".bif" };
         /// <summary>Hashing speed limit in MB/s, 0 = unlimited.</summary>

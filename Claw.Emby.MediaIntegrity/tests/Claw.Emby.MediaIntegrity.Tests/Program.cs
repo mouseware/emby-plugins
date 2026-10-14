@@ -22,7 +22,7 @@ static class Program
         var keep = new List<string>();
         try
         {
-            SqliteBasics(); Hashing(); Import(); Checks(); FullScan(); Browse(); Manual(); Discovery(); ManualTask(); Patcher();
+            SqliteBasics(); Hashing(); Import(); Checks(); FullScan(); Browse(); Manual(); Discovery(); Skip(); ManualTask(); Patcher();
             var legacy = Environment.GetEnvironmentVariable("LEGACY_DB");
             if (!string.IsNullOrEmpty(legacy)) RealDb(legacy, Environment.GetEnvironmentVariable("VERIFY_DIR"));
         }
@@ -75,6 +75,42 @@ static class Program
             }
         }
     }
+
+    static void Skip()
+    {
+        var rec = PluginConfiguration_Recommended();
+        var rx = ScanEngine.GlobsToRegex(rec);
+        string[] skipped = { "movie.nfo", "movie.NFO", "x.nfo-orig", "tvshow.xml", "a.bif", "b.metathumb", "poster.jpg", "fanart.JPEG", "logo.png", "c.webp", "d.tbn", "e.gif", "Thumbs.db", "desktop.ini", "y.tmp", "z.part", "w.!qB" };
+        string[] kept = { "Movie (2010).mkv", "Ep.mp4", "a.srt", "a.ass", "a.ssa", "a.sub", "a.idx", "a.vtt", "Book.m4b", "Track.mp3", "Disc.iso", "Book.epub", "Book.pdf", "x.flac", "notes.txt", "jpg.mkv", "nfo" };
+        Ok(skipped.All(n => rx.IsMatch(n)), "recommended list skips metadata, artwork and junk");
+        Ok(kept.All(n => !rx.IsMatch(n)), "recommended list keeps media, ebooks and subtitles: " + string.Join(",", kept.Where(n => rx.IsMatch(n))));
+        var d = Tmp(); var root = Path.Combine(d, "Lib"); var mdir = Path.Combine(root, "Movie"); Directory.CreateDirectory(mdir);
+        var mkv = Path.Combine(mdir, "Movie.mkv"); File.WriteAllText(mkv, "video");
+        var nfo = Path.Combine(mdir, "movie.nfo"); File.WriteAllText(nfo, "<nfo/>");
+        var jpg = Path.Combine(mdir, "poster.jpg"); File.WriteAllText(jpg, "jpg");
+        var srt = Path.Combine(mdir, "Movie.en.srt"); File.WriteAllText(srt, "1");
+        using (var s = new IntegrityStore(Path.Combine(d, "s.db")))
+        {
+            var e = new ScanEngine(s);
+            var roots = new List<ScanRoot> { new ScanRoot(root, "Movies") };
+            FileDiscovery.Run(s, roots, ScanEngine.GlobsToRegex(new[] { "*.tmp" }), "old list", CancellationToken.None);
+            foreach (var p in new[] { mkv, nfo, jpg, srt }) e.CheckFile(p, "manual", null, new G(), CancellationToken.None);
+            Ok(s.FileCount == 4 && s.History(s.GetFile(nfo).Id).Count == 1, "old skip list: metadata tracked with history");
+            s.Enqueue(jpg, "added", DateTime.UtcNow, DateTime.UtcNow);
+            Ok(s.MatchingSkip(rx).Count == 2, "preview: 2 tracked rows would be removed");
+            var r = FileDiscovery.Run(s, roots, rx, "settings changed", CancellationToken.None);
+            Ok(r.Skipped == 2 && s.GetFile(nfo) == null && s.GetFile(jpg) == null, "refresh removes OK rows that now match skip patterns (" + r.Skipped + ")");
+            Ok(s.Db.ScalarLong("SELECT COUNT(*) FROM checks c LEFT JOIN files f ON f.id=c.file_id WHERE f.id IS NULL") == 0, "their history is removed too");
+            Ok(s.QueueLength == 0, "queued entries of skipped files dropped");
+            Ok(File.Exists(nfo) && File.Exists(jpg), "files on disk are never touched");
+            Ok(s.GetFile(mkv)?.Status == FileStatus.Ok && s.GetFile(srt)?.Status == FileStatus.Ok, "media and subtitles stay tracked");
+            Ok(r.Added == 0, "skipped files are not re-added as not yet hashed");
+            var r2 = FileDiscovery.Run(s, roots, rx, "again", CancellationToken.None);
+            Ok(r2.Skipped == 0 && s.FileCount == 2, "second refresh removes nothing more");
+            Ok(ManualCheckQueue.ExpandTargets(null, new[] { root }, rx, null).Count == 2, "Check this folder does not hash skipped files");
+        }
+    }
+    static string[] PluginConfiguration_Recommended() => SkipDefaults.Recommended;
 
     static void Discovery()
     {

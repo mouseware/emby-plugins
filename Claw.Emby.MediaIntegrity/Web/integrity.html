@@ -207,8 +207,11 @@
           </div>
           <div class="mi-grid">
             <div class="inputContainer">
-              <label class="inputLabel">Never hash these files (name patterns, one per line)</label>
-              <textarea class="mi-in mi-s-exclude"></textarea>
+              <label class="inputLabel">Skip these files (name patterns, one per line)</label>
+              <textarea class="mi-in mi-s-exclude" rows="8"></textarea>
+              <div class="fieldDescription mi-skip-help"><b>Skip</b> = never hashed or listed; files already tracked are removed from tracking with their history (files on disk are never touched). <b>Auto-accept</b> (below) = still hashed, but a rewrite is accepted silently instead of being reported.</div>
+              <button type="button" is="emby-button" class="raised mi-btn mi-mini mi-skip-restore"><i class="md-icon">restart_alt</i><span>Restore recommended skip list</span></button>
+              <span class="mi-dim mi-skip-note"></span>
             </div>
             <div class="inputContainer">
               <label class="inputLabel">Accept rewrites silently for these extensions</label>

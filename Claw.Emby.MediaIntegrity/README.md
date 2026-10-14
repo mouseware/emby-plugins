@@ -41,6 +41,16 @@ Tests:
 
 ## Changes
 
+- **1.0.5.0**
+  - **Emby metadata and artwork are skipped by default.** The recommended skip list is `*.nfo`, `*.nfo-orig`, `*.xml`, `*.bif`, `*.metathumb`, artwork (`*.jpg`, `*.jpeg`, `*.png`, `*.webp`, `*.tbn`, `*.gif`), plus the existing junk patterns (`Thumbs.db`, `desktop.ini`, `.DS_Store`, `*.tmp`, `*.part`, `*.partial`, `*.crdownload`, `*.!qB`).
+    - Subtitles (`.srt`, `.ass`, `.ssa`, `.sub`, `.idx`, `.vtt`) and all media, including video, audio, `.iso` and ebooks, stay hashed.
+    - The skip list stays fully editable in Settings, with a one-line explanation of skip versus auto-accept. **Restore recommended skip list** adds the recommended patterns without removing your own.
+    - A saved configuration is never overwritten; only a fresh install (or a user with no saved config) gets the new defaults.
+  - **A file-list refresh drops rows that now match the skip list.** That includes OK rows and their check history, and it happens at startup, after library changes, after saving settings, and from Refresh file list. The refresh log reports how many were removed.
+    - Files on disk are never touched.
+    - Saving a skip-list change that would remove more than 1,000 tracked rows asks for confirmation first, and shows how many would be removed.
+  - Auto-accept still applies to rewrites of metadata extensions that are not skipped.
+
 - **1.0.4.0**
   - **Every file on disk is listed.** A cached disk enumeration ("file list") covers every library of any type (audiobooks, books, music, home videos and so on) plus the extra folders.
     - Files the database does not know yet are added as **Not yet hashed**. They show in Browse, in search and in the status filter, and are counted on the summary rows and the Problems tab.

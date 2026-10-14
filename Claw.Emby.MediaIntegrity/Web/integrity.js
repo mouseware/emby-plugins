@@ -757,6 +757,15 @@ define([], function () {
     q(".mi-imp-now").addEventListener("click", function () {
       post("Import").then(function (r) { renderImport(r); if (S.status) S.status.Import = r; toast(r.Error ? "Import: " + r.Error : "Imported " + fmtNum(r.FilesImported) + " files"); loadStatus(); });
     });
+    q(".mi-skip-restore").addEventListener("click", function () {
+      getJSON("Skip/Recommended").then(function (rec) {
+        var cur = unlines(q(".mi-s-exclude").value), low = cur.map(function (x) { return x.toLowerCase(); });
+        var merged = (rec || []).concat(cur.filter(function (x) { return (rec || []).map(function (y) { return y.toLowerCase(); }).indexOf(x.toLowerCase()) < 0; }));
+        var added = (rec || []).filter(function (x) { return low.indexOf(x.toLowerCase()) < 0; }).length;
+        q(".mi-s-exclude").value = lines(merged);
+        q(".mi-skip-note").textContent = added ? added + " recommended pattern" + (added === 1 ? "" : "s") + " added (your own patterns kept). Save to apply." : "Already contains the recommended list.";
+      });
+    });
     q(".mi-settings-form").addEventListener("submit", function (e) {
       e.preventDefault();
       ApiClient.getPluginConfiguration(PLUGIN_ID).then(function (c) {
@@ -771,10 +780,19 @@ define([], function () {
         c.NotifyScanSummary = q(".mi-s-nsum").checked;
         c.NotifyProblems = q(".mi-s-nprob").checked;
         c.LegacyDbPath = q(".mi-s-legacy").value.trim();
-        return ApiClient.updatePluginConfiguration(PLUGIN_ID, c).then(function (r) {
-          if (typeof Dashboard !== "undefined" && Dashboard.processPluginConfigurationUpdateResult) Dashboard.processPluginConfigurationUpdateResult(r);
-          S.cfg = c; loadStatus();
-        });
+        var save = function () {
+          return ApiClient.updatePluginConfiguration(PLUGIN_ID, c).then(function (r) {
+            if (typeof Dashboard !== "undefined" && Dashboard.processPluginConfigurationUpdateResult) Dashboard.processPluginConfigurationUpdateResult(r);
+            S.cfg = c; q(".mi-skip-note").textContent = ""; loadStatus();
+          });
+        };
+        // a skip-list change removes matching tracked rows (with history) on the next file-list refresh: confirm big removals
+        return post("Skip/Preview", { Patterns: c.Exclude.join("\n") }).then(function (p) {
+          var n = (p && p.WouldRemove) || 0;
+          if (n > 1000 && !confirm("The skip list matches " + fmtNum(n) + " tracked files. They will be removed from tracking together with their check history (the files on disk are not touched). Save?")) return;
+          if (n > 0) toast(fmtNum(n) + " tracked file" + (n === 1 ? "" : "s") + " will be removed from tracking by the skip list");
+          return save();
+        }, save);
       });
       return false;
     });

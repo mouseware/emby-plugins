@@ -74,8 +74,8 @@ namespace Claw.Emby.MediaIntegrity.Server
                 var r = FileDiscovery.Run(Store, Roots(), ExcludeRegex(), _discoverReason, CancellationToken.None);
                 LastDiscovery = r;
                 try { Store.SetMeta("discovery", System.Text.Json.JsonSerializer.Serialize(r)); } catch { }
-                _log.Info("Media Integrity: file list refreshed ({0}): {1} files on disk in {2} folders ({3} offline), {4} not yet hashed added, {5} gone removed, {6:0.0}s",
-                    r.Reason, r.OnDisk, r.Roots, r.RootsOffline, r.Added, r.Removed, r.Seconds);
+                _log.Info("Media Integrity: file list refreshed ({0}): {1} files on disk in {2} folders ({3} offline), {4} not yet hashed added, {5} gone removed, {7} removed by skip patterns, {6:0.0}s",
+                    r.Reason, r.OnDisk, r.Roots, r.RootsOffline, r.Added, r.Removed, r.Seconds, r.Skipped);
                 foreach (var e in r.Errors.Take(5)) _log.Warn("Media Integrity: file list: {0}", e);
             }
             catch (Exception ex) { _log.ErrorException("Media Integrity: file list refresh", ex); }

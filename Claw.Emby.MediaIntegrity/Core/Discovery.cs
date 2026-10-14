@@ -7,6 +7,17 @@ using System.Threading;
 
 namespace Claw.Emby.MediaIntegrity.Core
 {
+    /// <summary>Recommended skip list (1.0.5): Emby/Kodi metadata and artwork plus download/OS junk. Subtitles, media and ebooks stay hashed.</summary>
+    public static class SkipDefaults
+    {
+        public static readonly string[] Recommended =
+        {
+            "*.nfo", "*.nfo-orig", "*.xml", "*.bif", "*.metathumb",
+            "*.jpg", "*.jpeg", "*.png", "*.webp", "*.tbn", "*.gif",
+            "Thumbs.db", "desktop.ini", ".DS_Store", "*.tmp", "*.part", "*.partial", "*.crdownload", "*.!qB"
+        };
+    }
+
     public sealed class DiscoveryResult
     {
         public DateTime Time { get; set; }
@@ -16,6 +27,8 @@ namespace Claw.Emby.MediaIntegrity.Core
         public long OnDisk { get; set; }
         public long Added { get; set; }
         public long Removed { get; set; }
+        /// <summary>Tracked rows dropped because they match the skip patterns (with their history; files on disk untouched).</summary>
+        public long Skipped { get; set; }
         public double Seconds { get; set; }
         public List<string> Errors { get; set; } = new List<string>();
     }
@@ -33,6 +46,7 @@ namespace Claw.Emby.MediaIntegrity.Core
             now = now ?? (() => DateTime.UtcNow);
             var t0 = DateTime.UtcNow;
             var res = new DiscoveryResult { Time = now(), Reason = reason };
+            res.Skipped = store.RemoveSkipped(exclude);
             foreach (var r in ScanEngine.DistinctRoots(roots))
             {
                 ct.ThrowIfCancellationRequested();

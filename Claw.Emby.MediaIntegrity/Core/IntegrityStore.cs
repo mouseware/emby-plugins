@@ -265,6 +265,31 @@ CREATE TABLE IF NOT EXISTS queue (
 
         public List<string> PendingPaths() => Db.Query("SELECT path FROM files WHERE status IN ('pending','never_hashed') AND ignored=0 ORDER BY path COLLATE NOCASE").Select(r => r.Str("path")).ToList();
 
+        /// <summary>Tracked rows whose file name matches the skip patterns: (count, ids). Read-only (preview for the settings confirm).</summary>
+        public List<long> MatchingSkip(System.Text.RegularExpressions.Regex skip)
+        {
+            var ids = new List<long>();
+            if (skip == null) return ids;
+            foreach (var r in Db.Query("SELECT id, name FROM files")) if (skip.IsMatch(r.Str("name") ?? "")) ids.Add(r.Long("id"));
+            return ids;
+        }
+
+        /// <summary>Stops tracking files that match the skip patterns: deletes their rows, history (cascade) and queue entries.
+        /// Files on disk are never touched. Returns the number of rows removed.</summary>
+        public long RemoveSkipped(System.Text.RegularExpressions.Regex skip)
+        {
+            if (skip == null) return 0;
+            var ids = MatchingSkip(skip);
+            var queued = Db.Query("SELECT id, path FROM queue").Where(r => skip.IsMatch(System.IO.Path.GetFileName(r.Str("path") ?? ""))).Select(r => r.Long("id")).ToList();
+            if (ids.Count == 0 && queued.Count == 0) return 0;
+            Db.Transaction(() =>
+            {
+                foreach (var id in ids) { Db.Exec("DELETE FROM checks WHERE file_id=@id", ("id", id)); Db.Exec("DELETE FROM files WHERE id=@id", ("id", id)); }
+                foreach (var id in queued) Db.Exec("DELETE FROM queue WHERE id=@id", ("id", id));
+            });
+            return ids.Count;
+        }
+
         public static string WithSep(string p)
         {
             if (string.IsNullOrEmpty(p)) return p;

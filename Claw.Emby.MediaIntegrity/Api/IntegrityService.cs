@@ -105,6 +105,14 @@ namespace Claw.Emby.MediaIntegrity.Api
         public bool CountOnly { get; set; }
     }
 
+    [Route("/ClawMediaIntegrity/Skip/Preview", "POST", Summary = "Media Integrity: how many tracked rows a skip-pattern list would remove (Patterns = one per line)")]
+    [Authenticated(Roles = "Admin")]
+    public class PostSkipPreview : IReturn<SkipPreview> { public string Patterns { get; set; } }
+    [Route("/ClawMediaIntegrity/Skip/Recommended", "GET", Summary = "Media Integrity: the recommended skip list")]
+    [Authenticated(Roles = "Admin")]
+    public class GetSkipRecommended : IReturn<string[]> { }
+    public class SkipPreview { public long WouldRemove { get; set; } public long TrackedNow { get; set; } }
+
     public class DiscoveryStatus { public bool Running { get; set; } public DateTime? Scheduled { get; set; } public DiscoveryResult Last { get; set; } }
 
     public class ManualStatus
@@ -410,6 +418,14 @@ namespace Claw.Emby.MediaIntegrity.Api
             if (r.CountOnly) return new CheckJob { Label = label, Total = paths.Count, State = "count" };
             return h.Snap(h.Manual.Enqueue(label, paths));
         }
+
+        public object Post(PostSkipPreview r)
+        {
+            var h = H;
+            var pats = (r.Patterns ?? "").Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToArray();
+            return new SkipPreview { WouldRemove = h.Store.MatchingSkip(ScanEngine.GlobsToRegex(pats)).Count, TrackedNow = h.Store.FileCount };
+        }
+        public object Get(GetSkipRecommended r) => PluginConfiguration.RecommendedExclude;
 
         public object Post(PostFileListRefresh r) { H.RequestDiscovery("refresh button", 0); return new OkResult { Ok = true }; }
     }
