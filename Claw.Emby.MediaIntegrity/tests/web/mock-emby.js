@@ -37,7 +37,7 @@
   var problemsSt = ["changed", "modified", "missing", "unreadable"];
 
   window.__srv = {
-    cfg: { HashNewItems: true, ExcludedLibraryIds: [], ExtraFolders: ["E:\\Archive"], Exclude: ["*.nfo", "*.nfo-orig", "*.xml", "*.bif", "*.metathumb", "*.jpg", "*.jpeg", "*.png", "*.webp", "*.tbn", "*.gif", "Thumbs.db", "desktop.ini", ".DS_Store", "*.tmp", "*.part", "*.partial", "*.crdownload", "*.!qB"],
+    cfg: { HashNewItems: true, ExcludedLibraryIds: [], ExtraFolders: ["E:\\Archive"], Exclude: ["*.nfo", "*.nfo-orig", "*.xml", "*.bif", "*.metathumb", "*.jpg", "*.jpeg", "*.png", "*.webp", "*.tbn", "*.gif", "*.old*", "Thumbs.db", "desktop.ini", ".DS_Store", "*.tmp", "*.part", "*.partial", "*.crdownload", "*.!qB"],
       AutoAcceptModifiedExtensions: [".nfo", ".xml", ".jpg", ".jpeg", ".png", ".webp", ".tbn", ".bif"], ThrottleMBps: 0, PauseDuringPlayback: true, MinDaysBetweenScheduledScans: 150,
       NotifyScanSummary: true, NotifyProblems: true, LegacyDbPath: "D:\\Tools\\filehashes.db" },
     files: files, calls: [], saved: [], queue: 0,
@@ -186,7 +186,7 @@
       case "POST Scan/Pause": S.scan.UserPaused = true; return { Ok: true };
       case "POST Scan/Resume": S.scan.UserPaused = false; return { Ok: true };
       case "POST Scan/Stop": S.running = false; S.scan.UserPaused = false; S.resumable = { Id: 4, State: "stopped", Started: iso(19 * H), Done: S.scan.FileIndex, Total: S.scan.FileCount }; return { Ok: true };
-      case "GET Skip/Recommended": return ["*.nfo", "*.nfo-orig", "*.xml", "*.bif", "*.metathumb", "*.jpg", "*.jpeg", "*.png", "*.webp", "*.tbn", "*.gif", "Thumbs.db", "desktop.ini", ".DS_Store", "*.tmp", "*.part", "*.partial", "*.crdownload", "*.!qB"];
+      case "GET Skip/Recommended": return ["*.nfo", "*.nfo-orig", "*.xml", "*.bif", "*.metathumb", "*.jpg", "*.jpeg", "*.png", "*.webp", "*.tbn", "*.gif", "*.old*", "Thumbs.db", "desktop.ini", ".DS_Store", "*.tmp", "*.part", "*.partial", "*.crdownload", "*.!qB"];
       case "POST Skip/Preview": S.previews = (S.previews || []).concat([q.Patterns]); return { WouldRemove: S.skipWould || 0, TrackedNow: files.length };
       case "GET Problems": return files.filter(function (f) { return problemsSt.indexOf(f.Status) >= 0 && (q.IncludeIgnored === "true" || !f.Ignored); });
       case "POST Files/Action": {

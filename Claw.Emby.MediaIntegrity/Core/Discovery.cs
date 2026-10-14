@@ -13,7 +13,7 @@ namespace Claw.Emby.MediaIntegrity.Core
         public static readonly string[] Recommended =
         {
             "*.nfo", "*.nfo-orig", "*.xml", "*.bif", "*.metathumb",
-            "*.jpg", "*.jpeg", "*.png", "*.webp", "*.tbn", "*.gif",
+            "*.jpg", "*.jpeg", "*.png", "*.webp", "*.tbn", "*.gif", "*.old*",
             "Thumbs.db", "desktop.ini", ".DS_Store", "*.tmp", "*.part", "*.partial", "*.crdownload", "*.!qB"
         };
     }

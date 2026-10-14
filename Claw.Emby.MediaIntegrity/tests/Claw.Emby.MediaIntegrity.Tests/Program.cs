@@ -80,10 +80,11 @@ static class Program
     {
         var rec = PluginConfiguration_Recommended();
         var rx = ScanEngine.GlobsToRegex(rec);
-        string[] skipped = { "movie.nfo", "movie.NFO", "x.nfo-orig", "tvshow.xml", "a.bif", "b.metathumb", "poster.jpg", "fanart.JPEG", "logo.png", "c.webp", "d.tbn", "e.gif", "Thumbs.db", "desktop.ini", "y.tmp", "z.part", "w.!qB" };
+        string[] skipped = { "movie.nfo", "movie.NFO", "x.nfo-orig", "tvshow.xml", "a.bif", "b.metathumb", "poster.jpg", "fanart.JPEG", "logo.png", "c.webp", "d.tbn", "e.gif", "movie.nfo.old", "x.old62", "Show.OLD", "Thumbs.db", "desktop.ini", "y.tmp", "z.part", "w.!qB" };
         string[] kept = { "Movie (2010).mkv", "Ep.mp4", "a.srt", "a.ass", "a.ssa", "a.sub", "a.idx", "a.vtt", "Book.m4b", "Track.mp3", "Disc.iso", "Book.epub", "Book.pdf", "x.flac", "notes.txt", "jpg.mkv", "nfo" };
         Ok(skipped.All(n => rx.IsMatch(n)), "recommended list skips metadata, artwork and junk");
         Ok(kept.All(n => !rx.IsMatch(n)), "recommended list keeps media, ebooks and subtitles: " + string.Join(",", kept.Where(n => rx.IsMatch(n))));
+        Ok(rx.IsMatch("tvshow.nfo.old") && rx.IsMatch("backup.old44") && !rx.IsMatch("Movie (2010).mkv") && !rx.IsMatch("bold.srt"), "*.old* skips Emby .old backups, keeps media and subtitles");
         var d = Tmp(); var root = Path.Combine(d, "Lib"); var mdir = Path.Combine(root, "Movie"); Directory.CreateDirectory(mdir);
         var mkv = Path.Combine(mdir, "Movie.mkv"); File.WriteAllText(mkv, "video");
         var nfo = Path.Combine(mdir, "movie.nfo"); File.WriteAllText(nfo, "<nfo/>");

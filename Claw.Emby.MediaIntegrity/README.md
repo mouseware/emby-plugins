@@ -42,7 +42,7 @@ Tests:
 ## Changes
 
 - **1.0.5.0**
-  - **Emby metadata and artwork are skipped by default.** The recommended skip list is `*.nfo`, `*.nfo-orig`, `*.xml`, `*.bif`, `*.metathumb`, artwork (`*.jpg`, `*.jpeg`, `*.png`, `*.webp`, `*.tbn`, `*.gif`), plus the existing junk patterns (`Thumbs.db`, `desktop.ini`, `.DS_Store`, `*.tmp`, `*.part`, `*.partial`, `*.crdownload`, `*.!qB`).
+  - **Emby metadata and artwork are skipped by default.** The recommended skip list is `*.nfo`, `*.nfo-orig`, `*.xml`, `*.bif`, `*.metathumb`, artwork (`*.jpg`, `*.jpeg`, `*.png`, `*.webp`, `*.tbn`, `*.gif`), Emby backups (`*.old*`), plus the existing junk patterns (`Thumbs.db`, `desktop.ini`, `.DS_Store`, `*.tmp`, `*.part`, `*.partial`, `*.crdownload`, `*.!qB`).
     - Subtitles (`.srt`, `.ass`, `.ssa`, `.sub`, `.idx`, `.vtt`) and all media, including video, audio, `.iso` and ebooks, stay hashed.
     - The skip list stays fully editable in Settings, with a one-line explanation of skip versus auto-accept. **Restore recommended skip list** adds the recommended patterns without removing your own.
     - A saved configuration is never overwritten; only a fresh install (or a user with no saved config) gets the new defaults.
