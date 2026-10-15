@@ -8,6 +8,10 @@ using MediaBrowser.Model.Services;
 
 namespace Claw.Emby.MediaIntegrity.Api
 {
+    [Route("/ClawMediaIntegrity/Info", "GET", Summary = "Media Integrity: master switch and version (used by the item-menu script)")]
+    public class GetInfo : IReturn<InfoResult> { }
+    public class InfoResult { public bool Enabled { get; set; } public string Version { get; set; } }
+
     [Route("/ClawMediaIntegrity/Status", "GET", Summary = "Media Integrity: scan progress, queue, counts, import result")]
     [Authenticated(Roles = "Admin")]
     public class GetStatus : IReturn<StatusResult> { }
@@ -40,6 +44,18 @@ namespace Claw.Emby.MediaIntegrity.Api
         public bool Desc { get; set; }
         public int StartIndex { get; set; }
         public int Limit { get; set; } = 100;
+        /// <summary>File type filter: extension without dot ("mkv"), or "(none)".</summary>
+        public string Type { get; set; }
+    }
+
+    [Route("/ClawMediaIntegrity/Files/Types", "GET", Summary = "Media Integrity: file types (extensions) with counts for one group / search, for the type filter")]
+    [Authenticated(Roles = "Admin")]
+    public class GetFileTypes : IReturn<List<TypeCount>>
+    {
+        public string GroupBy { get; set; }
+        public string Group { get; set; }
+        public string Search { get; set; }
+        public string Status { get; set; }
     }
 
     [Route("/ClawMediaIntegrity/Files/{Id}/History", "GET", Summary = "Media Integrity: one file with its check history")]
@@ -101,6 +117,7 @@ namespace Claw.Emby.MediaIntegrity.Api
         public string Search { get; set; }
         public string Status { get; set; }
         public bool IncludeIgnored { get; set; }
+        public string Type { get; set; }
         /// <summary>Only count, do not queue (for the confirmation above 2,000 files).</summary>
         public bool CountOnly { get; set; }
     }
@@ -135,6 +152,8 @@ namespace Claw.Emby.MediaIntegrity.Api
         public string Path { get; set; }
         public string Name { get; set; }
         public string Folder { get; set; }
+        /// <summary>Extension without the dot, lower case ("" = none).</summary>
+        public string Ext { get; set; }
         public long? Size { get; set; }
         public string Hash { get; set; }
         public string LastHash { get; set; }
@@ -147,7 +166,7 @@ namespace Claw.Emby.MediaIntegrity.Api
         public DateTime? Mtime { get; set; }
         public static FileDto From(FileRecord f) => new FileDto
         {
-            Id = f.Id, Path = f.Path, Name = f.Name, Folder = f.Folder, Size = f.Size, Hash = f.BaselineMd5, LastHash = f.LastMd5, LastChecked = f.LastChecked, BaselineDate = f.BaselineDate,
+            Id = f.Id, Path = f.Path, Name = f.Name, Folder = f.Folder, Ext = IntegrityStore.ExtOf(f.Name), Size = f.Size, Hash = f.BaselineMd5, LastHash = f.LastMd5, LastChecked = f.LastChecked, BaselineDate = f.BaselineDate,
             Status = f.Status, LastResult = f.LastResult, Ignored = f.Ignored, Error = f.Error, Mtime = f.Mtime
         };
     }
@@ -156,6 +175,7 @@ namespace Claw.Emby.MediaIntegrity.Api
 
     public class StatusResult
     {
+        public bool Enabled { get; set; } = true;
         public string State { get; set; }
         public string PauseReason { get; set; }
         public bool UserPaused { get; set; }
@@ -198,6 +218,8 @@ namespace Claw.Emby.MediaIntegrity.Api
     {
         private static IntegrityHost H => IntegrityHost.Instance ?? throw new InvalidOperationException("Media Integrity is starting");
 
+        public object Get(GetInfo r) => new InfoResult { Enabled = IntegrityHost.IsOn, Version = Plugin.Instance?.Version?.ToString() };
+
         public object Get(GetStatus r)
         {
             var h = H; var p = h.Progress; var counts = h.Store.StatusCounts();
@@ -213,7 +235,7 @@ namespace Claw.Emby.MediaIntegrity.Api
                 Counts = counts, Files = h.Store.FileCount, Problems = FileStatus.Problems.Sum(s => counts.TryGetValue(s, out var n) ? n : 0),
                 Import = h.Import, LastSkipReason = h.LastSkipReason, LastCompleteVerification = h.LastCompleteVerification(), RootCount = h.Roots().Count, Now = DateTime.UtcNow,
                 FileList = new DiscoveryStatus { Running = h.Discovering, Scheduled = h.DiscoveryRequested, Last = h.LastDiscovery },
-                Manual = ManualStatusOf(h)
+                Manual = ManualStatusOf(h), Enabled = IntegrityHost.IsOn
             };
         }
 
@@ -363,15 +385,25 @@ namespace Claw.Emby.MediaIntegrity.Api
             var h = H;
             var groups = Groups(h, r.GroupBy, out var allRoots);
             PagedFiles page;
-            if (string.IsNullOrEmpty(r.Group) || r.Group == "all") page = h.Store.Browse(null, null, r.Search, r.Status, r.Sort, r.Desc, r.StartIndex, r.Limit);
-            else if (r.Group == "other") page = h.Store.Browse(null, allRoots, r.Search, r.Status, r.Sort, r.Desc, r.StartIndex, r.Limit);
+            if (string.IsNullOrEmpty(r.Group) || r.Group == "all") page = h.Store.Browse(null, null, r.Search, r.Status, r.Sort, r.Desc, r.StartIndex, r.Limit, r.Type);
+            else if (r.Group == "other") page = h.Store.Browse(null, allRoots, r.Search, r.Status, r.Sort, r.Desc, r.StartIndex, r.Limit, r.Type);
             else
             {
                 var g = groups.FirstOrDefault(x => x.Key == r.Group);
                 if (g == null) return new PagedDto { Items = new List<FileDto>() };
-                page = h.Store.Browse(g.Paths, null, r.Search, r.Status, r.Sort, r.Desc, r.StartIndex, r.Limit);
+                page = h.Store.Browse(g.Paths, null, r.Search, r.Status, r.Sort, r.Desc, r.StartIndex, r.Limit, r.Type);
             }
             return new PagedDto { Total = page.Total, StartIndex = page.Offset, Items = page.Items.Select(FileDto.From).ToList() };
+        }
+
+        public object Get(GetFileTypes r)
+        {
+            var h = H;
+            var groups = Groups(h, r.GroupBy, out var allRoots);
+            if (string.IsNullOrEmpty(r.Group) || r.Group == "all") return h.Store.Types(null, null, r.Search, r.Status);
+            if (r.Group == "other") return h.Store.Types(null, allRoots, r.Search, r.Status);
+            var g = groups.FirstOrDefault(x => x.Key == r.Group);
+            return g == null ? new List<TypeCount>() : h.Store.Types(g.Paths, null, r.Search, r.Status);
         }
 
         public object Get(GetHistory r)
@@ -400,19 +432,20 @@ namespace Claw.Emby.MediaIntegrity.Api
                 // same rows as the Problems tab: problem status (one kind or all), name/path filter, ignored only when shown
                 var kinds = string.IsNullOrEmpty(r.Status) ? FileStatus.Problems : new[] { r.Status };
                 paths = h.Store.Problems(r.IncludeIgnored, int.MaxValue).Where(f => kinds.Contains(f.Status))
-                    .Where(f => string.IsNullOrWhiteSpace(r.Search) || (f.Path ?? "").IndexOf(r.Search.Trim(), StringComparison.OrdinalIgnoreCase) >= 0).Select(f => f.Path).ToList();
+                    .Where(f => string.IsNullOrWhiteSpace(r.Search) || (f.Path ?? "").IndexOf(r.Search.Trim(), StringComparison.OrdinalIgnoreCase) >= 0)
+                    .Where(f => IntegrityStore.NormType(r.Type) == null || IntegrityStore.ExtOf(f.Name) == IntegrityStore.NormType(r.Type)).Select(f => f.Path).ToList();
                 label = "All matching problems";
             }
             else
             {
                 var groups = Groups(h, r.GroupBy, out var allRoots);
-                if (string.IsNullOrEmpty(r.Group) || r.Group == "all") { paths = h.Store.MatchingPaths(null, null, r.Search, r.Status); label = "All matching files"; }
-                else if (r.Group == "other") { paths = h.Store.MatchingPaths(null, allRoots, r.Search, r.Status); label = "Not in scope (matching)"; }
+                if (string.IsNullOrEmpty(r.Group) || r.Group == "all") { paths = h.Store.MatchingPaths(null, null, r.Search, r.Status, r.Type); label = "All matching files"; }
+                else if (r.Group == "other") { paths = h.Store.MatchingPaths(null, allRoots, r.Search, r.Status, r.Type); label = "Not in scope (matching)"; }
                 else
                 {
                     var g = groups.FirstOrDefault(x => x.Key == r.Group);
-                    paths = g == null ? new List<string>() : h.Store.MatchingPaths(g.Paths, null, r.Search, r.Status);
-                    label = (g?.Label ?? "?") + (string.IsNullOrWhiteSpace(r.Search) && string.IsNullOrEmpty(r.Status) ? "" : " (matching)");
+                    paths = g == null ? new List<string>() : h.Store.MatchingPaths(g.Paths, null, r.Search, r.Status, r.Type);
+                    label = (g?.Label ?? "?") + (string.IsNullOrWhiteSpace(r.Search) && string.IsNullOrEmpty(r.Status) && string.IsNullOrEmpty(r.Type) ? "" : " (matching)");
                 }
             }
             if (r.CountOnly) return new CheckJob { Label = label, Total = paths.Count, State = "count" };

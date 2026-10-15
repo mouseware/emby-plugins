@@ -67,7 +67,7 @@ namespace Claw.Emby.MediaIntegrity.Server
 
         private void RunDiscovery()
         {
-            if (_disposed || Interlocked.Exchange(ref _discovering, 1) == 1) return;
+            if (_disposed || !IsOn || Interlocked.Exchange(ref _discovering, 1) == 1) return;
             try
             {
                 DiscoveryRequested = null;
@@ -81,7 +81,7 @@ namespace Claw.Emby.MediaIntegrity.Server
             catch (Exception ex) { _log.ErrorException("Media Integrity: file list refresh", ex); }
             finally { Interlocked.Exchange(ref _discovering, 0); }
         }
-        private void OnLibraryChanged(object sender, ItemChangeEventArgs e) { if (!_disposed) RequestDiscovery("library change", 60000); }
+        private void OnLibraryChanged(object sender, ItemChangeEventArgs e) { if (!_disposed && IsOn) RequestDiscovery("library change", 60000); }
 
         public IntegrityHost(IServerConfigurationManager config, ILibraryManager library, ISessionManager sessions, INotificationManager notifications, ITaskManager tasks, ILogManager logManager)
         {
@@ -91,6 +91,9 @@ namespace Claw.Emby.MediaIntegrity.Server
         }
 
         public static PluginConfiguration Cfg => Plugin.Instance?.Configuration ?? new PluginConfiguration();
+        public static bool IsOn => Cfg.Enabled;
+        public const string OffMessage = ManualCheckQueue.OffMessage;
+        private bool _wasOn = true;
 
         // ---------------- pause / throttle ----------------
         public sealed class Gate : IHashGate
@@ -155,6 +158,7 @@ namespace Claw.Emby.MediaIntegrity.Server
             _queueTimer = new Timer(_ => _queueWake.Set(), null, 15000, 30000);
             Manual = new ManualCheckQueue(Engine, ManualGate)
             {
+                IsEnabled = () => IsOn,
                 OnError = (path, ex) => _log.ErrorException("Media Integrity: manual check " + (path ?? ""), ex),
                 Queued = () => { try { _tasks.QueueIfNotRunning<ManualCheckTask>(); } catch (Exception ex) { _log.ErrorException("Media Integrity: start manual task", ex); } },
                 JobStarted = j => { try { j.LogId = Store.NewScan(j.Source == "item" ? "item" : "manual", j.Started ?? DateTime.UtcNow, null, j.Label, j.Source).Id; } catch (Exception ex) { _log.ErrorException("Media Integrity: activity entry", ex); } },
@@ -168,7 +172,21 @@ namespace Claw.Emby.MediaIntegrity.Server
         public void ApplyConfiguration()
         {
             var c = Cfg;
-            if (_discoverTimer != null) RequestDiscovery("settings changed", 5000);
+            if (!c.Enabled)
+            {
+                // switched off: stop the full scan (it resumes later) and cancel manual checks; nothing new starts
+                if (_wasOn) _log.Info("Media Integrity: switched off; scan stopped, manual checks cancelled");
+                _wasOn = false;
+                try { _scanStop?.Cancel(); } catch { }
+                try { Manual?.CancelAll(); } catch { }
+                _discoverTimer?.Change(Timeout.Infinite, Timeout.Infinite); DiscoveryRequested = null;
+            }
+            else
+            {
+                if (!_wasOn) { _log.Info("Media Integrity: switched on"); _queueWake.Set(); }
+                _wasOn = true;
+                if (_discoverTimer != null) RequestDiscovery("settings changed", 5000);
+            }
             if (Engine != null) Engine.Options = new ScanOptions { Exclude = c.Exclude ?? new string[0], AutoAcceptModifiedExtensions = c.AutoAcceptModifiedExtensions ?? new string[0] };
         }
 
@@ -232,6 +250,7 @@ namespace Claw.Emby.MediaIntegrity.Server
         // ---------------- full scan ----------------
         public void RequestStart(bool fresh)
         {
+            if (!IsOn) throw new ArgumentException(OffMessage);
             _forceNextRun = true;
             if (fresh) { var s = Store.ResumableScan("full"); if (s != null) { s.State = "abandoned"; s.Ended = DateTime.UtcNow; Store.SaveScan(s); } }
             ScanGate.UserPaused = false;
@@ -251,6 +270,13 @@ namespace Claw.Emby.MediaIntegrity.Server
 
         public async Task RunFullScanAsync(CancellationToken emby, IProgress<double> progress)
         {
+            if (!IsOn)
+            {
+                LastSkipReason = string.Format("Skipped {0:yyyy-MM-dd HH:mm}: Media Integrity is switched off (General tab).", DateTime.Now);
+                _log.Info("Media Integrity: " + LastSkipReason);
+                progress?.Report(100);
+                return;
+            }
             if (Interlocked.Exchange(ref _scanRunning, 1) == 1) return;
             try
             {
@@ -335,7 +361,7 @@ namespace Claw.Emby.MediaIntegrity.Server
             try
             {
                 var item = e?.Item;
-                if (item == null) return;
+                if (item == null || !IsOn) return;
                 RequestDiscovery("library change", 60000);
                 if (!item.IsFileProtocol || string.IsNullOrEmpty(item.Path) || !Cfg.HashNewItems) return;
                 if (item is MediaBrowser.Controller.Entities.CollectionFolder || item is MediaBrowser.Controller.Entities.AggregateFolder) return;
@@ -392,6 +418,7 @@ namespace Claw.Emby.MediaIntegrity.Server
 
         public CheckJob CheckPaths(string label, IList<string> files, IList<string> dirs, bool companions, string source = "manual")
         {
+            if (!IsOn) throw new ArgumentException(OffMessage);
             var paths = ManualCheckQueue.ExpandTargets(files, dirs, ExcludeRegex(), d => Store.PathsUnder(d, null), companions);
             return Snap(Manual.Enqueue(label, paths, source));
         }
@@ -430,7 +457,7 @@ namespace Claw.Emby.MediaIntegrity.Server
             return CheckPaths(label, files, dirs, true, "item");
         }
 
-        public void Recheck(FileRecord f) { Store.Enqueue(f.Path, "recheck", DateTime.UtcNow, DateTime.UtcNow); _queueWake.Set(); }
+        public void Recheck(FileRecord f) { if (!IsOn) throw new ArgumentException(OffMessage); Store.Enqueue(f.Path, "recheck", DateTime.UtcNow, DateTime.UtcNow); _queueWake.Set(); }
 
         private void QueueLoop()
         {
@@ -438,6 +465,7 @@ namespace Claw.Emby.MediaIntegrity.Server
             {
                 _queueWake.WaitOne(30000);
                 if (_disposed) break;
+                if (!IsOn) continue; // switched off: queued new-item hashing waits until it is switched on again
                 try
                 {
                     while (!_disposed)

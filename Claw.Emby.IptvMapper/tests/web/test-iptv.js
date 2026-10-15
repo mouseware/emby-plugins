@@ -1,5 +1,5 @@
 // IPTV Channel Mapper: real Web/config.html + config.js against a small mock (fallback mode, 14 channels).
-const puppeteer = require('/workspace/jstest/node_modules/puppeteer-core');
+const puppeteer = require(process.env.PUPPETEER || '/workspace/jstest/node_modules/puppeteer-core');
 const fs = require('fs'), path = require('path');
 const W = path.resolve(__dirname, '../../Web');
 let fails = 0, passes = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); c ? passes++ : fails++; };
@@ -28,13 +28,13 @@ const page = `<!doctype html><html><head><meta charset="utf-8"><style>
 body{margin:0;background:#141414;color:#e8e8e8;font:14px "Segoe UI",Roboto,Arial,sans-serif}.top{height:3.2em;background:#1c1c1c;display:flex;align-items:center;padding:0 1.5em;border-bottom:1px solid #2a2a2a}.top b{color:#52b54b;margin-right:.8em}
 .main{padding:.5em 1.5em}button,select,input{font:inherit;color:inherit}button{background:#2a2a2a;border:1px solid #3a3a3a;border-radius:.25em;padding:.35em .8em}</style>
 <script>${mock}</script></head><body><div class="top"><b>emby</b> Server dashboard &rsaquo; IPTV Channel Mapper</div><div class="main">${html}</div>
-<script src="${W}/config.js"></script><script>var v=document.querySelector('.iptvMapperPage')||document.querySelector('[data-role=page]');new __View(v,{});v.dispatchEvent(new CustomEvent('viewshow'));</script></body></html>`;
+<script src="${require('url').pathToFileURL(path.join(W, 'config.js')).href}"></script><script>var v=document.querySelector('.iptvMapperPage')||document.querySelector('[data-role=page]');new __View(v,{});v.dispatchEvent(new CustomEvent('viewshow'));</script></body></html>`;
 fs.writeFileSync(path.join(__dirname, 'iptv-page.html'), page);
 (async () => {
-  const b = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--allow-file-access-from-files'] });
+  const b = await puppeteer.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--no-sandbox', '--allow-file-access-from-files'] });
   const p = await b.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
   await p.setViewport({ width: 1500, height: 820 });
-  await p.goto('file://' + path.join(__dirname, 'iptv-page.html')); await p.waitForFunction(() => document.querySelectorAll('.iptvm-tbody tr').length >= 14, { timeout: 8000 }).catch(() => {});
+  await p.goto(require('url').pathToFileURL(path.join(__dirname, 'iptv-page.html')).href); await p.waitForFunction(() => document.querySelectorAll('.iptvm-tbody tr').length >= 14, { timeout: 8000 }).catch(() => {});
   ok(await p.$$eval('.iptvm-tbody tr', t => t.length) >= 14, 'channels rendered');
   const C = require('./checks.js')(p, ok);
   await p.screenshot({ path: '' + (process.env.SHOTDIR || __dirname) + '/iptvmapper-resize-before.png' });

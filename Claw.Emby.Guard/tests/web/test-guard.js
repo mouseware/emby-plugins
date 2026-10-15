@@ -1,12 +1,12 @@
-const puppeteer = require('/workspace/jstest/node_modules/puppeteer-core');
+const puppeteer = require(process.env.PUPPETEER || '/workspace/jstest/node_modules/puppeteer-core');
 const path = require('path');
 require('./build-page.js');
-const URL = 'file://' + path.resolve(__dirname, 'guard-page.html');
+const URL = require('url').pathToFileURL(path.resolve(__dirname, 'guard-page.html')).href;
 let fails = 0, passes = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); c ? passes++ : fails++; };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const SHOTS = process.env.SHOTS !== '0';
 (async () => {
-  const b = await puppeteer.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox', '--allow-file-access-from-files'] });
+  const b = await puppeteer.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--no-sandbox', '--allow-file-access-from-files'] });
   const p = await b.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
   await p.setViewport({ width: 1500, height: 900 });
   await p.goto(URL); await p.evaluate(() => document.fonts.ready); await sleep(300);
@@ -24,7 +24,7 @@ const SHOTS = process.env.SHOTS !== '0';
   const ghost = r.find(x => x[2] === '2001:db8:4:2::99'); ok(ghost && /no such user/.test(ghost[3]), 'nonexistent user tagged');
   const iconW = await p.$$eval('.cg-live-t td.cg-ic .md-icon', a => a.map(i => i.getBoundingClientRect().width));
   ok(iconW.every(w => w > 0 && w < 30), 'icons render as glyphs');
-  if (SHOTS) await p.screenshot({ path: '/workspace/guard-live.png' });
+  if (SHOTS) await p.screenshot({ path: (process.env.SHOTDIR || '/workspace') + '/guard-live.png' });
   // filter
   await p.type('.cg-filter', 'bob'); await sleep(50); r = await rows();
   ok(r.length === 1 && r[0][3].startsWith('bob'), 'text filter');
@@ -45,7 +45,7 @@ const SHOTS = process.env.SHOTS !== '0';
   menu = await p.$$eval('.cg-menu button', a => a.map(x => x.textContent.trim()));
   ok(menu.some(x => /Ban 1 hour/.test(x)) && menu.some(x => /Ban 1 day/.test(x)) && menu.some(x => /Ban 30 days/.test(x)) && menu.some(x => /Ban permanently/.test(x)) &&
      menu.some(x => /Whitelist this IP/.test(x)) && menu.some(x => /Watch username.*bob/.test(x)) && menu.some(x => /Show only this IP/.test(x)), 'row menu has all actions');
-  if (SHOTS) await p.screenshot({ path: '/workspace/guard-live-menu.png' });
+  if (SHOTS) await p.screenshot({ path: (process.env.SHOTDIR || '/workspace') + '/guard-live-menu.png' });
   // ban 1 day from row
   const menuClick = async re => { const h = await p.evaluateHandle(re => [...document.querySelectorAll('.cg-menu button')].find(x => new RegExp(re).test(x.textContent)), re); await h.asElement().click(); await sleep(80); };
   await menuClick('Ban 1 day');
@@ -86,7 +86,7 @@ const SHOTS = process.env.SHOTS !== '0';
   ok(/Import finished/.test(await p.$eval('.cg-dlg-title', e => e.textContent)) && await p.$eval('.cg-imp-n', e => e.textContent) === '537', 'import shows imported count (537)');
   const impBody = await p.$eval('.cg-dlg-body', e => e.textContent);
   ok(/Bans created by the rules4 \(1 still active\)/.test(impBody) && /never banned\)402/.test(impBody), 'import result breakdown');
-  if (SHOTS) await p.screenshot({ path: '/workspace/guard-import.png' });
+  if (SHOTS) await p.screenshot({ path: (process.env.SHOTDIR || '/workspace') + '/guard-import.png' });
   await p.click('.cg-dlg-yes'); await sleep(200);
   ok(await p.$eval('.cg-range', e => e.value) === '168', 'range widened to 7 days to show imported items');
   ok((await p.$$eval('.cg-live-t tbody tr', t => t.filter(r => /imported/.test(r.textContent)).length)) >= 4, 'imported rows tagged "imported"');
@@ -100,7 +100,7 @@ const SHOTS = process.env.SHOTS !== '0';
   let br = await brows();
   ok(br.length === 4, 'active bans listed (' + br.length + ')');
   ok(br.some(x => x[0] === '198.51.100.0/24' && /permanent/.test(x[4])), 'CIDR + permanent shown');
-  if (SHOTS) await p.screenshot({ path: '/workspace/guard-bans.png' });
+  if (SHOTS) await p.screenshot({ path: (process.env.SHOTDIR || '/workspace') + '/guard-bans.png' });
   const banBtn = async (key, act) => { const h = await p.evaluateHandle((k, a) => document.querySelector('.cg-bans-t tr[data-key="' + k + '"] button[data-act="' + a + '"]'), key, act); await h.asElement().click(); await sleep(120); };
   const before = await p.evaluate(() => __srv.bans.find(b => b.Key === '203.0.113.233').Expires);
   await banBtn('203.0.113.233', 'extend'); await sleep(150);
@@ -127,7 +127,7 @@ const SHOTS = process.env.SHOTS !== '0';
   const steps = () => p.$$eval('.cg-steps-body tr', t => t.map(r => (r.querySelector('.cg-step-u').value === '0' ? 'perm' : r.querySelector('.cg-step-n').value + 'x' + r.querySelector('.cg-step-u').value)));
   ok(JSON.stringify(await steps()) === JSON.stringify(['1x60', '1x1440', '30x1440', 'perm']), 'escalation 1h, 1d, 30d, permanent');
   ok((await p.$eval('#cgInstant', e => e.value)).split('\n').includes('administrator'), 'instant usernames listed');
-  if (SHOTS) { await p.setViewport({ width: 1500, height: 1250 }); await p.screenshot({ path: '/workspace/guard-rules.png' }); await p.setViewport({ width: 1500, height: 900 }); }
+  if (SHOTS) { await p.setViewport({ width: 1500, height: 1250 }); await p.screenshot({ path: (process.env.SHOTDIR || '/workspace') + '/guard-rules.png' }); await p.setViewport({ width: 1500, height: 900 }); }
   // edit: threshold 3, change step 2 to 12 hours, remove 30d, save
   await p.$eval('#cgSigninN', e => e.value = '3');
   await p.evaluate(() => { const tr = document.querySelectorAll('.cg-steps-body tr')[1]; tr.querySelector('.cg-step-n').value = '12'; tr.querySelector('.cg-step-u').value = '60'; });
@@ -160,12 +160,19 @@ const SHOTS = process.env.SHOTS !== '0';
   // ---- settings ----
   await p.click('.cg-tab[data-tab="settings"]'); await sleep(100);
   ok(/Forever/.test(await p.$eval('.cg-retention', e => e.textContent)) && /3 days/.test(await p.$eval('.cg-retention', e => e.textContent)), 'retention shown');
-  ok(/managed by Guard/.test(await p.$eval('.cg-filter-note', e => e.textContent)), 'filter status explained');
+  ok(/managed by Guard/.test(await p.$eval('.cg-filter-note', e => e.textContent)), 'filter status explained'); if (SHOTS) await p.screenshot({ path: (process.env.SHOTDIR || '/workspace') + '/guard-settings.png' });
   await p.type('#cgMmId', '123456'); await p.type('#cgMmKey', 'abc_def');
   await p.$eval('.cg-settings-form', f => f.requestSubmit()); await sleep(200);
   cfg = await p.evaluate(() => __srv.cfg); ok(cfg.MaxMindAccountId === '123456' && cfg.MaxMindLicenseKey === 'abc_def', 'MaxMind credentials saved');
   // master off asks
-  await p.click('#cgEnabled'); await p.$eval('.cg-settings-form', f => f.requestSubmit()); await sleep(100);
+  ok((await p.evaluate(() => __srv.cfg.Enabled)) !== false, 'Settings save leaves the master switch alone');
+  // ---- general tab ----
+  await p.click('.cg-tab[data-tab="general"]'); await sleep(100);
+  ok(await p.$eval('#cgEnabled', e => e.checked && e.offsetParent !== null), 'General tab shows the Enable switch (on)');
+  ok((await p.$eval('.cg-version', e => e.textContent)) === '1.2.0.0', 'About shows the version');
+  ok(/github\.com\/mouseware\/emby-plugins/.test(await p.$eval('.cg-about', e => e.innerHTML)) && /None/.test(await p.$eval('.cg-about', e => e.textContent)), 'About: GitHub link, no injected script');
+  if (SHOTS) await p.screenshot({ path: (process.env.SHOTDIR || '/workspace') + '/guard-general.png' });
+  await p.click('#cgEnabled'); await p.$eval('.cg-general-form', f => f.requestSubmit()); await sleep(100);
   ok(/Switch Guard off/.test(await p.$eval('.cg-dlg-title', e => e.textContent)), 'master off asks for confirmation');
   await p.click('.cg-dlg-yes'); await sleep(200);
   ok((await p.evaluate(() => __srv.cfg.Enabled)) === false, 'master off saved');
@@ -174,7 +181,7 @@ const SHOTS = process.env.SHOTS !== '0';
   await p.click('.cg-tab[data-tab="live"]');
   await p.evaluate(() => document.getElementById('clawGuardPage').dispatchEvent(new CustomEvent('viewshow'))); await sleep(400);
   ok((await head('.cg-live-t')).includes('Country') && (await rows()).some(x => x[3] === 'NL'), 'Country column appears with GeoLite DB');
-  if (SHOTS) await p.screenshot({ path: '/workspace/guard-live-country.png' });
+  if (SHOTS) await p.screenshot({ path: (process.env.SHOTDIR || '/workspace') + '/guard-live-country.png' });
   // conflict state
   await p.evaluate(() => { __srv.filterState = 'conflict-whitelist'; }); await p.evaluate(() => document.getElementById('clawGuardPage').dispatchEvent(new CustomEvent('viewshow'))); await sleep(300);
   ok(await p.$eval('.cg-c-state', e => e.textContent) === 'Not enforcing', 'allow-list conflict surfaced');
@@ -200,7 +207,7 @@ const SHOTS = process.env.SHOTS !== '0';
   ok(Math.abs(await colW('.cg-live-t', 6) - w1) <= 2 && await p.$$eval('.cg-live-t thead th', a => a.every(th => th.querySelector('.cr-h'))), 'width + handles survive header re-render (sort)');
   await dragCol('.cg-live-t', 3, -400);
   ok(await colW('.cg-live-t', 3) >= 27, 'minimum column width enforced');
-  if (SHOTS) await p.screenshot({ path: '/workspace/guard-resize.png' });
+  if (SHOTS) await p.screenshot({ path: (process.env.SHOTDIR || '/workspace') + '/guard-resize.png' });
   await p.reload(); await p.evaluate(() => document.fonts.ready); await sleep(500);
   ok(Math.abs(await p.$eval('.cg-live-t th[data-sort=client]', e => e.getBoundingClientRect().width) - w1) <= 2, 'width restored after page reload (by column id, even without the Country column)');
   await p.$eval('.cg-live-t th[data-sort=client] .cr-h', h => h.dispatchEvent(new MouseEvent('dblclick', { bubbles: true })));

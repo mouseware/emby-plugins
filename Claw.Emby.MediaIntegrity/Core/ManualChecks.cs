@@ -102,8 +102,13 @@ namespace Claw.Emby.MediaIntegrity.Core
         /// (its total grows; files already pending in it are not added twice) and that job is returned, so the
         /// progress panel shows one combined "x of y". Otherwise a new job starts.
         /// </summary>
+        /// <summary>Plugin master switch; while off, Enqueue is refused.</summary>
+        public Func<bool> IsEnabled { get; set; } = () => true;
+        public const string OffMessage = "Media Integrity is switched off (General tab).";
+
         public CheckJob Enqueue(string label, IEnumerable<string> paths, string source = "manual", bool append = true)
         {
+            if (!IsEnabled()) throw new ArgumentException(OffMessage);
             var list = Distinct(paths);
             var sizes = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
             foreach (var p in list) { try { var fi = new FileInfo(p); sizes[p] = fi.Exists ? fi.Length : 0; } catch { sizes[p] = 0; } }

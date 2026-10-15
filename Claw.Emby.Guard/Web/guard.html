@@ -40,6 +40,7 @@
 #clawGuardPage .cg-btn.cg-pri{background:#52b54b;border-color:#52b54b;color:#fff}
 #clawGuardPage .cg-btn.cg-dan{background:#b33a3a;border-color:#b33a3a;color:#fff}
 #clawGuardPage .cg-btn.cg-mini{padding:.15em .55em;font-size:.88em}
+#clawGuardPage .cg-about td{padding:.25em 1.4em .25em 0;vertical-align:top}#clawGuardPage .cg-about td:first-child{opacity:.7;white-space:nowrap}
 #clawGuardPage .cg-note{background:rgba(82,181,75,.08);border:1px solid rgba(82,181,75,.35);border-radius:.35em;padding:.6em .9em;margin:.6em 0 1em;font-size:.92em}
 #clawGuardPage .cg-warn{background:rgba(224,160,48,.1);border-color:rgba(224,160,48,.5)}
 #clawGuardPage .cg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(17em,1fr));gap:.2em 1.5em}
@@ -62,6 +63,7 @@
         <button type="button" class="cg-tab" data-tab="rules">Rules</button>
         <button type="button" class="cg-tab" data-tab="whitelist">Whitelist<span class="cg-badge cg-wl-count">0</span></button>
         <button type="button" class="cg-tab" data-tab="settings">Settings</button>
+        <button type="button" class="cg-tab" data-tab="general">General</button>
       </div>
 
       <!-- LIVE -->
@@ -176,8 +178,6 @@
       <!-- SETTINGS -->
       <div class="cg-panel" data-panel="settings">
         <form class="cg-settings-form">
-          <div class="checkboxContainer checkboxContainer-withDescription"><label><input is="emby-checkbox" type="checkbox" id="cgEnabled" /><span>Guard enabled (master switch)</span></label>
-            <div class="fieldDescription checkboxFieldDescription">Off: no new bans, and every entry Guard added to Emby's Remote IP filter is removed (entries you typed there yourself stay). Events are still logged. Bans are kept and come back when you switch it on again.</div></div>
           <div class="cg-note cg-filter-note"></div>
           <h3 class="cg-h">Country (optional, MaxMind GeoLite2)</h3>
           <div class="cg-grid">
@@ -192,6 +192,22 @@
           <p class="cg-tail cg-dim" style="font-size:.9em"></p>
           <div class="cg-err cg-settings-err"></div>
           <button is="emby-button" type="submit" class="raised button-submit block"><span>Save settings</span></button>
+        </form>
+      </div>
+
+      <!-- GENERAL -->
+      <div class="cg-panel" data-panel="general">
+        <form class="cg-general-form">
+          <h3 class="cg-h">General</h3>
+          <div class="checkboxContainer checkboxContainer-withDescription"><label><input is="emby-checkbox" type="checkbox" id="cgEnabled" /><span>Enable plugin</span></label>
+            <div class="fieldDescription checkboxFieldDescription">Off = no new bans, and every entry Guard added to Emby's Remote IP filter is removed (entries you typed there yourself stay). Events are still logged. Bans are kept and come back when you switch it on again.</div></div>
+          <button is="emby-button" type="submit" class="raised button-submit block"><span>Save</span></button>
+          <h3 class="cg-h">About</h3>
+          <table class="cg-about"><tbody>
+            <tr><td>Version</td><td class="cg-version">&ndash;</td></tr>
+            <tr><td>Script</td><td>None. Guard has no web-client injection; it only adds this dashboard page and works on the server.</td></tr>
+            <tr><td>Source</td><td><a is="emby-linkbutton" class="button-link" style="color:#52b54b" href="https://github.com/mouseware/emby-plugins" target="_blank" rel="noopener">github.com/mouseware/emby-plugins</a></td></tr>
+          </tbody></table>
         </form>
       </div>
 

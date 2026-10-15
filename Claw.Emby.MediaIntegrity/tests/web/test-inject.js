@@ -18,7 +18,7 @@ window.Emby={importModule:function(p){
   return Promise.reject(new Error('n/a'));}};
 window.ApiClient={getUrl:function(p){return p;},serverId:function(){return 's1';},getCurrentUser:function(){return Promise.resolve({Policy:{IsAdministrator:true}});},
   ajax:function(o){calls.push(o.type+' '+o.url);return Promise.resolve({Id:7,Label:'Sintel (2010)',State:'queued',Total:3,Done:0,BytesTotal:5100000000});},
-  getJSON:function(u){calls.push('GET '+u);polls++;
+  getJSON:function(u){if(/Info$/.test(u)) return Promise.resolve({Enabled:!window.__miOff,Version:'1.0.6.0'});calls.push('GET '+u);polls++;
     if(window.__mode==='bad') return Promise.resolve({Id:7,Label:'Sintel (2010)',State:polls<2?'running':'done',Total:3,Done:3,Ok:2,Changed:1,Findings:[{FileId:1,Path:'D:\\\\Media\\\\Movies\\\\Sintel (2010)\\\\Sintel (2010).mkv',Result:'changed'}]});
     return Promise.resolve(polls<2?{Id:7,Label:'Sintel (2010)',State:'running',Total:3,Done:1,BytesTotal:5100000000}:{Id:7,Label:'Sintel (2010)',State:'done',Total:3,Done:3,Ok:2,New:1});}};
 </script><script src="${require('url').pathToFileURL(path.resolve(__dirname, '../../Inject/claw-media-integrity.js')).href}"></script></body></html>`;
@@ -64,6 +64,10 @@ window.ApiClient={getUrl:function(p){return p;},serverId:function(){return 's1';
   ok(s[0] === 'warn' && /cancelled after 2 of 5/.test(s[1]), 'summarize edge cases');
   const iw = await p.$eval('.claw-mi-toast .md-icon', e => e.getBoundingClientRect().width);
   ok(iw > 10 && iw < 40, 'toast icon glyph renders (' + iw + ')');
+  await p.evaluate(() => { window.__miOff = true; return window.__clawMediaIntegrity.loadInfo(true); });
+  ok((await cmds([{ Id: '1', Type: 'Movie' }], admin)).length === 0, 'plugin off: no Verify integrity menu');
+  await p.evaluate(() => { window.__miOff = false; return window.__clawMediaIntegrity.loadInfo(true); });
+  ok((await cmds([{ Id: '1', Type: 'Movie' }], admin)).length === 1, 'plugin on again: menu back');
   ok(errs.length === 0, 'no page errors ' + errs.join(';'));
   fs.unlinkSync(path.join(__dirname, 'inject-page.html'));
   console.log(pass + ' passed, ' + fail + ' failed'); await b.close(); process.exit(fail ? 1 : 0);

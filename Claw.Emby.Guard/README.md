@@ -1,4 +1,4 @@
-# Claw Guard (Claw.Emby.Guard) 1.1.0.0
+# Claw Guard (Claw.Emby.Guard) 1.2.0.0
 
 Guard bans IP addresses that attack the Emby login or API. It enforces bans **inside Emby**, through Emby's own *Remote IP filter* in blacklist mode (Settings > Network). It adds no firewall rules or helper service, and it never locks Emby user accounts: only addresses are banned.
 
@@ -10,7 +10,8 @@ You can open it from the main menu (**Guard**, shield icon) or from its tile und
 - **Bans**: active bans, which you can Unban, give +1 day, or Make permanent. You can also add a manual ban (IP or CIDR, with a duration). History lists expired and lifted bans; escalation uses it.
 - **Rules**: thresholds, the instant-ban usernames, the API-failure rule, the escalation steps, when escalation resets, the IPv6 prefix and notifications.
 - **Whitelist**: IPs or CIDRs that are never banned. It starts empty, and admin IPs are not trusted automatically. A note explains that LAN addresses are never filtered by Emby.
-- **Settings**: the master switch, the optional MaxMind credentials, log retention and the filter status.
+- **Settings**: the optional MaxMind credentials, log retention and the filter status.
+- **General** (1.2): the **Enable plugin** master switch (switching off asks first; Guard then removes its entries from the Remote IP filter and stops banning, but keeps logging) and an About section with the version, "Script: None" (Guard injects nothing into other pages) and the GitHub link.
 
 ## Detection (per event type)
 

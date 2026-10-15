@@ -91,6 +91,9 @@
 #clawMediaIntegrityPage h3.mi-h{margin:1.2em 0 .4em;font-weight:500}
 #clawMediaIntegrityPage .mi-libs label{display:flex;gap:.5em;align-items:baseline;margin:.3em 0}
 #clawMediaIntegrityPage .mi-libs small{opacity:.6}
+#clawMediaIntegrityPage .mi-about td{padding:.25em 1.4em .25em 0;vertical-align:top}#clawMediaIntegrityPage .mi-about td:first-child{opacity:.7;white-space:nowrap}
+#clawMediaIntegrityPage .mi-off-banner{border:1px solid rgba(224,90,70,.55);background:rgba(224,90,70,.12);border-radius:.35em;padding:.6em .9em;margin:.8em 0}
+#clawMediaIntegrityPage .mi-type{font-variant-numeric:tabular-nums;opacity:.85}
 </style>
   <div data-role="content">
     <div class="content-primary">
@@ -132,17 +135,20 @@
         </div>
       </div>
 
+      <div class="mi-off-banner" style="display:none"><i class="md-icon">power_settings_new</i> Media Integrity is switched off: no scans, no hashing, no file-list refresh and no item-menu entry. Switch it on in the <b>General</b> tab.</div>
       <div class="mi-tabs">
         <button type="button" class="mi-tab mi-on" data-tab="problems">Problems<span class="mi-badge mi-red mi-prob-count">0</span></button>
         <button type="button" class="mi-tab" data-tab="browse">Browse</button>
         <button type="button" class="mi-tab" data-tab="activity">Activity</button>
         <button type="button" class="mi-tab" data-tab="settings">Settings</button>
+        <button type="button" class="mi-tab" data-tab="general">General</button>
       </div>
 
       <!-- Problems -->
       <div class="mi-panel mi-on" data-panel="problems">
         <div class="mi-bar2">
           <select class="mi-prob-kind"><option value="">All problems</option><option value="changed">Changed (silent)</option><option value="modified">Modified (rewritten)</option><option value="missing">Missing</option><option value="unreadable">Unreadable</option></select>
+          <select class="mi-prob-type" title="File type"><option value="">All file types</option></select>
           <input type="text" class="mi-prob-filter" placeholder="Filter by name or path" style="min-width:18em" />
           <label class="mi-nowrap"><input type="checkbox" class="mi-prob-ign" /> Show ignored</label>
           <span style="margin-left:auto" class="mi-prob-bulk mi-dim">0 selected</span>
@@ -156,7 +162,7 @@
         <div class="mi-selall mi-prob-selall" style="display:none"></div>
         <table class="mi-t mi-prob-t"><thead><tr>
           <th class="mi-ns" data-col="sel"><input type="checkbox" class="mi-sel-all" /></th>
-          <th data-sort="status">Status</th><th data-sort="name">Name</th><th data-sort="folder">Folder</th><th data-sort="size" class="mi-num">Size</th>
+          <th data-sort="status">Status</th><th data-sort="name">Name</th><th data-sort="type">Type</th><th data-sort="folder">Folder</th><th data-sort="size" class="mi-num">Size</th>
           <th data-sort="checked">Last checked</th><th class="mi-ns" data-col="hashes">Baseline → current</th><th class="mi-ns" data-col="actions">Actions</th>
         </tr></thead><tbody class="mi-click"></tbody></table>
         <div class="mi-pager mi-prob-pager" style="display:none"><button type="button" class="mi-btn mi-mini mi-prob-prev">‹ Previous</button><span class="mi-prob-page"></span><button type="button" class="mi-btn mi-mini mi-prob-next">Next ›</button></div>
@@ -242,6 +248,22 @@
           <div class="mi-imp-res"></div>
 
           <div><button is="emby-button" type="submit" class="raised button-submit block"><span>Save</span></button></div>
+        </form>
+      </div>
+
+      <!-- General -->
+      <div class="mi-panel" data-panel="general">
+        <form class="mi-general-form">
+          <h3 class="mi-h">General</h3>
+          <div class="checkboxContainer checkboxContainer-withDescription"><label><input is="emby-checkbox" type="checkbox" class="mi-s-enabled" /><span>Enable plugin</span></label>
+            <div class="fieldDescription checkboxFieldDescription">Off = the running full scan stops (it resumes from that file later), manual checks are cancelled, nothing new is hashed, the file list is not refreshed and <b>Verify integrity</b> disappears from the item menu. Stored hashes, history and settings are kept; files of new items queued while off are hashed when you switch it on again.</div></div>
+          <div><button is="emby-button" type="submit" class="raised button-submit block"><span>Save</span></button></div>
+          <h3 class="mi-h">About</h3>
+          <table class="mi-about"><tbody>
+            <tr><td>Version</td><td class="mi-version">&ndash;</td></tr>
+            <tr><td>Script</td><td>claw-media-integrity.js, injected into the web client's index.html at Emby startup (re-applied after Emby updates). It adds <b>Verify integrity</b> to the item menu; while the plugin is off it stays injected but adds nothing.</td></tr>
+            <tr><td>Source</td><td><a is="emby-linkbutton" class="button-link" style="color:#52b54b" href="https://github.com/mouseware/emby-plugins" target="_blank" rel="noopener">github.com/mouseware/emby-plugins</a></td></tr>
+          </tbody></table>
         </form>
       </div>
 

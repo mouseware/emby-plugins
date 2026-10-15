@@ -57,6 +57,8 @@
 .defaultChaptersPage .dc-warn{display:inline-block;padding:.05em .45em;border-radius:1em;background:rgba(255,170,0,.16);color:#ffc95c;font-size:80%;margin-left:.4em}
 .defaultChaptersPage .dc-pager{display:flex;align-items:center;justify-content:flex-end;gap:.6em;margin:.5em 0}
 .defaultChaptersPage .dc-linkbtn{font:inherit;color:var(--theme-accent-text-color,#52b54b);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
+.defaultChaptersPage .dc-about td{padding:.25em 1.4em .25em 0;vertical-align:top}.defaultChaptersPage .dc-about td:first-child{opacity:.7;white-space:nowrap}
+.defaultChaptersPage .dc-off-banner{border:1px solid rgba(224,90,70,.5);background:rgba(224,90,70,.1);border-radius:.35em;padding:.6em .9em;margin:.6em 0}
 </style>
   <div data-role="content">
     <div class="content-primary dc-root">
@@ -71,6 +73,7 @@
         Use <b>Found movies</b> to search for long movies with few chapters and generate for many at once. Movies only; administrators only.
       </div>
 
+      <div class="dc-msg dc-off-banner err" hidden>Default Chapters is switched off: the menu entries are hidden, Generate is refused and library refreshes no longer re-apply interval chapters. Revert still works. Switch it on in the <b>General</b> tab.</div>
       <div class="dc-card">
         <form class="dc-settings dc-form" novalidate>
           <label for="dcInterval">Chapter interval (minutes)</label>
@@ -84,6 +87,7 @@
       <div class="dc-tabs" role="tablist">
         <button type="button" class="dc-tab dc-active" role="tab" data-tab="changed" aria-selected="true">Changed<span class="dc-badge dc-badge-changed"></span></button>
         <button type="button" class="dc-tab" role="tab" data-tab="found" aria-selected="false">Found movies<span class="dc-badge dc-badge-found">&ndash;</span></button>
+        <button type="button" class="dc-tab" role="tab" data-tab="general" aria-selected="false">General</button>
       </div>
 
       <div class="dc-panel dc-panel-changed" role="tabpanel">
@@ -159,6 +163,20 @@
           <button type="button" class="dc-btn dc-next">Next &rsaquo;</button>
         </div>
       </div>
-    </div>
+      <div class="dc-panel dc-panel-general" role="tabpanel" hidden>
+        <form class="dc-general-form" novalidate>
+          <h3>General</h3>
+          <label class="dc-check"><input type="checkbox" id="dcEnabled" /> <b>Enable plugin</b></label>
+          <div class="dc-small dc-muted" style="margin:.3em 0 .8em 1.6em">Off = no &ldquo;Generate interval chapters&rdquo; / &ldquo;Restore original chapters&rdquo; menu entries, Generate is refused, and library refreshes no longer re-apply interval chapters (Emby's own chapters come back on the next refresh). Overrides and the stashed originals are kept, so Revert still works and everything resumes when you switch it on again.</div>
+          <button type="submit" class="dc-btn dc-btn-accent">Save</button>
+          <span class="dc-small dc-msg dc-general-msg"></span>
+          <h3 style="margin-top:1.4em">About</h3>
+          <table class="dc-about"><tbody>
+            <tr><td>Version</td><td class="dc-about-version">&ndash;</td></tr>
+            <tr><td>Script</td><td>claw-default-chapters.js, injected into the web client's index.html at Emby startup (re-applied after Emby updates). It adds the movie &hellip; menu entries; while the plugin is off it stays injected but adds nothing.</td></tr>
+            <tr><td>Source</td><td><a class="dc-link" style="color:#52b54b" href="https://github.com/mouseware/emby-plugins" target="_blank" rel="noopener">github.com/mouseware/emby-plugins</a></td></tr>
+          </tbody></table>
+        </form>
+      </div>    </div>
   </div>
 </div>

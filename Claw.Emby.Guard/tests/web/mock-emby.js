@@ -74,7 +74,7 @@
     getUrl: function (p, q) { var s = Object.keys(q || {}).map(function (k) { return encodeURIComponent(k) + "=" + encodeURIComponent(q[k]); }).join("&"); return p + (s ? "?" + s : ""); },
     getJSON: function (u) { try { return Promise.resolve(clone(api("GET", u))); } catch (e) { return Promise.reject(e); } },
     ajax: function (o) { try { return Promise.resolve(clone(api(o.type, o.url))); } catch (e) { return Promise.reject(e); } },
-    getPluginConfiguration: function () { return Promise.resolve(clone(S.cfg)); },
+    getPluginConfiguration: function () { return Promise.resolve(clone(S.cfg)); }, getInstalledPlugins: function () { return Promise.resolve([{ Id: "07d4dd00-021a-4dc5-9964-837979319eca", Name: "Claw Guard", Version: "1.2.0.0" }]); },
     updatePluginConfiguration: function (pid, c) { S.cfg = clone(c); S.saved.push(clone(c)); return Promise.resolve({}); }
   };
   window.Dashboard = { showLoadingMsg: function () {}, hideLoadingMsg: function () {}, processPluginConfigurationUpdateResult: function () { window.__savedToast = true; } };

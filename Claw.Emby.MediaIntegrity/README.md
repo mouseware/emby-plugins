@@ -41,6 +41,10 @@ Tests:
 
 ## Changes
 
+- **1.0.6.0**
+  - **File type column.** The Problems table and every file table under Browse (library, folder and search boxes) have a **Type** column with the file extension. It sorts like the other columns, and a **type filter** dropdown lists the extensions with their counts (server-side via `GET /ClawMediaIntegrity/Files/Types`; `Type` is also accepted by `Files` and `Check/Matching`, so "Check all matching" respects the filter). Columns stay resizable.
+  - **General tab** with an **Enable plugin** switch and an About section (version, injected script `claw-media-integrity.js`, GitHub link). Switching off asks first, then stops the full scan (it resumes later), the background hashing, the file-list refresh and manual checks, and hides "Verify integrity" in the item menu. Hashes and history are kept; a banner shows the off state. `GET /ClawMediaIntegrity/Info` returns `{ Enabled, Version }`.
+  - Fix: dragging a column edge in a file table inside the Browse groups table resized the outer table instead (same fix in all plugins).
 - **1.0.5.0**
   - **Emby metadata and artwork are skipped by default.** The recommended skip list is `*.nfo`, `*.nfo-orig`, `*.xml`, `*.bif`, `*.metathumb`, artwork (`*.jpg`, `*.jpeg`, `*.png`, `*.webp`, `*.tbn`, `*.gif`), Emby backups (`*.old*`), plus the existing junk patterns (`Thumbs.db`, `desktop.ini`, `.DS_Store`, `*.tmp`, `*.part`, `*.partial`, `*.crdownload`, `*.!qB`).
     - Subtitles (`.srt`, `.ass`, `.ssa`, `.sub`, `.idx`, `.vtt`) and all media, including video, audio, `.iso` and ebooks, stay hashed.

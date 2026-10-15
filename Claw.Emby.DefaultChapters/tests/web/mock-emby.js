@@ -51,7 +51,7 @@
     if (srv.failNext) { var f = srv.failNext; srv.failNext = null; return fail(f.status, f.text); }
     if (method === "GET" && m === "DefaultChapters/Overrides") {
       if (!srv.admin) return fail(403, "Forbidden");
-      return Promise.resolve({ IntervalMinutes: srv.configuredInterval, Items: Object.keys(srv.overrides).map(function (id) { return row(srv.items[id]); }) });
+      return Promise.resolve({ Enabled: srv.pluginConfig.Enabled !== false, IntervalMinutes: srv.configuredInterval, Items: Object.keys(srv.overrides).map(function (id) { return row(srv.items[id]); }) });
     }
     if (method === "GET" && /^DefaultChapters\/Found\?/.test(m)) {
       var q = {}; m.split("?")[1].split("&").forEach(function (kv) { var p = kv.split("="); q[p[0]] = decodeURIComponent(p[1]); });
@@ -123,7 +123,8 @@
     ajax: function (o) { return handle(o.type || "GET", o.url); },
     getCurrentUser: function () { return Promise.resolve({ Id: "u1", Name: srv.admin ? "admin" : "kid", Policy: { IsAdministrator: srv.admin } }); },
     getImageUrl: function (id) { return "data:image/svg+xml;utf8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="60"><rect width="40" height="60" fill="hsl(' + (parseInt(id, 10) * 47 % 360) + ',35%,32%)"/></svg>'); },
-    getPluginConfiguration: function () { return Promise.resolve(JSON.parse(JSON.stringify(srv.pluginConfig))); },
+    getInstalledPlugins: function () { return Promise.resolve([{ Id: "b5671c07-59f4-4bbd-924e-0b2483056350", Name: "Default Chapters", Version: "1.2.0.0" }]); },
+      getPluginConfiguration: function () { return Promise.resolve(JSON.parse(JSON.stringify(srv.pluginConfig))); },
     updatePluginConfiguration: function (id, cfg) { log.requests.push("POST Plugins/" + id + "/Configuration " + JSON.stringify(cfg)); srv.pluginConfig = cfg; return Promise.resolve(); }
   };
 

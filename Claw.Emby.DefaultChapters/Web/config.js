@@ -64,13 +64,13 @@ define([], function () {
           if (t === table || (t.closest && t.closest("thead") && t.closest("table") === table)) { refresh(); return; }
         }
       }).observe(table, { childList: true, subtree: true });
-      table.addEventListener("click", function (e) { if (e.target.classList && e.target.classList.contains("cr-h")) { e.stopPropagation(); e.preventDefault(); } }, true);
+      table.addEventListener("click", function (e) { if (e.target.classList && e.target.classList.contains("cr-h") && cells(table).indexOf(e.target.parentNode) >= 0) { e.stopPropagation(); e.preventDefault(); } }, true);
       table.addEventListener("dblclick", function (e) {
-        if (!(e.target.classList && e.target.classList.contains("cr-h"))) return;
+        if (!(e.target.classList && e.target.classList.contains("cr-h")) || cells(table).indexOf(e.target.parentNode) < 0) return;
         e.stopPropagation(); e.preventDefault(); save(key, {}); apply(table, key);
       }, true);
       table.addEventListener("pointerdown", function (e) {
-        var hd = e.target; if (!(hd.classList && hd.classList.contains("cr-h")) || e.button !== 0) return;
+        var hd = e.target; if (!(hd.classList && hd.classList.contains("cr-h")) || e.button !== 0) return; if (cells(table).indexOf(hd.parentNode) < 0) return; // handle of a nested table: let that table resize it
         e.preventDefault(); e.stopPropagation();
         var th = hd.parentNode, list = cells(table), idx = list.indexOf(th);
         // Freeze every other column at its current width (except the last, which keeps absorbing the remainder).
@@ -256,6 +256,8 @@ define([], function () {
       return ApiClient.getPluginConfiguration(PLUGIN_ID).then(function (cfg) {
         S.config = cfg || {};
         $("#dcInterval").value = S.config.IntervalMinutes || 5;
+        $("#dcEnabled").checked = S.config.Enabled !== false;
+        $(".dc-off-banner").hidden = S.config.Enabled !== false;
         fillCriteria();
       }, function () { $("#dcInterval").value = 5; S.config = {}; fillCriteria(); });
     }
@@ -281,6 +283,33 @@ define([], function () {
         hideLoading();
         return errorText(err).then(function (t) { setMsg(".dc-save-msg", "Save failed: " + t, "err"); });
       });
+    }
+
+    function saveGeneral(e) {
+      if (e) e.preventDefault();
+      var on = !!$("#dcEnabled").checked;
+      showLoading();
+      return ApiClient.getPluginConfiguration(PLUGIN_ID).then(function (cfg) {
+        cfg = cfg || {};
+        cfg.Enabled = on;
+        return ApiClient.updatePluginConfiguration(PLUGIN_ID, cfg).then(function () { S.config = cfg; });
+      }).then(function () {
+        hideLoading();
+        $(".dc-off-banner").hidden = on;
+        if (window.__clawDefaultChapters && window.__clawDefaultChapters.state) window.__clawDefaultChapters.state.enabled = on;
+        setMsg(".dc-general-msg", on ? "Saved. Default Chapters is on." : "Saved. Default Chapters is off.", "ok");
+      }, function (err) {
+        hideLoading();
+        return errorText(err).then(function (t) { setMsg(".dc-general-msg", "Save failed: " + t, "err"); });
+      });
+    }
+
+    function showVersion() {
+      if (typeof ApiClient === "undefined" || !ApiClient.getInstalledPlugins) return;
+      ApiClient.getInstalledPlugins().then(function (list) {
+        var me = (list || []).filter(function (x) { return String(x.Id || "").toLowerCase() === PLUGIN_ID; })[0];
+        if (me && me.Version) $(".dc-about-version").textContent = me.Version;
+      }, function () { });
     }
 
     function revert(id) {
@@ -311,6 +340,8 @@ define([], function () {
 
     function wire() {
       $(".dc-form").addEventListener("submit", saveConfig);
+      $(".dc-general-form").addEventListener("submit", saveGeneral);
+      showVersion();
       var t;
       $(".dc-panel-changed .dc-filter").addEventListener("input", function () {
         clearTimeout(t);
@@ -341,7 +372,7 @@ define([], function () {
     }
 
     function showTab(name) {
-      S.tab = name === "found" ? "found" : "changed";
+      S.tab = name === "found" || name === "general" ? name : "changed";
       var tabs = view.querySelectorAll(".dc-tab");
       for (var i = 0; i < tabs.length; i++) {
         var on = tabs[i].getAttribute("data-tab") === S.tab;
@@ -350,6 +381,7 @@ define([], function () {
       }
       $(".dc-panel-changed").hidden = S.tab !== "changed";
       $(".dc-panel-found").hidden = S.tab !== "found";
+      $(".dc-panel-general").hidden = S.tab !== "general";
     }
 
     // ------------------------------------------------------------ found movies

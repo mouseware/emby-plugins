@@ -40,7 +40,7 @@ Requires the .NET 8 SDK. Emby reference DLLs are in `refs\` (copied from Emby Se
 ```powershell
 cd E:\Apps\Emby-plugins\Claw.Emby.DefaultChapters
 dotnet build -c Release
-# -> bin\Release\Claw.Emby.DefaultChapters.dll  (version 1.1.0.0)
+# -> bin\Release\Claw.Emby.DefaultChapters.dll  (version 1.2.0.0)
 ```
 
 ## Install (manual)
@@ -82,6 +82,8 @@ The C# harness compiles the plugin's `Core\*.cs` directly, with same-shape stubs
 - Bulk Generate attaches existing chapter images only. In per-chapter image mode, the new positions get images when Emby's chapter image task runs.
 
 ## Changelog
+
+- **1.2.0.0**: **General** tab with an **Enable plugin** switch and an About section (version, injected script `claw-default-chapters.js`, GitHub link). Switched off: the item-menu entries disappear, Generate (single and bulk) is refused with HTTP 409, and library refreshes no longer re-apply interval chapters; stored overrides stay and Revert still works. A banner on the settings page shows the off state.
 
 
 - **1.1.1.0**: Changed and Found tables have resizable columns. Drag the right edge of any column header to resize it. Widths are saved per table in this browser (localStorage `claw.defaultchapters.cols.changed / .found`). Double-click an edge to reset the table to automatic widths. Test: `node tests\web\test-colresize.js`.

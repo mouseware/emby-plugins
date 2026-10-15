@@ -19,6 +19,7 @@
     loadedAt: 0,
     loading: null,
     isAdmin: null,    // null = unknown yet
+    enabled: true,    // plugin master switch (General tab), from the Overrides response
     registered: false
   };
 
@@ -99,6 +100,7 @@
       return getJSON("Overrides").then(function (res) {
         var ids = {};
         (res && res.Items || []).forEach(function (r) { ids[String(r.Id)] = true; });
+        state.enabled = !(res && res.Enabled === false);
         state.ids = ids;
         return ids;
       });
@@ -132,7 +134,7 @@
       var item = items[0];
       if (!item || item.Type !== "Movie" || !item.Id || item.ExtraType) return [];
       loadOverrides(false); // background refresh, used by the next menu
-      if (!isAdmin(options)) return [];
+      if (!isAdmin(options) || !state.enabled) return [];
 
       var cmds = [{ name: "Generate interval chapters", id: CMD_GENERATE, icon: "bookmarks" }];
       if (state.ids[String(item.Id)]) cmds.push({ name: "Restore original chapters", id: CMD_RESTORE, icon: "restore" });

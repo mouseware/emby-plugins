@@ -3,20 +3,27 @@
 Five plugins for Emby Server, one per subfolder:
 
 - **Claw Guard**: bans IP addresses after failed sign-ins, nonexistent or instant-ban usernames, or repeated 401/403 API calls. Bans are enforced through Emby's own Remote IP filter. It has a live log, ban management, escalation rules, a whitelist, optional GeoLite2 country lookup, and an import from Emby's existing logs.
-- **Claw IPTV Channel Mapper**: a spreadsheet-style editor for IPTV channels (number, name, group, logo, guide mapping, enabled), with undo, snapshots and bulk actions.
+- **Claw IPTV Channel Mapper**: a spreadsheet-style editor for IPTV channels (number, name, group, logo, guide mapping, enabled), with undo, snapshots and bulk actions. 1.4 adds Export/Import of the whole mapping as one .zip (mapper.json plus a logos/ folder), with a preview (Merge or Replace, All channels or Matching only) before anything is applied.
 - **Claw Default Chapters**: generates "Chapter 1, 2 …" interval chapters for movies that have few or no chapters, from the item menu or in bulk (Found movies), with revert.
 - **Claw Custom Item UI**: item-page link tweaks, VLC path links, a rearrangeable admin dashboard, and Activity/Alerts tables on the dashboard.
-- **Media Integrity**: finds bit rot, missing and unreadable files by comparing each library file's MD5 with a stored baseline. It has a resumable, low-priority full scan (scheduled task), background hashing of new items, "Verify integrity" in the item menu, a live **Check now** on any file, folder or library, search across all files, per-file history, and an import of the old `get-all-hashes.ps1` database. 1.0.5 skips Emby metadata, artwork and `.old` backups by default (subtitles and media stay hashed), and a file-list refresh drops skipped rows from tracking without touching the files on disk.
+- **Media Integrity**: finds bit rot, missing and unreadable files by comparing each library file's MD5 with a stored baseline. It has a resumable, low-priority full scan (scheduled task), background hashing of new items, "Verify integrity" in the item menu, a live **Check now** on any file, folder or library, search across all files, per-file history, and an import of the old `get-all-hashes.ps1` database. 1.0.5 skips Emby metadata, artwork and `.old` backups by default (subtitles and media stay hashed), and a file-list refresh drops skipped rows from tracking without touching the files on disk. 1.0.6 adds a sortable File type column with a type filter to the file tables.
 
 All data tables have resizable columns. The widths are saved per table in the browser.
+
+Every plugin has a **General** tab like Custom Item UI: an **Enable plugin** switch and an About section (version, injected script if any, GitHub link). Switching a plugin off stops its features cleanly and keeps its data:
+
+- **Guard**: removes its entries from the Remote IP filter and stops banning (events are still logged).
+- **IPTV Channel Mapper**: Save and Import are blocked and the Channel Name Guide provider returns no channels or programs. Export still works.
+- **Default Chapters**: the item-menu entries disappear, Generate is refused and refreshes no longer re-apply interval chapters. Revert still works.
+- **Media Integrity**: the full scan, background hashing, file-list refresh and manual checks stop, and the item-menu entry disappears. Queued work waits until it is switched on again.
 
 | Project | Folder | Version | Output DLL |
 |---------|--------|---------|------------|
 | Claw Custom Item UI | `Claw.Emby.CustomItemUI` | 1.2.3.0 | `Claw.Emby.CustomItemUI\bin\Release\Claw.Emby.CustomItemUI.dll` |
-| Claw IPTV Mapper | `Claw.Emby.IptvMapper` | 1.3.2.0 | `Claw.Emby.IptvMapper\bin\Release\Claw.Emby.IptvMapper.dll` |
-| Claw Guard | `Claw.Emby.Guard` | 1.1.0.0 | `Claw.Emby.Guard\bin\Release\Claw.Emby.Guard.dll` |
-| Claw Default Chapters | `Claw.Emby.DefaultChapters` | 1.1.1.0 | `Claw.Emby.DefaultChapters\bin\Release\Claw.Emby.DefaultChapters.dll` |
-| Media Integrity | `Claw.Emby.MediaIntegrity` | 1.0.5.0 | `Claw.Emby.MediaIntegrity\bin\Release\Claw.Emby.MediaIntegrity.dll` |
+| Claw IPTV Mapper | `Claw.Emby.IptvMapper` | 1.4.0.0 | `Claw.Emby.IptvMapper\bin\Release\Claw.Emby.IptvMapper.dll` |
+| Claw Guard | `Claw.Emby.Guard` | 1.2.0.0 | `Claw.Emby.Guard\bin\Release\Claw.Emby.Guard.dll` |
+| Claw Default Chapters | `Claw.Emby.DefaultChapters` | 1.2.0.0 | `Claw.Emby.DefaultChapters\bin\Release\Claw.Emby.DefaultChapters.dll` |
+| Media Integrity | `Claw.Emby.MediaIntegrity` | 1.0.6.0 | `Claw.Emby.MediaIntegrity\bin\Release\Claw.Emby.MediaIntegrity.dll` |
 
 Each project builds on its own. Its `refs\` folder holds copies of the Emby SDK DLLs (`MediaBrowser.Common.dll`, `MediaBrowser.Controller.dll`, `MediaBrowser.Model.dll`), and the csproj HintPaths point there through `$(EmbyServerPath)`, which defaults to `refs`.
 
@@ -37,6 +44,10 @@ The screenshots use made-up sample data: documentation IP ranges, fake users and
 | ![Media Integrity search](docs/screenshots/mediaintegrity-global-search.png) Media Integrity: search all files by status | ![Media Integrity history](docs/screenshots/mediaintegrity-history.png) Media Integrity: per-file history |
 | ![Media Integrity item menu](docs/screenshots/mediaintegrity-item-menu.png) Media Integrity: "Verify integrity" in the item menu | ![Media Integrity toast](docs/screenshots/mediaintegrity-item-toast-changed.png) Media Integrity: result toast with a link |
 | ![Media Integrity activity](docs/screenshots/mediaintegrity-activity.png) Media Integrity: past scans and import | ![Media Integrity settings](docs/screenshots/mediaintegrity-settings.png) Media Integrity: settings |
+| ![Media Integrity type filter](docs/screenshots/mediaintegrity-browse-type-filter.png) Media Integrity: File type column and filter | ![Media Integrity general](docs/screenshots/mediaintegrity-general.png) Media Integrity: General tab |
+| ![IPTV import preview](docs/screenshots/iptvmapper-import-preview.png) IPTV Channel Mapper: import preview (Merge) | ![IPTV import replace](docs/screenshots/iptvmapper-import-replace.png) IPTV Channel Mapper: import preview (Replace, matching only) |
+| ![IPTV general](docs/screenshots/iptvmapper-general.png) IPTV Channel Mapper: General tab, backup | ![Guard general](docs/screenshots/guard-general.png) Guard: General tab |
+| ![Default Chapters general](docs/screenshots/defaultchapters-general.png) Default Chapters: General tab | |
 
 ## Install (from a release)
 

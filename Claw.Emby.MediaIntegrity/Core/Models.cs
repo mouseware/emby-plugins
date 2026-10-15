@@ -134,6 +134,8 @@ namespace Claw.Emby.MediaIntegrity.Core
         public DateTime? NewestCheck { get; set; }
     }
 
+    public class TypeCount { public string Type { get; set; } public long Count { get; set; } }
+
     public class PagedFiles
     {
         public long Total { get; set; }

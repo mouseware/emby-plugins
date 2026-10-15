@@ -2,7 +2,7 @@
  * Run: node test-menu.js [--shots]   (needs puppeteer-core + Chrome; see README) */
 const path = require('path');
 const fs = require('fs');
-const puppeteer = require(process.env.PUPPETEER_CORE || 'puppeteer-core');
+const puppeteer = require(process.env.PUPPETEER || process.env.PUPPETEER_CORE || 'puppeteer-core');
 const CHROME = process.env.CHROME || '/usr/bin/google-chrome';
 const root = path.resolve(__dirname, '..', '..');
 const injectSrc = fs.readFileSync(path.join(root, 'Inject', 'claw-default-chapters.js'), 'utf8').replace(/__PLUGIN_VERSION__/g, '1.0.0.0');
@@ -120,6 +120,14 @@ function check(cond, name) { if (cond) { pass++; console.log('  ok   ' + name); 
   r = await exec('claw-dc-restore', movie('102'));
   check(r && r.rejected === 'nocommands', 'Restore not offered once the stash is gone (itemmanager finds no source)');
 
+  console.log('Master switch');
+  await page.evaluate(() => { window.__server.pluginConfig.Enabled = false; });
+  await page.evaluate(() => window.__clawDefaultChapters.reload());
+  check((await page.evaluate(() => window.__itemmanager.getCommands({ items: [{ Id: '101', Type: 'Movie' }], user: { Policy: { IsAdministrator: true } } }).filter(c => /^claw-dc-/.test(c.id)).length)) === 0, 'plugin off: no Default Chapters menu entries');
+  await page.evaluate(() => { window.__server.pluginConfig.Enabled = true; });
+  await page.evaluate(() => window.__clawDefaultChapters.reload());
+  check((await page.evaluate(() => window.__itemmanager.getCommands({ items: [{ Id: '101', Type: 'Movie' }], user: { Policy: { IsAdministrator: true } } }).filter(c => /^claw-dc-/.test(c.id)).length)) > 0, 'plugin on again: menu entries back');
+
   if (shots) {
     // Preview: Emby-like action sheet for a movie with a stash, then the confirm dialog.
     await page.evaluate(() => window.__server.addOverride('101', { after: 35 }));
@@ -129,9 +137,9 @@ function check(cond, name) { if (cond) { pass++; console.log('  ok   ' + name); 
     await page.evaluate(cmds => window.renderSheet(cmds), cmds);
     await page.evaluate(() => document.fonts.ready);
     await new Promise(r => setTimeout(r, 400));
-    await page.screenshot({ path: process.env.MENU_SHOT || '/workspace/default-chapters-menu.png' });
+    await page.screenshot({ path: process.env.MENU_SHOT || (process.env.SHOTDIR || '/workspace') + '/default-chapters-menu.png' });
     await page.evaluate(() => window.renderConfirm("This movie's 24 chapters already look like a 5-minute interval set. Replace them with a 5-minute set anyway?"));
-    await page.screenshot({ path: process.env.CONFIRM_SHOT || '/workspace/default-chapters-confirm.png' });
+    await page.screenshot({ path: process.env.CONFIRM_SHOT || (process.env.SHOTDIR || '/workspace') + '/default-chapters-confirm.png' });
     console.log('  screenshots written');
   }
 

@@ -111,6 +111,33 @@ namespace Claw.Emby.DefaultChapters.Tests
             return (host, mgr, dir);
         }
 
+        private static void MasterSwitch()
+        {
+            Console.WriteLine("Master switch (General tab)");
+            var (host, mgr, dir) = Setup();
+            try
+            {
+                var on = true;
+                mgr.IsEnabled = () => on;
+                mgr.Generate("101", true);
+                var item = host.FindItem("101");
+                var probed = new List<ChapterInfo> { Ch(0), Ch(30) };
+                Check(mgr.ApplyOnRefresh(item, probed) != null, "on: refresh re-applies interval chapters");
+                on = false;
+                Throws<DefaultChaptersException>(() => mgr.Generate("102", true), "off: Generate refused");
+                Throws<DefaultChaptersException>(() => mgr.GenerateMany(new[] { "102" }, true), "off: Generate for many refused");
+                try { mgr.Generate("102", true); } catch (DefaultChaptersException ex) { Check(ex.Message.Contains("switched off") && ex.StatusCode == 409, "off: clear message, 409"); }
+                Check(mgr.ApplyOnRefresh(item, probed) == null, "off: refresh no longer re-applies overrides");
+                Check(mgr.Store.Contains(101), "off: overrides and stash kept");
+                mgr.Restore("101");
+                Check(!mgr.Store.Contains(101), "off: Revert/Restore still works");
+                on = true;
+                mgr.Generate("102", true);
+                Check(mgr.Store.Contains(102), "on again: Generate works");
+            }
+            finally { Cleanup(dir); }
+        }
+
         private static void Generator()
         {
             Console.WriteLine("ChapterGenerator");
@@ -361,6 +388,7 @@ namespace Claw.Emby.DefaultChapters.Tests
             NonMovies();
             Found();
             Inject();
+            MasterSwitch();
             Console.WriteLine();
             Console.WriteLine("Passed " + _pass + ", failed " + _fail);
             foreach (var f in Failures) Console.WriteLine("  failed: " + f);

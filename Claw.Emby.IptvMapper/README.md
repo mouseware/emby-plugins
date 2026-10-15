@@ -3,6 +3,7 @@
 Emby Server plugin: **IPTV Channel Mapper**. A dashboard table for editing IPTV Live TV channels, meant as a better replacement for Emby's built-in channel mapping.
 
 - One row per tuner channel, across all M3U tuners.
+- **v1.4.0:** **General** tab (Enable switch, Backup, About) and **Export/Import** (see below).
 - **v1.3.1:** Cleaner dialog layout. The logo dialog has a left-aligned tool row (Upload image…, Copy from channel…, Use M3U logo, Clear override) and a separate right-aligned footer (Cancel, Apply). All buttons have the same height, margins are reset, and narrow screens get a 2×2 grid. Snapshot row buttons don't wrap. Esc in the copy-from-channel picker closes only the picker.
 - **v1.3:** **Channel Name Guide**, a built-in dummy guide data provider (type `clawdummy`, `Guide/ChannelNameGuideProvider.cs`).
   - For channels with no real guide (UFC Network, PPV/"EVENT 1: …" channels): one solid 24-hour tile per day, local midnight to local midnight in the server's time zone (23h/25h on DST days).
@@ -106,6 +107,27 @@ Records are keyed by a stable key: `tunerHostId|tvg:<tvg-id>`, falling back to `
 ## Column widths (1.3.2.0)
 
 Column widths: drag the right edge of any column header to resize it. Widths are saved per table in this browser (localStorage `claw.iptvmapper.cols.channels`). Double-click an edge to reset the table to automatic widths. The header stays sticky.
+
+## General tab (1.4.0.0)
+
+- **Enable plugin**: switched off, Save and Import are blocked, and the Channel Name Guide provider returns no channels and no programs. Overrides, snapshots and Export are kept. A banner on the Channels tab shows the off state.
+- **About**: version, "Script: None" (nothing is injected into other pages) and the GitHub link.
+
+## Export / Import (1.4.0.0)
+
+**Export** downloads one file, `iptv-mapper-export-YYYYMMDD-HHMM.zip`:
+
+- `mapper.json` (`Format: "claw-iptvmapper"`, `FormatVersion: 1`) holds every channel override: number, name, group, enabled, guide mapping (provider id plus type and label, and the guide channel id), locked fields, the M3U values seen at the time, the snapshots and the listing providers.
+- `logos/` holds the uploaded or copied logo images, one file per channel. Logos that are just a URL are stored as links in `mapper.json`, not downloaded.
+
+**Import** (Channels toolbar or General tab) loads such a .zip and shows a preview table (Channel, Field, Current, Imported, with logo thumbnails) before anything changes:
+
+- **Merge** sets only the fields the file contains. **Replace** makes each channel exactly the file: override fields the file does not set go back to the M3U values (in fallback mode, where the M3U values are unknown, those are left alone).
+- **All channels**: with Replace, channels the file does not list are reset as well, and entries for channels that do not exist here are stored as overrides for later. **Matching only** touches only channels that are in both.
+- Guide providers are matched by id, then by type and label; a provider that does not exist here is skipped with a warning.
+- **Apply** first stores a snapshot ("Before import of ...") with the current values of every field it changes, plus the snapshots from the file, then queues the changes as pending edits and runs the normal Save (with its confirmation). Cancelling the Save leaves them pending; Undo and Restore snapshot work as usual.
+
+Test (offline, fake data): `node tests\web\test-iptv-io.js` (needs puppeteer-core, jszip and Chrome; env `PUPPETEER`, `JSZIP`, `CHROME`, `SHOTDIR`).
 
 ## Not in v1 (code is structured for it)
 

@@ -13,7 +13,7 @@
   var POLL_MS = 1500, POLL_MAX_MS = 10 * 60 * 1000;
   // things that are not media / have no files of their own
   var SKIP = { Person: 1, Genre: 1, MusicGenre: 1, GameGenre: 1, Studio: 1, Tag: 1, TvChannel: 1, Program: 1, Timer: 1, SeriesTimer: 1, Channel: 1, ChannelFolderItem: 0, UserView: 1, Device: 1, Plugin: 1, Server: 1, ActiveRecording: 1 };
-  var state = { isAdmin: null, registered: false, toastEl: null, toastTimer: null };
+  var state = { isAdmin: null, enabled: true, infoAt: 0, registered: false, toastEl: null, toastTimer: null };
 
   function api() { return window.ApiClient || null; }
   function unwrap(m) { return m && m.__esModule && ("default" in m) ? m["default"] : m; }
@@ -131,7 +131,8 @@
     getCommands: function (options) {
       options = options || {};
       var items = options.items || (options.item ? [options.item] : []);
-      if (!items.length || !isAdmin(options)) return [];
+      loadInfo(false); // background refresh of the master switch, used by the next menu
+      if (!items.length || !isAdmin(options) || !state.enabled) return [];
       for (var i = 0; i < items.length; i++) if (!eligible(items[i])) return [];
       return [{ name: "Verify integrity", id: CMD, icon: "health_and_safety" }];
     },
@@ -142,6 +143,11 @@
     }
   };
 
+  function loadInfo(force) {
+    if (!api() || (!force && Date.now() - state.infoAt < 30000)) return Promise.resolve(state.enabled);
+    state.infoAt = Date.now();
+    return getJSON("Info").then(function (r) { state.enabled = !(r && r.Enabled === false); return state.enabled; }, function () { return state.enabled; });
+  }
   function loadUser() {
     var c = api();
     if (!c || typeof c.getCurrentUser !== "function") return Promise.resolve(null);
@@ -152,7 +158,7 @@
     return importModule("./modules/common/itemmanager/itemmanager.js").then(function (im) {
       if (!im || typeof im.registerCommandSource !== "function") throw new Error("itemmanager has no registerCommandSource");
       if (!state.registered) { im.registerCommandSource(source); state.registered = true; }
-      loadUser();
+      loadUser(); loadInfo(true);
       return true;
     });
   }
@@ -165,6 +171,6 @@
     setTimeout(function () { boot(tries + 1); }, WAIT_MS);
   }
 
-  window.__clawMediaIntegrity = { version: "__PLUGIN_VERSION__", command: CMD, source: source, state: state, summarize: summarize, verify: verify, openPage: openPage };
+  window.__clawMediaIntegrity = { version: "__PLUGIN_VERSION__", command: CMD, source: source, state: state, summarize: summarize, verify: verify, openPage: openPage, loadInfo: loadInfo };
   boot(0);
 })();

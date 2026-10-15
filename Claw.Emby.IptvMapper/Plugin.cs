@@ -22,6 +22,9 @@ namespace Claw.Emby.IptvMapper
 
         public static Plugin Instance { get; private set; }
 
+        /// <summary>Master switch (General tab); true while the configuration is not loaded.</summary>
+        public static bool IsEnabled => Instance?.Configuration == null || Instance.Configuration.Enabled;
+
         public override string Name => "IPTV Channel Mapper";
 
         public override string Description =>

@@ -170,9 +170,32 @@ CREATE TABLE IF NOT EXISTS queue (
              MIN(last_checked) oldest, MAX(last_checked) newest FROM files GROUP BY folder");
 
         /// <summary>Files under any of <paramref name="prefixes"/> (or outside all of <paramref name="notUnder"/>), paged and searchable.</summary>
-        private static string BrowseWhere(IList<string> prefixes, IList<string> notUnder, string search, string status, List<(string, object)> args)
+        /// <summary>Lower-case extension of the name without the dot ("" when the name has none), in SQL:
+        /// rtrim(name, every non-dot character) leaves everything up to and including the last dot.</summary>
+        public const string ExtSql = "(CASE WHEN instr(name,'.')=0 THEN '' ELSE lower(substr(name, length(rtrim(name, replace(name,'.','')))+1)) END)";
+
+        /// <summary>Same as <see cref="ExtSql"/> in C#.</summary>
+        public static string ExtOf(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return "";
+            var i = name.LastIndexOf('.');
+            return i < 0 ? "" : name.Substring(i + 1).ToLowerInvariant();
+        }
+
+        /// <summary>Filter value of the type dropdown: "mkv", ".mkv" or "(none)" for names without an extension.</summary>
+        public static string NormType(string type)
+        {
+            if (string.IsNullOrWhiteSpace(type)) return null;
+            type = type.Trim();
+            if (type == "(none)") return "";
+            return type.TrimStart('.').ToLowerInvariant();
+        }
+
+        private static string BrowseWhere(IList<string> prefixes, IList<string> notUnder, string search, string status, List<(string, object)> args, string type = null)
         {
             var where = new List<string>();
+            var t = NormType(type);
+            if (t != null) { where.Add(ExtSql + "=@ext"); args.Add(("ext", t)); }
             if (prefixes != null && prefixes.Count > 0)
             {
                 var ors = new List<string>();
@@ -193,17 +216,26 @@ CREATE TABLE IF NOT EXISTS queue (
         }
 
         /// <summary>Every path matching a Browse filter (group prefixes, search, status): "select all N matching" checks.</summary>
-        public List<string> MatchingPaths(IList<string> prefixes, IList<string> notUnder, string search, string status)
+        public List<string> MatchingPaths(IList<string> prefixes, IList<string> notUnder, string search, string status, string type = null)
         {
             var args = new List<(string, object)>();
-            var w = BrowseWhere(prefixes, notUnder, search, status, args);
+            var w = BrowseWhere(prefixes, notUnder, search, status, args, type);
             return Db.Query("SELECT path FROM files" + w + " ORDER BY path COLLATE NOCASE", args.ToArray()).Select(r => r.Str("path")).ToList();
         }
 
-        public PagedFiles Browse(IList<string> prefixes, IList<string> notUnder, string search, string status, string sort, bool desc, int offset, int limit)
+        /// <summary>File types (extensions) with counts for the type filter dropdown, same filters as Browse (without a type).</summary>
+        public List<TypeCount> Types(IList<string> prefixes, IList<string> notUnder, string search, string status)
         {
             var args = new List<(string, object)>();
             var w = BrowseWhere(prefixes, notUnder, search, status, args);
+            return Db.Query("SELECT " + ExtSql + " AS ext, COUNT(*) AS n FROM files" + w + " GROUP BY 1 ORDER BY n DESC, ext", args.ToArray())
+                .Select(r => new TypeCount { Type = r.Str("ext") ?? "", Count = r.Long("n") }).ToList();
+        }
+
+        public PagedFiles Browse(IList<string> prefixes, IList<string> notUnder, string search, string status, string sort, bool desc, int offset, int limit, string type = null)
+        {
+            var args = new List<(string, object)>();
+            var w = BrowseWhere(prefixes, notUnder, search, status, args, type);
             string col;
             switch ((sort ?? "").ToLowerInvariant())
             {
@@ -212,6 +244,7 @@ CREATE TABLE IF NOT EXISTS queue (
                 case "checked": col = "last_checked"; break;
                 case "status": col = "status"; break;
                 case "folder": col = "folder"; break;
+                case "type": col = ExtSql; break;
                 default: col = "name"; break;
             }
             limit = Math.Max(1, Math.Min(limit, 500)); offset = Math.Max(0, offset);

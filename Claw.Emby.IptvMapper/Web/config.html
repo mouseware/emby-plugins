@@ -120,6 +120,23 @@
 .iptvMapperPage .iptvm-snap{border-bottom:1px solid rgba(128,128,128,.2);padding:.5em 0;display:flex;gap:.8em;align-items:center}
 .iptvMapperPage .iptvm-snap>div{flex:1 1 auto;min-width:0}
 .iptvMapperPage .iptvm-snap .iptvm-btn{flex:0 0 auto}
+.iptvMapperPage .iptvm-tabs{display:flex;gap:.3em;border-bottom:1px solid rgba(128,128,128,.3);margin:.4em 0 .8em}
+.iptvMapperPage .iptvm-tab{font:inherit;color:inherit;background:none;border:0;border-bottom:2px solid transparent;padding:.55em 1.1em;cursor:pointer;opacity:.7}
+.iptvMapperPage .iptvm-tab.iptvm-tab-on{opacity:1;border-bottom-color:#52b54b}
+.iptvMapperPage .iptvm-general-form h3{margin:1.2em 0 .5em}
+.iptvMapperPage .iptvm-gdesc{max-width:60em;margin:.3em 0 .7em}
+.iptvMapperPage .iptvm-checkline{display:flex;gap:.5em;align-items:center}
+.iptvMapperPage .iptvm-about td{padding:.25em 1.4em .25em 0;vertical-align:top}.iptvMapperPage .iptvm-about td:first-child{opacity:.7;white-space:nowrap}
+.iptvMapperPage .iptvm-dlg-wide{width:min(70em,94vw);max-width:none}
+.iptvMapperPage .iptvm-imp-opts{display:flex;gap:2em;flex-wrap:wrap;margin:.6em 0}
+.iptvMapperPage .iptvm-imp-opts label{display:block;margin:.25em 0}
+.iptvMapperPage .iptvm-imp-summary{margin:.5em 0}
+.iptvMapperPage .iptvm-imp-wrap{max-height:45vh;overflow:auto;border:1px solid rgba(128,128,128,.25);border-radius:.3em}
+.iptvMapperPage .iptvm-imp-table{border-collapse:collapse;width:100%;font-size:92%}
+.iptvMapperPage .iptvm-imp-table th,.iptvMapperPage .iptvm-imp-table td{padding:.35em .55em;border-bottom:1px solid rgba(128,128,128,.16);text-align:left;vertical-align:top;overflow:hidden;text-overflow:ellipsis}
+.iptvMapperPage .iptvm-imp-table th{position:sticky;top:0;background:rgba(40,40,40,.98)}
+.iptvMapperPage .iptvm-imp-table img{max-height:1.8em;max-width:4em;vertical-align:middle;background:#222}
+.iptvMapperPage .iptvm-imp-warn{color:#e0a030}
 </style>
   <div data-role="content">
     <div class="content-primary iptvm-root">
@@ -129,7 +146,14 @@
       </div>
       <div class="iptvm-banner iptvm-mode-banner"></div>
       <div class="iptvm-banner iptvm-err iptvm-provider-banner"></div>
+      <div class="iptvm-banner iptvm-err iptvm-off-banner" style="display:none">IPTV Channel Mapper is switched off: Save and Import are blocked and the Channel Name Guide provider returns no guide data. Your overrides and snapshots are kept. Switch it on in the <b>General</b> tab.</div>
 
+      <div class="iptvm-tabs" role="tablist">
+        <button type="button" class="iptvm-tab iptvm-tab-on" data-itab="channels" role="tab">Channels</button>
+        <button type="button" class="iptvm-tab" data-itab="general" role="tab">General</button>
+      </div>
+
+      <div class="iptvm-pane" data-ipane="channels">
       <div class="iptvm-toolbar">
         <input type="search" class="iptvm-f-search" placeholder="Search name, number, tvg-id, group, guide channel..." />
         <select class="iptvm-f-tuner" title="Tuner"></select>
@@ -168,6 +192,9 @@
         <input type="file" class="iptvm-bulk-file" accept="image/*" style="display:none" />
         <button type="button" class="iptvm-btn iptvm-act-enabledummy" style="display:none" title="Add the Channel Name Guide provider (all-day guide tile titled with the channel name) to Emby's guide providers">Enable Channel Name Guide</button>
         <button type="button" class="iptvm-btn iptvm-act-snapshots" title="Previous saves (rollback)">Snapshots</button>
+        <button type="button" class="iptvm-btn iptvm-act-export" title="Download all overrides, guide mappings, snapshots and uploaded logos as one .zip">Export&#x2026;</button>
+        <button type="button" class="iptvm-btn iptvm-act-import" title="Load an export .zip, preview the changes, then apply">Import&#x2026;</button>
+        <input type="file" class="iptvm-import-file" accept=".zip,application/zip" style="display:none" />
         <button type="button" class="iptvm-btn iptvm-act-reload" title="Reload from server">&#x21BB; Reload</button>
       </div>
 
@@ -191,6 +218,26 @@
           </tr></thead>
           <tbody class="iptvm-tbody"><tr><td colspan="11" class="iptvm-empty">Loading channels...</td></tr></tbody>
         </table>
+      </div>
+      </div>
+
+      <div class="iptvm-pane" data-ipane="general" style="display:none">
+        <form class="iptvm-general-form">
+          <h3>General</h3>
+          <label class="iptvm-checkline"><input type="checkbox" class="iptvm-g-enabled" /> <b>Enable plugin</b></label>
+          <div class="iptvm-small iptvm-muted iptvm-gdesc">Off = Save and Import are blocked on this page and the <i>Channel Name Guide</i> provider returns no channels or programs. Changes already saved to Emby stay as they are; overrides, guide mappings and snapshots are kept and can still be exported.</div>
+          <button type="submit" class="iptvm-btn iptvm-btn-primary">Save</button> <span class="iptvm-small iptvm-g-msg"></span>
+          <h3>Backup</h3>
+          <div class="iptvm-small iptvm-muted iptvm-gdesc"><b>Export</b> downloads one .zip with <code>mapper.json</code> (every channel override: number, name, group, enabled, guide-source mapping, locked fields, plus the snapshots) and a <code>logos/</code> folder with the uploaded or copied logo images. Logos set from a URL are stored as links. <b>Import</b> shows a preview first (Merge or Replace, all channels or matching only) and stores a snapshot of the current state before anything is applied.</div>
+          <button type="button" class="iptvm-btn iptvm-act-export">Export&#x2026;</button>
+          <button type="button" class="iptvm-btn iptvm-act-import">Import&#x2026;</button>
+          <h3>About</h3>
+          <table class="iptvm-about"><tbody>
+            <tr><td>Version</td><td class="iptvm-version">&ndash;</td></tr>
+            <tr><td>Script</td><td>None. This page edits Emby's channels through Emby's own API; nothing is injected into the web client. The plugin adds the <code>IptvMapper/Channels</code> endpoint and the <i>Channel Name Guide</i> listings provider.</td></tr>
+            <tr><td>Source</td><td><a class="iptvm-link" style="color:#52b54b" href="https://github.com/mouseware/emby-plugins" target="_blank" rel="noopener">github.com/mouseware/emby-plugins</a></td></tr>
+          </tbody></table>
+        </form>
       </div>
     </div>
   </div>
@@ -224,6 +271,27 @@
       <div class="iptvm-dlg-actions">
         <button type="button" class="iptvm-btn iptvm-logo-cancel">Cancel</button>
         <button type="button" class="iptvm-btn iptvm-btn-primary iptvm-logo-apply">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="iptvm-overlay iptvm-import-overlay">
+    <div class="iptvm-dlg iptvm-dlg-wide">
+      <h3>Import mapping</h3>
+      <div class="iptvm-small iptvm-muted iptvm-imp-file"></div>
+      <div class="iptvm-imp-opts">
+        <div><b>How</b>
+          <label><input type="radio" name="iptvmImpMode" value="merge" checked /> Merge <span class="iptvm-muted iptvm-small">(set what the file contains, keep everything else)</span></label>
+          <label><input type="radio" name="iptvmImpMode" value="replace" /> Replace <span class="iptvm-muted iptvm-small">(a channel's overrides become exactly the file's; fields it does not set go back to the M3U values)</span></label></div>
+        <div><b>Which channels</b>
+          <label><input type="radio" name="iptvmImpScope" value="all" checked /> All channels <span class="iptvm-muted iptvm-small">(Replace also resets channels the file does not list; entries for channels not found are kept for later)</span></label>
+          <label><input type="radio" name="iptvmImpScope" value="matching" /> Matching only <span class="iptvm-muted iptvm-small">(only channels that are in both)</span></label></div>
+      </div>
+      <div class="iptvm-imp-summary"></div>
+      <div class="iptvm-imp-wrap"><table class="iptvm-imp-table"><thead><tr><th>Channel</th><th>Field</th><th>Current</th><th>Imported</th></tr></thead><tbody></tbody></table></div>
+      <div class="iptvm-dlg-actions">
+        <button type="button" class="iptvm-btn iptvm-imp-cancel">Cancel</button>
+        <button type="button" class="iptvm-btn iptvm-btn-primary iptvm-imp-apply" disabled>Apply</button>
       </div>
     </div>
   </div>

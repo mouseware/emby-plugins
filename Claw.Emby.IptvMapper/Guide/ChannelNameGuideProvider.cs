@@ -72,6 +72,11 @@ namespace Claw.Emby.IptvMapper.Guide
         public Task<List<ChannelInfo>> GetChannels(ListingsProviderInfo info, CancellationToken cancellationToken)
         {
             var list = new List<ChannelInfo>();
+            if (!Plugin.IsEnabled)
+            {
+                _logger.Info("Channel Name Guide: plugin switched off, no guide channels");
+                return Task.FromResult(list);
+            }
             foreach (var tuner in GetTuners())
             {
                 if (info != null && !info.EnableAllTuners && !(info.EnabledTuners ?? Array.Empty<string>()).Contains(tuner.Id, StringComparer.OrdinalIgnoreCase))
@@ -101,7 +106,7 @@ namespace Claw.Emby.IptvMapper.Guide
         public Task<List<ProgramInfo>> GetProgramsAsync(ListingsProviderInfo info, string channelId, DateTimeOffset startDateUtc, DateTimeOffset endDateUtc, CancellationToken cancellationToken)
         {
             var programs = new List<ProgramInfo>();
-            if (string.IsNullOrEmpty(channelId) || !channelId.StartsWith(ChannelIdPrefix, StringComparison.OrdinalIgnoreCase))
+            if (!Plugin.IsEnabled || string.IsNullOrEmpty(channelId) || !channelId.StartsWith(ChannelIdPrefix, StringComparison.OrdinalIgnoreCase))
             {
                 return Task.FromResult(programs);
             }

@@ -14,6 +14,7 @@
   function add(path, size, st, o) {
     var i = ++id, parts = path.split("\\"), name = parts.pop();
     var f = { Id: i, Path: path, Name: name, Folder: parts.join("\\"), Size: size, Hash: md5(i), LastHash: md5(i), LastChecked: iso((i % 40) * D + 3 * H), BaselineDate: iso(400 * D), Status: st, LastResult: "match", Ignored: false, Error: null, Mtime: iso(500 * D) };
+    f.Ext = name.indexOf(".") < 0 ? "" : name.split(".").pop().toLowerCase();
     for (var k in (o || {})) f[k] = o[k];
     if (st === "changed" || st === "modified") f.LastHash = md5(i + 999);
     files.push(f); return f;
@@ -131,6 +132,7 @@
     if (S.cfg.ExtraFolders.length) g.push({ Key: "extra", Label: "Extra folders", Paths: S.cfg.ExtraFolders });
     return g;
   }
+  function typeOk(f, t) { return !t || (t === "(none)" ? !f.Ext : f.Ext === t); }
   function api(method, u) {
     var r = parse(u), q = r.q, path = r.path.replace(/^ClawMediaIntegrity\//, "");
     S.calls.push(method + " " + path);
@@ -164,6 +166,7 @@
           if (q.Search) ml = ml.filter(function (f) { return f.Path.toLowerCase().indexOf(q.Search.toLowerCase()) >= 0; });
           if (q.Status) ml = ml.filter(function (f) { return q.Status === "problems" ? problemsSt.indexOf(f.Status) >= 0 && !f.Ignored : q.Status === "pending" ? /pending|never/.test(f.Status) : q.Status === "ignored" ? f.Ignored : f.Status === q.Status; });
         }
+        if (q.Type) ml = ml.filter(function (f) { return typeOk(f, q.Type); });
         S.lastMatching = { q: q, n: ml.length };
         return pub(newJob(q.Group === "problems" ? "All matching problems" : "All matching files", ml));
       }
@@ -179,7 +182,7 @@
           CurrentSize: sc.CurrentSize, CurrentDone: sc.CurrentDone, BytesDone: sc.BytesDone, BytesTotal: sc.BytesTotal, BytesPerSecond: sc.BytesPerSecond,
           SecondsLeft: (sc.BytesTotal - sc.BytesDone) / sc.BytesPerSecond, Percent: 100 * sc.BytesDone / sc.BytesTotal, Matched: sc.Matched, Changed: sc.Changed, Modified: sc.Modified, New: sc.New, Missing: sc.Missing, Unreadable: sc.Unreadable,
           Started: iso(19 * H), Resumable: S.running ? null : S.resumable || null, LastScan: S.scans[0], QueueLength: S.queue, QueueCurrent: null, PlaybackActive: false, Counts: c,
-          Files: files.length, Problems: problemsSt.reduce(function (a, k) { return a + (c[k] || 0); }, 0), Import: S.imp, LastSkipReason: null, LastCompleteVerification: iso(180 * D), RootCount: 4, Now: new Date().toISOString(), FileList: (flTick(), S.fl), Manual: (advance(), manualStatus()) };
+          Enabled: S.cfg.Enabled !== false, Files: files.length, Problems: problemsSt.reduce(function (a, k) { return a + (c[k] || 0); }, 0), Import: S.imp, LastSkipReason: null, LastCompleteVerification: iso(180 * D), RootCount: 4, Now: new Date().toISOString(), FileList: (flTick(), S.fl), Manual: (advance(), manualStatus()) };
       }
       case "POST Scan/Start": S.running = true; S.resumable = null; return { Ok: true };
       case "POST Scan/StartFresh": S.running = true; S.resumable = null; S.scan.FileIndex = 0; S.scan.BytesDone = 0; return { Ok: true };
@@ -213,12 +216,22 @@
         });
         return out;
       }
+      case "GET Info": return { Enabled: S.cfg.Enabled !== false, Version: "1.0.6.0" };
+      case "GET Files/Types": {
+        var tg = groups(q.GroupBy).filter(function (x) { return x.Key === q.Group; })[0];
+        var tl = q.Group === "all" ? files.slice() : files.filter(function (f) { return tg && under(f, tg.Paths); });
+        if (q.Search) tl = tl.filter(function (f) { return f.Path.toLowerCase().indexOf(q.Search.toLowerCase()) >= 0; });
+        if (q.Status) tl = tl.filter(function (f) { return q.Status === "problems" ? problemsSt.indexOf(f.Status) >= 0 && !f.Ignored : q.Status === "pending" ? /pending|never/.test(f.Status) : q.Status === "ignored" ? f.Ignored : f.Status === q.Status; });
+        var tc = {}; tl.forEach(function (f) { tc[f.Ext] = (tc[f.Ext] || 0) + 1; });
+        return Object.keys(tc).sort().map(function (k) { return { Type: k, Count: tc[k] }; });
+      }
       case "GET Files": {
         var g = groups(q.GroupBy).filter(function (x) { return x.Key === q.Group; })[0];
         var list = q.Group === "all" ? files.slice() : files.filter(function (f) { return g && under(f, g.Paths); });
         if (q.Search) list = list.filter(function (f) { return f.Path.toLowerCase().indexOf(q.Search.toLowerCase()) >= 0; });
         if (q.Status) list = list.filter(function (f) { return q.Status === "problems" ? problemsSt.indexOf(f.Status) >= 0 && !f.Ignored : q.Status === "pending" ? /pending|never/.test(f.Status) : q.Status === "ignored" ? f.Ignored : f.Status === q.Status; });
-        var key = { name: "Name", size: "Size", hash: "Hash", checked: "LastChecked", status: "Status" }[q.Sort || "name"], d = q.Desc === "true" ? -1 : 1;
+        if (q.Type) list = list.filter(function (f) { return typeOk(f, q.Type); });
+        var key = { type: "Ext", name: "Name", size: "Size", hash: "Hash", checked: "LastChecked", status: "Status" }[q.Sort || "name"], d = q.Desc === "true" ? -1 : 1;
         list.sort(function (a, b) { var x = a[key], y = b[key]; if (typeof x === "string") { x = x.toLowerCase(); y = (y || "").toLowerCase(); } return (x < y ? -1 : x > y ? 1 : 0) * d; });
         var st = +q.StartIndex || 0, lim = +q.Limit || 100;
         return { Total: list.length, StartIndex: st, Items: list.slice(st, st + lim) };
@@ -241,7 +254,7 @@
     getUrl: function (p, q) { var s = Object.keys(q || {}).filter(function (k) { return q[k] !== undefined && q[k] !== null; }).map(function (k) { return encodeURIComponent(k) + "=" + encodeURIComponent(q[k]); }).join("&"); return p + (s ? "?" + s : ""); },
     getJSON: function (u) { try { return Promise.resolve(clone(api("GET", u))); } catch (e) { return Promise.reject(e); } },
     ajax: function (o) { try { return Promise.resolve(clone(api(o.type, o.url))); } catch (e) { return Promise.reject(e); } },
-    getPluginConfiguration: function () { return Promise.resolve(clone(S.cfg)); },
+    getPluginConfiguration: function () { return Promise.resolve(clone(S.cfg)); }, getInstalledPlugins: function () { return Promise.resolve([{ Id: "5b0c7f3e-2d4a-4e61-9a8b-6c1f0e7d3a52", Name: "Media Integrity", Version: "1.0.6.0" }]); },
     updatePluginConfiguration: function (pid, c) { S.cfg = clone(c); S.saved.push(clone(c)); return Promise.resolve({}); }
   };
   window.Dashboard = { showLoadingMsg: function () {}, hideLoadingMsg: function () {}, processPluginConfigurationUpdateResult: function () { window.__savedToast = true; } };

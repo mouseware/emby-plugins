@@ -86,7 +86,7 @@ namespace Claw.Emby.DefaultChapters
                     _host,
                     new OverrideStore(Instance.StorePath),
                     () => Instance.Configuration == null ? 5 : Instance.Configuration.IntervalMinutes,
-                    msg => logger.Info(msg));
+                    msg => logger.Info(msg)) { IsEnabled = () => Instance.Configuration == null || Instance.Configuration.Enabled };
                 return _manager;
             }
         }

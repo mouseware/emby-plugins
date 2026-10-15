@@ -6,6 +6,9 @@ namespace Claw.Emby.MediaIntegrity
     public class PluginConfiguration : BasePluginConfiguration
     {
         /// <summary>Hash files of newly added library items in the background (baseline).</summary>
+        /// <summary>Master switch (General tab). Off: no scans, no background or manual hashing, no file-list refresh and no
+        /// item-menu entry. Stored hashes and history are kept; queued new-item hashing resumes when switched on.</summary>
+        public bool Enabled { get; set; } = true;
         public bool HashNewItems { get; set; } = true;
         /// <summary>Emby library ids (VirtualFolderInfo.ItemId) that are NOT scanned. Empty = every library.</summary>
         public string[] ExcludedLibraryIds { get; set; } = Array.Empty<string>();

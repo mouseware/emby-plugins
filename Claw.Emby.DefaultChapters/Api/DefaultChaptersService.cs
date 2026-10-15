@@ -72,6 +72,7 @@ namespace Claw.Emby.DefaultChapters.Api
     public class OverridesResult
     {
         public int IntervalMinutes { get; set; }
+        public bool Enabled { get; set; } = true;
         public List<OverrideRow> Items { get; set; }
     }
 
@@ -107,7 +108,7 @@ namespace Claw.Emby.DefaultChapters.Api
 
         public object Get(GetDefaultChapterOverrides request)
         {
-            return new OverridesResult { IntervalMinutes = Manager.ConfiguredInterval, Items = Manager.GetRows() };
+            return new OverridesResult { IntervalMinutes = Manager.ConfiguredInterval, Enabled = Manager.IsEnabled(), Items = Manager.GetRows() };
         }
 
         public object Get(GetDefaultChapterStatus request)

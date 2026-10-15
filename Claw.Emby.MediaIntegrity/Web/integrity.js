@@ -61,13 +61,13 @@ define([], function () {
           if (t === table || (t.closest && t.closest("thead") && t.closest("table") === table)) { refresh(); return; }
         }
       }).observe(table, { childList: true, subtree: true });
-      table.addEventListener("click", function (e) { if (e.target.classList && e.target.classList.contains("cr-h")) { e.stopPropagation(); e.preventDefault(); } }, true);
+      table.addEventListener("click", function (e) { if (e.target.classList && e.target.classList.contains("cr-h") && cells(table).indexOf(e.target.parentNode) >= 0) { e.stopPropagation(); e.preventDefault(); } }, true);
       table.addEventListener("dblclick", function (e) {
-        if (!(e.target.classList && e.target.classList.contains("cr-h"))) return;
+        if (!(e.target.classList && e.target.classList.contains("cr-h")) || cells(table).indexOf(e.target.parentNode) < 0) return;
         e.stopPropagation(); e.preventDefault(); save(key, {}); apply(table, key);
       }, true);
       table.addEventListener("pointerdown", function (e) {
-        var hd = e.target; if (!(hd.classList && hd.classList.contains("cr-h")) || e.button !== 0) return;
+        var hd = e.target; if (!(hd.classList && hd.classList.contains("cr-h")) || e.button !== 0) return; if (cells(table).indexOf(hd.parentNode) < 0) return; // handle of a nested table: let that table resize it
         e.preventDefault(); e.stopPropagation();
         var th = hd.parentNode, list = cells(table), idx = list.indexOf(th);
         // Freeze every other column at its current width (except the last, which keeps absorbing the remainder).
@@ -155,6 +155,29 @@ define([], function () {
     return '<span class="mi-pill mi-p-' + esc(s) + '">' + esc(st.label) + "</span>" + (ignored ? ' <span class="mi-pill" title="Ignored">ignored</span>' : "");
   }
 
+  // ---- file type (extension) column + filter ----
+  function extOf(f) {
+    if (f && f.Ext != null) return String(f.Ext).toLowerCase();
+    var n = (f && f.Name) || "", i = n.lastIndexOf(".");
+    return i < 0 ? "" : n.substr(i + 1).toLowerCase();
+  }
+  function typeKey(ext) { return ext ? ext : "(none)"; }
+  function typeLabel(ext) { return ext ? "." + ext : "(no extension)"; }
+  function typeCell(f) { var e = extOf(f); return '<td class="mi-nowrap mi-type" title="' + esc(typeLabel(e)) + '">' + (e ? "." + esc(e) : '<span class="mi-dim">-</span>') + "</td>"; }
+  function countTypes(list) {
+    var m = {}; list.forEach(function (f) { var k = extOf(f); m[k] = (m[k] || 0) + 1; });
+    return Object.keys(m).map(function (k) { return { Type: k, Count: m[k] }; }).sort(function (a, b) { return b.Count - a.Count || (a.Type < b.Type ? -1 : 1); });
+  }
+  /** Fills a type dropdown from [{Type, Count}]; keeps the current value (returns it). */
+  function typeOptions(sel, types, cur) {
+    var keys = types.map(function (t) { return typeKey(t.Type); });
+    if (cur && keys.indexOf(cur) < 0) types = types.concat([{ Type: cur === "(none)" ? "" : cur, Count: 0 }]);
+    sel.innerHTML = '<option value="">All file types</option>' + types.map(function (t) {
+      var k = typeKey(t.Type); return '<option value="' + esc(k) + '"' + (k === cur ? " selected" : "") + ">" + esc(typeLabel(t.Type)) + " (" + Number(t.Count).toLocaleString() + ")</option>";
+    }).join("");
+    sel.value = cur || "";
+    return sel.value;
+  }
   function View(view) {
     var S = { live: {}, bsel: {}, global: { search: "", status: "", sort: "name", desc: false, start: 0 }, status: null, problems: [], probSort: { key: "status", dir: 1 }, sel: {}, groupBy: "library", groups: [], open: {}, cfg: null, libs: [], tab: "problems", timer: null, scans: [] };
     var q = function (s) { return view.querySelector(s); };
@@ -181,6 +204,7 @@ define([], function () {
       else if (t === "browse") loadGroups();
       else if (t === "activity") loadScans();
       else if (t === "settings") loadSettings();
+      else if (t === "general") loadGeneral();
     }
     qa(".mi-tab").forEach(function (b) { b.addEventListener("click", function () { showTab(b.getAttribute("data-tab")); }); });
 
@@ -190,6 +214,7 @@ define([], function () {
     }
     function renderStatus() {
       var s = S.status; if (!s) return;
+      q(".mi-off-banner").style.display = s.Enabled === false ? "" : "none";
       var now = new Date(s.Now || Date.now()), c = s.Counts || {};
       q(".mi-c-files").textContent = fmtNum(s.Files);
       q(".mi-c-size").textContent = s.RootCount + " folder" + (s.RootCount === 1 ? "" : "s") + " in scope";
@@ -403,14 +428,17 @@ define([], function () {
         case "status": return ["changed", "unreadable", "missing", "modified"].indexOf(f.Status);
         case "name": return (f.Name || "").toLowerCase();
         case "folder": return (f.Folder || "").toLowerCase();
+        case "type": return extOf(f);
         case "size": return f.Size || 0;
         case "checked": return f.LastChecked || "";
       }
       return "";
     }
     function renderProblems() {
-      var kind = q(".mi-prob-kind").value, filt = q(".mi-prob-filter").value.trim().toLowerCase();
-      var list = S.problems.filter(function (f) { return (!kind || f.Status === kind) && (!filt || (f.Path || "").toLowerCase().indexOf(filt) >= 0); });
+      var kind = q(".mi-prob-kind").value, filt = q(".mi-prob-filter").value.trim().toLowerCase(), typ = q(".mi-prob-type").value;
+      var base = S.problems.filter(function (f) { return (!kind || f.Status === kind) && (!filt || (f.Path || "").toLowerCase().indexOf(filt) >= 0); });
+      typ = typeOptions(q(".mi-prob-type"), countTypes(base), typ);
+      var list = base.filter(function (f) { return !typ || typeKey(extOf(f)) === typ; });
       var k = S.probSort.key, d = S.probSort.dir;
       list.sort(function (a, b) { var x = probVal(a, k), y = probVal(b, k); return (x < y ? -1 : x > y ? 1 : 0) * d || (a.Path < b.Path ? -1 : 1); });
       qa(".mi-prob-t th[data-sort]").forEach(function (th) { var s = th.getAttribute("data-sort"); th.innerHTML = th.innerHTML.replace(/ [▲▼]$/, "") + (s === k ? (d > 0 ? " ▲" : " ▼") : ""); });
@@ -435,7 +463,7 @@ define([], function () {
           + (f.Status === "missing" ? '<button type="button" class="mi-btn mi-mini mi-row-act" data-act="forget" title="Stop tracking (deletes its history)">Forget</button>' : "");
         return '<tr data-kind="prob" data-id="' + f.Id + '" data-path="' + esc(f.Path) + '"><td><input type="checkbox" class="mi-sel"' + (S.sel[f.Id] ? " checked" : "") + "></td>" +
           '<td class="mi-nowrap"><i class="md-icon ' + (st.cls || "") + '">' + (st.icon || "") + "</i> " + pill(f.Status, f.Ignored) + '<div class="mi-live"></div></td>' +
-          '<td class="mi-ell" title="' + esc(f.Name) + '">' + esc(f.Name) + '</td><td class="mi-ell mi-dim" title="' + esc(f.Folder) + '">' + esc(f.Folder) + "</td>" +
+          '<td class="mi-ell" title="' + esc(f.Name) + '">' + esc(f.Name) + '</td>' + typeCell(f) + '<td class="mi-ell mi-dim" title="' + esc(f.Folder) + '">' + esc(f.Folder) + "</td>" +
           '<td class="mi-num mi-nowrap">' + fmtBytes(f.Size) + '</td><td class="mi-nowrap">' + fmtTime(f.LastChecked) + "</td><td>" + hashes + '</td><td><div class="mi-acts">' + acts + "</div></td></tr>";
     }
     function selectedIds() { return S.probAll ? (S.probList || []).map(function (f) { return String(f.Id); }) : Object.keys(S.sel).filter(function (k) { return S.sel[k]; }); }
@@ -480,7 +508,7 @@ define([], function () {
       if (act === "recheck") {
         if (S.probAll) {
           if (!confirmBig(ids.length, "problem files")) return;
-          var m = { Group: "problems", Search: q(".mi-prob-filter").value.trim(), Status: q(".mi-prob-kind").value, IncludeIgnored: q(".mi-prob-ign").checked };
+          var m = { Group: "problems", Search: q(".mi-prob-filter").value.trim(), Status: q(".mi-prob-kind").value, IncludeIgnored: q(".mi-prob-ign").checked, Type: q(".mi-prob-type").value };
           var pageIds = qa(".mi-prob-t tbody tr[data-id]").map(function (tr) { return tr.getAttribute("data-id"); });
           clearProbSel(); toast("Checking all " + fmtNum(ids.length) + " matching problem files"); checkNow(pageIds, { matching: m }); return;
         }
@@ -493,6 +521,7 @@ define([], function () {
       var k = th.getAttribute("data-sort"); S.probSort = { key: k, dir: S.probSort.key === k ? -S.probSort.dir : 1 }; renderProblems();
     });
     q(".mi-prob-kind").addEventListener("change", function () { S.probStart = 0; S.probAll = false; renderProblems(); });
+    q(".mi-prob-type").addEventListener("change", function () { S.probStart = 0; S.probAll = false; renderProblems(); });
     q(".mi-prob-filter").addEventListener("input", function () { S.probStart = 0; S.probAll = false; renderProblems(); });
     q(".mi-prob-ign").addEventListener("change", loadProblems);
 
@@ -574,9 +603,10 @@ define([], function () {
       var tr = td;
       td.innerHTML = '<div class="mi-bar2">' + (global ? "" : '<input type="text" class="mi-f-search" placeholder="Search in this group" value="' + esc(st.search) + '" style="min-width:20em" />' +
         '<select class="mi-f-status">' + statusOptions(st.status) + "</select>") +
+        '<select class="mi-f-type" title="File type"><option value="">All file types</option></select>' +
         '<span class="mi-dim mi-f-count"></span><span style="margin-left:auto" class="mi-dim mi-bsel-n">0 selected</span><button type="button" class="mi-btn mi-mini mi-bsel-check" disabled><i class="md-icon">health_and_safety</i>Check selected</button></div>' +
         '<div class="mi-selall" style="display:none"></div>' +
-        '<table class="mi-t mi-files-t"><thead><tr><th class="mi-ns" data-col="sel"><input type="checkbox" class="mi-bsel-all" /></th><th data-sort="name">Name</th><th data-sort="size" class="mi-num">Size</th><th data-sort="hash">MD5</th><th data-sort="checked">Last checked</th><th data-sort="status">Status</th><th class="mi-ns" data-col="act"></th></tr></thead><tbody class="mi-click"></tbody></table>' +
+        '<table class="mi-t mi-files-t"><thead><tr><th class="mi-ns" data-col="sel"><input type="checkbox" class="mi-bsel-all" /></th><th data-sort="name">Name</th><th data-sort="type">Type</th><th data-sort="size" class="mi-num">Size</th><th data-sort="hash">MD5</th><th data-sort="checked">Last checked</th><th data-sort="status">Status</th><th class="mi-ns" data-col="act"></th></tr></thead><tbody class="mi-click"></tbody></table>' +
         '<div class="mi-pager"><button type="button" class="mi-btn mi-mini mi-f-prev">‹ Previous</button><span class="mi-f-page"></span><button type="button" class="mi-btn mi-mini mi-f-next">Next ›</button></div>';
       ClawColResize.attach(td.querySelector("table"), "claw.mediaintegrity.cols." + (global ? "search" : "files"));
       var timer = null;
@@ -584,6 +614,7 @@ define([], function () {
         td.querySelector(".mi-f-search").addEventListener("input", function (e) { clearTimeout(timer); timer = setTimeout(function () { st.search = e.target.value; st.start = 0; loadFiles(tr); }, 300); });
         td.querySelector(".mi-f-status").addEventListener("change", function (e) { st.status = e.target.value; st.start = 0; loadFiles(tr); });
       }
+      td.querySelector(".mi-f-type").addEventListener("change", function (e) { st.type = e.target.value; st.start = 0; loadFiles(tr); });
       function bsel() { return qa('[data-box="' + key + '"] .mi-bsel:checked').map(function (c) { return c.closest("tr").getAttribute("data-id"); }); }
       var sel = td._sel = { all: false };
       function clearSel() { sel.all = false; td.querySelectorAll(".mi-bsel").forEach(function (c) { c.checked = false; }); td.querySelector(".mi-bsel-all").checked = false; updB(); }
@@ -602,7 +633,7 @@ define([], function () {
           if (!confirmBig(total, "matching files")) return;
           var gb = key === "all" ? "library" : S.groupBy;
           clearSel();
-          checkNow(ids, { matching: { Group: key, GroupBy: gb, Search: st.search || "", Status: st.status || "" } }).then(function () { }, function () { });
+          checkNow(ids, { matching: { Group: key, GroupBy: gb, Search: st.search || "", Status: st.status || "", Type: st.type || "" } }).then(function () { }, function () { });
           toast("Checking all " + fmtNum(total) + " matching files");
           return;
         }
@@ -625,18 +656,25 @@ define([], function () {
     }
     function fileRow(f, key) {
       return '<tr data-kind="file" data-key="' + esc(key) + '" data-id="' + f.Id + '" data-path="' + esc(f.Path) + '"><td><input type="checkbox" class="mi-bsel" /></td><td class="mi-ell" title="' + esc(f.Path) + '">' + esc(f.Name) + ' <span class="mi-dim">' + esc(rel(f.Folder, key)) + "</span>" +
-        '</td><td class="mi-num mi-nowrap">' + fmtBytes(f.Size) + '</td><td class="mi-mono">' + esc(f.Hash || "–") + '</td><td class="mi-nowrap">' + fmtTime(f.LastChecked) + '</td><td class="mi-nowrap">' + pill(f.Status, f.Ignored) + '<div class="mi-live"></div></td>' +
+        '</td>' + typeCell(f) + '<td class="mi-num mi-nowrap">' + fmtBytes(f.Size) + '</td><td class="mi-mono">' + esc(f.Hash || "–") + '</td><td class="mi-nowrap">' + fmtTime(f.LastChecked) + '</td><td class="mi-nowrap">' + pill(f.Status, f.Ignored) + '<div class="mi-live"></div></td>' +
         '<td><button type="button" class="mi-btn mi-mini mi-checknow" title="Hash this file now">Check now</button></td></tr>';
     }
     function loadFiles(tr) {
       var td = tr.cells ? tr.cells[0] : tr, key = td.getAttribute("data-box"), st = td._st || subState(key);
       var gb = key === "all" ? "library" : S.groupBy;
-      return getJSON("Files", { GroupBy: gb, Group: key, Search: st.search, Status: st.status, Sort: st.sort, Desc: st.desc, StartIndex: st.start, Limit: PAGE }).then(function (r) {
+      var sig = gb + "|" + key + "|" + (st.search || "") + "|" + (st.status || "");
+      if (td._typesSig !== sig) {
+        td._typesSig = sig;
+        getJSON("Files/Types", { GroupBy: gb, Group: key, Search: st.search, Status: st.status }).then(function (types) {
+          var sel = td.querySelector(".mi-f-type"); if (sel) typeOptions(sel, types || [], st.type || "");
+        }, function () { });
+      }
+      return getJSON("Files", { GroupBy: gb, Group: key, Search: st.search, Status: st.status, Type: st.type || "", Sort: st.sort, Desc: st.desc, StartIndex: st.start, Limit: PAGE }).then(function (r) {
         var items = r.Items || [];
         td.querySelectorAll(".mi-files-t th[data-sort]").forEach(function (th) {
           var s = th.getAttribute("data-sort"); th.innerHTML = th.innerHTML.replace(/ [▲▼]$/, "") + (s === st.sort ? (st.desc ? " ▼" : " ▲") : "");
         });
-        td.querySelector("tbody").innerHTML = items.map(function (f) { return fileRow(f, key); }).join("") || '<tr><td colspan="7" class="mi-empty">' + (st.search || st.status || key === "all" ? "No files match." : "No files found on disk in this " + (S.groupBy === "library" ? "library" : "folder") + " yet. Use Refresh file list to read it from disk.") + "</td></tr>";
+        td.querySelector("tbody").innerHTML = items.map(function (f) { return fileRow(f, key); }).join("") || '<tr><td colspan="8" class="mi-empty">' + (st.search || st.status || st.type || key === "all" ? "No files match." : "No files found on disk in this " + (S.groupBy === "library" ? "library" : "folder") + " yet. Use Refresh file list to read it from disk.") + "</td></tr>";
         td._total = r.Total || 0; if (td._sel) td._sel.all = false;
         if (td._updB) td._updB();
         var from = r.Total ? r.StartIndex + 1 : 0, to = r.StartIndex + items.length;
@@ -728,6 +766,30 @@ define([], function () {
     // ---------------- settings ----------------
     function lines(a) { return (a || []).join("\n"); }
     function unlines(s) { return s.split(/\r?\n/).map(function (x) { return x.trim(); }).filter(function (x) { return x; }); }
+    function loadGeneral() {
+      ApiClient.getPluginConfiguration(PLUGIN_ID).then(function (c) { q(".mi-s-enabled").checked = !c || c.Enabled !== false; });
+      if (ApiClient.getInstalledPlugins) ApiClient.getInstalledPlugins().then(function (list) {
+        var me = (list || []).filter(function (x) { return String(x.Id || "").toLowerCase() === PLUGIN_ID; })[0];
+        if (me && me.Version) q(".mi-version").textContent = me.Version;
+      }, function () { });
+    }
+    q(".mi-general-form").addEventListener("submit", function (e) {
+      e.preventDefault();
+      var on = q(".mi-s-enabled").checked;
+      ApiClient.getPluginConfiguration(PLUGIN_ID).then(function (c) {
+        c = c || {};
+        if (!on && c.Enabled !== false && !confirm("Switch Media Integrity off? A running full scan stops (it resumes later) and manual checks are cancelled. Hashes and history are kept.")) { q(".mi-s-enabled").checked = true; return; }
+        c.Enabled = on;
+        return ApiClient.updatePluginConfiguration(PLUGIN_ID, c).then(function (r) {
+          if (typeof Dashboard !== "undefined" && Dashboard.processPluginConfigurationUpdateResult) Dashboard.processPluginConfigurationUpdateResult(r);
+          if (S.cfg) S.cfg.Enabled = on;
+          if (window.__clawMediaIntegrity && window.__clawMediaIntegrity.state) window.__clawMediaIntegrity.state.enabled = on;
+          if (S.status) { S.status.Enabled = on; renderStatus(); }
+          setTimeout(loadStatus, 600);
+        });
+      });
+      return false;
+    });
     function loadSettings() {
       return Promise.all([ApiClient.getPluginConfiguration(PLUGIN_ID), getJSON("Libraries")]).then(function (r) {
         var c = S.cfg = r[0], libs = S.libs = r[1] || [];

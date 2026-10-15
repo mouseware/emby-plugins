@@ -22,7 +22,7 @@ static class Program
         var keep = new List<string>();
         try
         {
-            SqliteBasics(); Hashing(); Import(); Checks(); FullScan(); Browse(); Manual(); Discovery(); Skip(); ManualTask(); Patcher();
+            SqliteBasics(); Hashing(); Import(); Checks(); FullScan(); Browse(); Manual(); Discovery(); Skip(); FileTypes(); MasterSwitch(); ManualTask(); Patcher();
             var legacy = Environment.GetEnvironmentVariable("LEGACY_DB");
             if (!string.IsNullOrEmpty(legacy)) RealDb(legacy, Environment.GetEnvironmentVariable("VERIFY_DIR"));
         }
@@ -112,6 +112,46 @@ static class Program
         }
     }
     static string[] PluginConfiguration_Recommended() => SkipDefaults.Recommended;
+
+    static void FileTypes()
+    {
+        Ok(IntegrityStore.ExtOf("Movie (2010).MKV") == "mkv" && IntegrityStore.ExtOf("a.b.srt") == "srt" && IntegrityStore.ExtOf("README") == "" && IntegrityStore.ExtOf(".DS_Store") == "ds_store", "ExtOf: last extension, lower case");
+        Ok(IntegrityStore.NormType(".MKV") == "mkv" && IntegrityStore.NormType("(none)") == "" && IntegrityStore.NormType("") == null, "type filter values normalised");
+        var d = Tmp(); var root = Path.Combine(d, "Lib"); Directory.CreateDirectory(root);
+        foreach (var n in new[] { "a.mkv", "b.MKV", "c.mp4", "x.en.srt", "README", "v1.2.final.mkv" }) File.WriteAllText(Path.Combine(root, n), n);
+        using (var s = new IntegrityStore(Path.Combine(d, "t.db")))
+        {
+            FileDiscovery.Run(s, new List<ScanRoot> { new ScanRoot(root, "Lib") }, ScanEngine.GlobsToRegex(new string[0]), "test", CancellationToken.None);
+            var types = s.Types(new[] { root }, null, null, null);
+            Ok(types.Count == 4 && types[0].Type == "mkv" && types[0].Count == 3, "Types: counts per extension, biggest first (" + string.Join(",", types.Select(x => x.Type + "=" + x.Count)) + ")");
+            Ok(types.Any(x => x.Type == "" && x.Count == 1) && types.Any(x => x.Type == "srt"), "Types: no-extension and multi-dot names");
+            var mkv = s.Browse(new[] { root }, null, null, null, "name", false, 0, 100, "mkv");
+            Ok(mkv.Total == 3 && mkv.Items.All(f => IntegrityStore.ExtOf(f.Name) == "mkv"), "Browse: type filter (case-insensitive)");
+            Ok(s.Browse(new[] { root }, null, null, null, "name", false, 0, 100, "(none)").Items.Single().Name == "README", "Browse: (none) filter");
+            var byType = s.Browse(new[] { root }, null, null, null, "type", false, 0, 100).Items.Select(f => IntegrityStore.ExtOf(f.Name)).ToList();
+            Ok(string.Join(",", byType) == string.Join(",", byType.OrderBy(x => x, StringComparer.Ordinal)), "Browse: sort by type ascending (" + string.Join(",", byType) + ")");
+            var desc = s.Browse(new[] { root }, null, null, null, "type", true, 0, 100).Items.Select(f => IntegrityStore.ExtOf(f.Name)).First();
+            Ok(desc == "srt", "Browse: sort by type descending");
+            Ok(s.MatchingPaths(new[] { root }, null, null, null, "mp4").Count == 1 && s.MatchingPaths(new[] { root }, null, "a.", null, "mkv").Count == 1, "select-all matching honours the type filter");
+        }
+    }
+
+    static void MasterSwitch()
+    {
+        var d = Tmp(); var f = Path.Combine(d, "x.mkv"); File.WriteAllText(f, "x");
+        using (var s = new IntegrityStore(Path.Combine(d, "m.db")))
+        {
+            var e = new ScanEngine(s); bool on = false;
+            var q = new ManualCheckQueue(e, new G()) { IsEnabled = () => on };
+            try { q.Enqueue("off", new[] { f }); Ok(false, "switched off: Enqueue refused"); }
+            catch (ArgumentException ex) { Ok(ex.Message.Contains("switched off"), "switched off: Enqueue refused with a clear message"); }
+            Ok(!q.Busy, "switched off: nothing queued");
+            on = true;
+            var j = q.Enqueue("on", new[] { f });
+            Ok(j != null && j.Total == 1, "switched on again: Enqueue works");
+            q.Dispose();
+        }
+    }
 
     static void Discovery()
     {

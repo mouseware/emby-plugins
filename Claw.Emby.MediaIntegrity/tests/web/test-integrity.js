@@ -90,7 +90,29 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const first = await p.$eval('.mi-files-t tbody tr[data-id] td:nth-child(2)', e => e.textContent);
   ok(/Bluray/.test(first), 'sort size desc puts videos first');
   await shot('browse-expanded');
-  // row checkboxes + Check selected
+  // file type column (browse box)
+  ok(!!(await p.$('.mi-files-t th[data-sort=type]')), 'browse table has a sortable Type column');
+  const topts = await p.$$eval('.mi-f-type option', a => a.map(o => o.value + '=' + o.textContent));
+  ok(topts.some(o => /^mkv=\.mkv \(14\)/.test(o)) && topts.some(o => /^nfo=\.nfo \(14\)/.test(o)) && topts.some(o => /^jpg=/.test(o)), 'type dropdown lists extensions with counts: ' + topts.join(', '));
+  await p.$eval('.mi-f-type', e => { e.value = 'nfo'; e.dispatchEvent(new Event('change', { bubbles: true })); }); await sleep(700);
+  const nfoTypes = await p.$$eval('.mi-files-t tbody tr[data-id] td.mi-type', a => a.map(x => x.textContent.trim()));
+  ok(nfoTypes.length === 14 && nfoTypes.every(x => x === '.nfo'), 'type filter: 14 .nfo rows, got ' + nfoTypes.length);
+  ok(await p.evaluate(() => __srv.calls.includes('GET Files/Types')), 'type counts come from Files/Types');
+  await shot('browse-type-filter');
+  await p.$eval('.mi-f-type', e => { e.value = ''; e.dispatchEvent(new Event('change', { bubbles: true })); }); await sleep(700);
+  ok((await p.$$('.mi-files-t tbody tr[data-id]')).length === 42, 'clearing the type filter shows all 42');
+  await p.$eval('.mi-files-t th[data-sort=type]', e => e.click()); await sleep(500);
+  let tcol = await p.$$eval('.mi-files-t tbody tr[data-id] td.mi-type', a => a.map(x => x.textContent.trim()));
+  ok(tcol[0] === '.jpg' && tcol[tcol.length - 1] === '.nfo' && tcol.join() === tcol.slice().sort().join(), 'sort by type A-Z');
+  await p.$eval('.mi-files-t th[data-sort=type]', e => e.click()); await sleep(500);
+  tcol = await p.$$eval('.mi-files-t tbody tr[data-id] td.mi-type', a => a.map(x => x.textContent.trim()));
+  ok(tcol[0] === '.nfo', 'sort by type Z-A');
+  {
+    const tth = await p.$('.mi-files-t th[data-sort=type]'); await tth.evaluate(e => e.scrollIntoView({ block: 'center' })); await sleep(300); const tb = (await tth.boundingBox()).width; const th2 = await tth.$('.cr-h');
+    ok(!!th2, 'Type column has a resize handle');
+    if (th2) { const hb2 = await th2.boundingBox(); await p.mouse.move(hb2.x + hb2.width / 2, hb2.y + hb2.height / 2); await p.mouse.down(); await p.mouse.move(hb2.x + 60, hb2.y + 5, { steps: 5 }); await p.mouse.up(); const ta = (await tth.boundingBox()).width; ok(ta > tb + 30, 'Type column resizes ' + tb + '->' + ta); ok(await p.evaluate(() => !!localStorage.getItem('claw.mediaintegrity.cols.files')), 'browse widths persisted'); }
+  }
+  await p.$eval('.mi-files-t th[data-sort=size]', e => e.click()); await sleep(300); await p.$eval('.mi-files-t th[data-sort=size]', e => e.click()); await sleep(400);  // row checkboxes + Check selected
   ok(await p.$eval('[data-box] .mi-bsel-check', e => e.disabled), 'Check selected disabled with none');
   await p.$$eval('[data-box] tbody tr[data-id] .mi-bsel', a => { a[0].click(); a[1].click(); });
   ok(/2 selected/.test(await txt('[data-box] .mi-bsel-n')), '2 selected');
@@ -178,7 +200,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   ok(/^12$/.test(await p.$eval(ab, r => r.cells[1].textContent.trim())), 'Audio books: 12 files after refresh: ' + await p.$eval(ab, r => r.cells[1].textContent.trim()));
   ok(/^12$/.test(await p.$eval(ab, r => r.cells[5].textContent.trim())), 'Audio books: 12 not yet hashed');
   ok((await p.$$('[data-box="lib:104"] tbody tr[data-id]')).length === 12, 'expanded library lists the untracked files');
-  ok(/Not yet hashed/.test(await txt('[data-box="lib:104"] tbody tr[data-id] td:nth-child(6)')), 'row status Not yet hashed');
+  ok(/Not yet hashed/.test(await txt('[data-box="lib:104"] tbody tr[data-id] td:nth-child(7)')), 'row status Not yet hashed');
   await shot('untracked-library');
   // untracked file in a library that already had files (Movies) shows in global search + status filter
   await p.$eval('.mi-g-status', e => { e.value = 'pending'; e.dispatchEvent(new Event('change')); }); await sleep(700);
@@ -219,7 +241,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   ok(!/old script/.test(await txt('.mi-pend-text').catch(() => '')), 'Problems note drops the old-script part');
   await click('.mi-tab[data-tab=browse]'); await sleep(300);
   await p.$eval('.mi-g-search', (e, n) => { e.value = n; e.dispatchEvent(new Event('input')); }, await p.evaluate(id => __srv.files.find(f => f.Id === id).Name, nvIds[0])); await sleep(900);
-  const lbl = await p.$eval('.mi-gsearch-box tbody tr[data-id="' + nvIds[0] + '"] td:nth-child(6)', e => e.textContent);
+  const lbl = await p.$eval('.mi-gsearch-box tbody tr[data-id="' + nvIds[0] + '"] td:nth-child(7)', e => e.textContent);
   ok(!/Never verified|old/i.test(lbl) && /OK|Changed|Unreadable|Missing/.test(lbl), 'per-file label after its first plugin hash: ' + lbl.trim());
   await p.$eval('.mi-g-clear', e => e.click()); await sleep(500);
   // ---- paging + Gmail-style "select all N matching"
@@ -345,6 +367,38 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const after = (await th.boundingBox()).width;
   ok(after > before + 50, 'drag widens column ' + before + '->' + after);
   ok(await p.evaluate(() => !!localStorage.getItem('claw.mediaintegrity.cols.problems')), 'widths persisted');
+  // problems: type column + filter
+  await click('.mi-tab[data-tab=problems]'); await sleep(300);
+  ok(!!(await p.$('.mi-prob-t th[data-sort=type]')), 'Problems table has a sortable Type column');
+  const popts = await p.$$eval('.mi-prob-type option', a => a.map(o => o.value).filter(Boolean));
+  ok(popts.length >= 1, 'Problems type dropdown filled: ' + popts.join(','));
+  const pAll = (await p.$$('.mi-prob-t tbody tr[data-id]')).length;
+  await p.$eval('.mi-prob-type', (e, v) => { e.value = v; e.dispatchEvent(new Event('change', { bubbles: true })); }, popts[popts.length - 1]); await sleep(400);
+  const pT = await p.$$eval('.mi-prob-t tbody tr[data-id] td.mi-type', a => a.map(x => x.textContent.trim()));
+  ok(pT.length > 0 && pT.length <= pAll && pT.every(x => x === '.' + popts[popts.length - 1]), 'Problems type filter (' + pT.length + ' of ' + pAll + ')');
+  await shot('problems-type');
+  await p.$eval('.mi-prob-type', e => { e.value = ''; e.dispatchEvent(new Event('change', { bubbles: true })); }); await sleep(300);
+  ok((await p.$$('.mi-prob-t tbody tr[data-id]')).length === pAll, 'Problems type filter cleared');
+  // General tab
+  await click('.mi-tab[data-tab=general]'); await sleep(500);
+  ok(await p.$eval('.mi-s-enabled', e => e.checked), 'General: Enable switch on');
+  ok((await txt('.mi-version')) === '1.0.6.0', 'General: About shows the version');
+  const gAbout = await p.$eval('.mi-general-form', e => e.innerHTML);
+  ok(/claw-media-integrity\.js/.test(gAbout) && /github\.com\/mouseware\/emby-plugins/.test(gAbout), 'General: injected script + GitHub link');
+  await shot('general');
+  await p.evaluate(() => { window.__conf = []; window.__confAns = false; });
+  await p.$eval('.mi-s-enabled', e => { e.checked = false; }); await p.$eval('.mi-general-form', f => f.requestSubmit()); await sleep(400);
+  ok(await p.evaluate(() => window.__conf.length === 1 && /Switch Media Integrity off/.test(window.__conf[0]) && __srv.cfg.Enabled !== false), 'switching off asks; cancel keeps it on');
+  ok(await p.$eval('.mi-s-enabled', e => e.checked), 'cancel puts the switch back');
+  await p.evaluate(() => { window.__confAns = true; });
+  await p.$eval('.mi-s-enabled', e => { e.checked = false; }); await p.$eval('.mi-general-form', f => f.requestSubmit()); await sleep(1500);
+  ok(await p.evaluate(() => __srv.cfg.Enabled === false), 'switch off saved');
+  ok(await vis('.mi-off-banner'), 'off banner shown');
+  await shot('off-banner');
+  const nSave2 = await p.evaluate(() => __srv.saved.length);
+  await p.$eval('.mi-s-enabled', e => { e.checked = true; }); await p.$eval('.mi-general-form', f => f.requestSubmit()); await sleep(1500);
+  ok(await p.evaluate(n => __srv.cfg.Enabled === true && __srv.saved.length === n + 1, nSave2), 'switch on again saved without asking');
+  ok(!(await vis('.mi-off-banner')), 'banner hidden again');
   ok(errs.length === 0, 'no page errors: ' + errs.join('; '));
   console.log(pass + ' passed, ' + fail + ' failed'); await b.close(); process.exit(fail ? 1 : 0);
 })().catch(e => { console.log('CRASH', e); process.exit(2); });

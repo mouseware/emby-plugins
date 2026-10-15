@@ -102,6 +102,16 @@ namespace Claw.Emby.DefaultChapters.Core
 
         public OverrideStore Store => _store;
 
+        /// <summary>Plugin master switch (General tab). Off: Generate is refused and refreshes don't re-apply overrides.</summary>
+        public Func<bool> IsEnabled { get; set; } = () => true;
+
+        public const string DisabledMessage = "Default Chapters is switched off (plugin settings, General tab).";
+
+        private void RequireEnabled()
+        {
+            if (!IsEnabled()) throw new DefaultChaptersException(DisabledMessage, 409);
+        }
+
         public int ConfiguredInterval => ChapterGenerator.ClampInterval(_configuredInterval());
 
         public List<OverrideRow> GetRows()
@@ -155,6 +165,7 @@ namespace Claw.Emby.DefaultChapters.Core
 
         public GenerateResult Generate(string id, bool confirmed)
         {
+            RequireEnabled();
             lock (_opLock)
             {
                 var item = Require(id);
@@ -300,6 +311,7 @@ namespace Claw.Emby.DefaultChapters.Core
         /// </summary>
         public BulkGenerateResult GenerateMany(IEnumerable<string> ids, bool confirmed)
         {
+            RequireEnabled();
             var list = (ids ?? Enumerable.Empty<string>())
                 .Where(i => !string.IsNullOrWhiteSpace(i))
                 .Select(i => i.Trim())
@@ -392,6 +404,7 @@ namespace Claw.Emby.DefaultChapters.Core
         /// </summary>
         public List<ChapterInfo> ApplyOnRefresh(ItemRef item, List<ChapterInfo> probed)
         {
+            if (!IsEnabled()) return null;
             if (item == null || !item.IsMovie) return null;
             if (probed == null) return null; // Emby is not going to touch chapters on this refresh.
 

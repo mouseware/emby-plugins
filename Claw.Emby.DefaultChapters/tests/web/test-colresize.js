@@ -1,7 +1,7 @@
 /* Column resize on the Changed and Found tables (real Web/config.html + config.js + mock-emby.js).
  * Run: node test-colresize.js   (needs puppeteer-core + Chrome; served from file:// so localStorage works) */
 const path = require('path'), fs = require('fs');
-const puppeteer = require(process.env.PUPPETEER_CORE || 'puppeteer-core');
+const puppeteer = require(process.env.PUPPETEER || process.env.PUPPETEER_CORE || 'puppeteer-core');
 const root = path.resolve(__dirname, '..', '..');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let passes = 0, fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); c ? passes++ : fails++; };
@@ -20,18 +20,18 @@ const file = path.join(__dirname, 'colresize-page.html'); fs.writeFileSync(file,
   const b = await puppeteer.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--no-sandbox', '--disable-gpu', '--allow-file-access-from-files'] });
   const p = await b.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
   await p.setViewport({ width: 1280, height: 640 });
-  await p.goto('file://' + file); await p.waitForFunction(() => document.querySelectorAll('.dc-rows tr[data-id]').length === 3, { timeout: 5000 });
+  await p.goto(require('url').pathToFileURL(file).href); await p.waitForFunction(() => document.querySelectorAll('.dc-rows tr[data-id]').length === 3, { timeout: 5000 });
   const C = require(process.env.CHECKS || './checks.js')(p, ok);
   const order = () => p.$$eval('.dc-rows tr[data-id]', t => t.map(r => r.getAttribute('data-id')).join());
   const o0 = await order();
   await C.run('Changed table', '.dc-panel-changed table.dc-table', 'name', 'claw.defaultchapters.cols.changed', async () => { await p.click('th[data-sort="after"]'); });
   ok(await order() !== o0, 'clicking a header (not its edge) still sorts');
   ok(await p.$eval('.dc-panel-changed th[data-sort=name]', th => getComputedStyle(th).position) === 'sticky', 'sticky header kept');
-  if (!process.env.NOSHOTS) await p.screenshot({ path: '/workspace/default-chapters-resize-changed.png' });
+  if (!process.env.NOSHOTS) await p.screenshot({ path: (process.env.SHOTDIR || '/workspace') + '/default-chapters-resize-changed.png' });
   await p.click('.dc-tab[data-tab="found"]'); await sleep(200); await p.click('.dc-preset[data-min="60"]'); await p.click('.dc-find');
   await p.waitForFunction(() => document.querySelectorAll('.dc-found-rows tr[data-id]').length > 0, { timeout: 3000 });
   await C.run('Found table', '.dc-found-table', 'path', 'claw.defaultchapters.cols.found', async () => { await p.click('th[data-fsort="runtime"]'); });
-  if (!process.env.NOSHOTS) await p.screenshot({ path: '/workspace/default-chapters-resize-found.png' });
+  if (!process.env.NOSHOTS) await p.screenshot({ path: (process.env.SHOTDIR || '/workspace') + '/default-chapters-resize-found.png' });
   await p.reload(); await p.waitForFunction(() => document.querySelectorAll('.dc-rows tr[data-id]').length === 3, { timeout: 5000 });
   const st = await p.evaluate(() => JSON.parse(localStorage.getItem('claw.defaultchapters.cols.changed')));
   ok(Math.abs((await C.thBox('.dc-panel-changed table.dc-table', 'name')).w - st.name) <= 2, 'Changed widths restored after reload');

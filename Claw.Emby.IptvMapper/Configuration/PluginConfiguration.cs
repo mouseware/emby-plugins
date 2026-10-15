@@ -11,6 +11,9 @@ namespace Claw.Emby.IptvMapper.Configuration
     {
         public int SchemaVersion { get; set; } = 3;
 
+        /// <summary>Master switch (General tab). Off: the page blocks Save/Import and the Channel Name Guide provider returns nothing.</summary>
+        public bool Enabled { get; set; } = true;
+
         /// <summary>One record per stable key (tunerHostId|tvg:&lt;id&gt; or tunerHostId|name:&lt;normalized&gt;).</summary>
         public ChannelOverride[] Overrides { get; set; } = Array.Empty<ChannelOverride>();
 

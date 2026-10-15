@@ -61,13 +61,13 @@ define([], function () {
           if (t === table || (t.closest && t.closest("thead") && t.closest("table") === table)) { refresh(); return; }
         }
       }).observe(table, { childList: true, subtree: true });
-      table.addEventListener("click", function (e) { if (e.target.classList && e.target.classList.contains("cr-h")) { e.stopPropagation(); e.preventDefault(); } }, true);
+      table.addEventListener("click", function (e) { if (e.target.classList && e.target.classList.contains("cr-h") && cells(table).indexOf(e.target.parentNode) >= 0) { e.stopPropagation(); e.preventDefault(); } }, true);
       table.addEventListener("dblclick", function (e) {
-        if (!(e.target.classList && e.target.classList.contains("cr-h"))) return;
+        if (!(e.target.classList && e.target.classList.contains("cr-h")) || cells(table).indexOf(e.target.parentNode) < 0) return;
         e.stopPropagation(); e.preventDefault(); save(key, {}); apply(table, key);
       }, true);
       table.addEventListener("pointerdown", function (e) {
-        var hd = e.target; if (!(hd.classList && hd.classList.contains("cr-h")) || e.button !== 0) return;
+        var hd = e.target; if (!(hd.classList && hd.classList.contains("cr-h")) || e.button !== 0) return; if (cells(table).indexOf(hd.parentNode) < 0) return; // handle of a nested table: let that table resize it
         e.preventDefault(); e.stopPropagation();
         var th = hd.parentNode, list = cells(table), idx = list.indexOf(th);
         // Freeze every other column at its current width (except the last, which keeps absorbing the remainder).
@@ -462,13 +462,23 @@ define([], function () {
     }
     function saveSettings(e) {
       e.preventDefault();
+      saveConfig(function (c) { c.MaxMindAccountId = q("#cgMmId").value.trim(); c.MaxMindLicenseKey = q("#cgMmKey").value.trim(); });
+      return false;
+    }
+    function showVersion() {
+      if (typeof ApiClient === "undefined" || !ApiClient.getInstalledPlugins) return;
+      ApiClient.getInstalledPlugins().then(function (list) {
+        var me = (list || []).filter(function (x) { return String(x.Id || "").toLowerCase() === PLUGIN_ID; })[0];
+        if (me && me.Version) q(".cg-version").textContent = me.Version;
+      }, function () { });
+    }
+    function saveGeneral(e) {
+      e.preventDefault();
       var on = q("#cgEnabled").checked;
       var go = (!on && (S.cfg.Enabled !== false)) ? dialog("Switch Guard off?", "All of Guard's entries are removed from Emby's Remote IP filter now (entries you typed there yourself stay). Bans are kept and return when you switch it back on.", "Switch off", true) : Promise.resolve(true);
       go.then(function (ok) {
         if (!ok) { q("#cgEnabled").checked = true; return; }
-        saveConfig(function (c) {
-          c.Enabled = on; c.MaxMindAccountId = q("#cgMmId").value.trim(); c.MaxMindLicenseKey = q("#cgMmKey").value.trim();
-        });
+        saveConfig(function (c) { c.Enabled = on; });
       });
       return false;
     }
@@ -561,7 +571,7 @@ define([], function () {
     });
     q(".cg-filter").addEventListener("input", renderLive);
     q(".cg-rules-form").addEventListener("submit", saveRules);
-    q(".cg-settings-form").addEventListener("submit", saveSettings);
+    q(".cg-settings-form").addEventListener("submit", saveSettings); q(".cg-general-form").addEventListener("submit", saveGeneral); showVersion();
 
     function startPolling() {
       stopPolling();

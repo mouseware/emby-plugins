@@ -2,7 +2,7 @@
  * Run: node test-settings.js [--shots] */
 const path = require('path');
 const fs = require('fs');
-const puppeteer = require(process.env.PUPPETEER_CORE || 'puppeteer-core');
+const puppeteer = require(process.env.PUPPETEER || process.env.PUPPETEER_CORE || 'puppeteer-core');
 const CHROME = process.env.CHROME || '/usr/bin/google-chrome';
 const root = path.resolve(__dirname, '..', '..');
 const html = fs.readFileSync(path.join(root, 'Web', 'config.html'), 'utf8');
@@ -98,7 +98,7 @@ html,body{margin:0;background:#101010;color:#ddd;font-family:"Segoe UI",Roboto,"
   await sortBy('changed');
 
   if (shots) {
-    await page.screenshot({ path: process.env.SETTINGS_SHOT || '/workspace/default-chapters-settings.png' });
+    await page.screenshot({ path: process.env.SETTINGS_SHOT || (process.env.SHOTDIR || '/workspace') + '/default-chapters-settings.png' });
     console.log('  screenshot written');
   }
 
@@ -239,7 +239,7 @@ html,body{margin:0;background:#101010;color:#ddd;font-family:"Segoe UI",Roboto,"
   if (shots) {
     await page.setViewport({ width: 1280, height: 860 });
     await page.evaluate(() => window.scrollTo(0, 0));
-    await page.screenshot({ path: process.env.FOUND_SHOT || '/workspace/default-chapters-found.png' });
+    await page.screenshot({ path: process.env.FOUND_SHOT || (process.env.SHOTDIR || '/workspace') + '/default-chapters-found.png' });
     console.log('  found screenshot written');
   }
   await page.click('.dc-select-none');
@@ -251,7 +251,7 @@ html,body{margin:0;background:#101010;color:#ddd;font-family:"Segoe UI",Roboto,"
   check(JSON.stringify(cids) === JSON.stringify(['103', '601', '602', '609']), 'generated movies listed on Changed');
   if (shots) {
     await page.evaluate(() => window.scrollTo(0, 0));
-    await page.screenshot({ path: process.env.TABS_SHOT || '/workspace/default-chapters-settings-tabs.png' });
+    await page.screenshot({ path: process.env.TABS_SHOT || (process.env.SHOTDIR || '/workspace') + '/default-chapters-settings-tabs.png' });
     console.log('  tabs screenshot written');
   }
 
@@ -314,6 +314,26 @@ html,body{margin:0;background:#101010;color:#ddd;font-family:"Segoe UI",Roboto,"
   await page.waitForFunction(() => /Generated interval chapters for 100 movies/.test(document.querySelector('.dc-found-msg').textContent), { timeout: 5000 });
   M = await page.evaluate(() => window.__server.manyCalls.map(c => c.ids.length));
   check(M.length === 10 && M.every(n => n === 10), '100 movies sent in batches of 10');
+
+  console.log('General tab');
+  await page.click('.dc-tab[data-tab="general"]');
+  await new Promise(r => setTimeout(r, 150));
+  check(await visible('.dc-panel-general'), 'General tab opens');
+  check(await page.$eval('#dcEnabled', e => e.checked), 'Enable switch on by default');
+  check((await text('.dc-about-version')) === '1.2.0.0', 'About shows the version');
+  const about = await page.$eval('.dc-panel-general', e => e.innerHTML);
+  check(/claw-default-chapters\.js/.test(about) && /github\.com\/mouseware\/emby-plugins/.test(about), 'About: injected script + GitHub link');
+  if (shots) await page.screenshot({ path: (process.env.SHOTDIR || '/workspace') + '/default-chapters-general.png' });
+  await page.$eval('#dcEnabled', e => { e.checked = false; });
+  await page.$eval('.dc-general-form', f => f.requestSubmit());
+  await new Promise(r => setTimeout(r, 300));
+  check((await page.evaluate(() => window.__server.pluginConfig.Enabled)) === false && (await page.evaluate(() => window.__server.pluginConfig.IntervalMinutes)) !== undefined, 'switch off saved, other settings kept');
+  check(await page.$eval('.dc-off-banner', e => !e.hidden), 'off banner shown');
+  check(/off/.test(await text('.dc-general-msg')), 'off message');
+  await page.$eval('#dcEnabled', e => { e.checked = true; });
+  await page.$eval('.dc-general-form', f => f.requestSubmit());
+  await new Promise(r => setTimeout(r, 300));
+  check((await page.evaluate(() => window.__server.pluginConfig.Enabled)) === true && await page.$eval('.dc-off-banner', e => e.hidden), 'switched back on, banner hidden');
 
   await browser.close();
   console.log('\nPassed ' + pass + ', failed ' + fail);

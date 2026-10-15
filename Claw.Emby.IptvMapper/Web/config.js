@@ -64,13 +64,13 @@ define([], function () {
           if (t === table || (t.closest && t.closest("thead") && t.closest("table") === table)) { refresh(); return; }
         }
       }).observe(table, { childList: true, subtree: true });
-      table.addEventListener("click", function (e) { if (e.target.classList && e.target.classList.contains("cr-h")) { e.stopPropagation(); e.preventDefault(); } }, true);
+      table.addEventListener("click", function (e) { if (e.target.classList && e.target.classList.contains("cr-h") && cells(table).indexOf(e.target.parentNode) >= 0) { e.stopPropagation(); e.preventDefault(); } }, true);
       table.addEventListener("dblclick", function (e) {
-        if (!(e.target.classList && e.target.classList.contains("cr-h"))) return;
+        if (!(e.target.classList && e.target.classList.contains("cr-h")) || cells(table).indexOf(e.target.parentNode) < 0) return;
         e.stopPropagation(); e.preventDefault(); save(key, {}); apply(table, key);
       }, true);
       table.addEventListener("pointerdown", function (e) {
-        var hd = e.target; if (!(hd.classList && hd.classList.contains("cr-h")) || e.button !== 0) return;
+        var hd = e.target; if (!(hd.classList && hd.classList.contains("cr-h")) || e.button !== 0) return; if (cells(table).indexOf(hd.parentNode) < 0) return; // handle of a nested table: let that table resize it
         e.preventDefault(); e.stopPropagation();
         var th = hd.parentNode, list = cells(table), idx = list.indexOf(th);
         // Freeze every other column at its current width (except the last, which keeps absorbing the remainder).
@@ -94,6 +94,66 @@ define([], function () {
   // ---- end Claw column resize ----
 
 
+  // ---------------------------------------------------------------- minimal ZIP (export: stored; import: stored or deflate)
+  var ClawZip = (function () {
+    var T = null;
+    function crcTable() { T = new Uint32Array(256); for (var n = 0; n < 256; n++) { var c = n; for (var k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; T[n] = c >>> 0; } }
+    function crc32(b) { if (!T) crcTable(); var c = 0xFFFFFFFF; for (var i = 0; i < b.length; i++) c = T[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+    function utf8(s) { return new TextEncoder().encode(s); }
+    function dosTime(d) { return ((d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1)) & 0xFFFF; }
+    function dosDate(d) { return (((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate()) & 0xFFFF; }
+    /** files: [{ name, data: Uint8Array }] -> Blob (application/zip, no compression) */
+    function build(files) {
+      var parts = [], central = [], offset = 0, now = new Date();
+      files.forEach(function (f) {
+        var name = utf8(f.name), data = f.data, crc = crc32(data);
+        var h = new DataView(new ArrayBuffer(30));
+        h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(8, 0, true);
+        h.setUint16(10, dosTime(now), true); h.setUint16(12, dosDate(now), true); h.setUint32(14, crc, true);
+        h.setUint32(18, data.length, true); h.setUint32(22, data.length, true); h.setUint16(26, name.length, true); h.setUint16(28, 0, true);
+        parts.push(new Uint8Array(h.buffer), name, data);
+        var c = new DataView(new ArrayBuffer(46));
+        c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true); c.setUint16(10, 0, true);
+        c.setUint16(12, dosTime(now), true); c.setUint16(14, dosDate(now), true); c.setUint32(16, crc, true);
+        c.setUint32(20, data.length, true); c.setUint32(24, data.length, true); c.setUint16(28, name.length, true);
+        c.setUint32(42, offset, true);
+        central.push(new Uint8Array(c.buffer), name);
+        offset += 30 + name.length + data.length;
+      });
+      var csize = central.reduce(function (a, b) { return a + b.length; }, 0);
+      var e = new DataView(new ArrayBuffer(22));
+      e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true);
+      e.setUint32(12, csize, true); e.setUint32(16, offset, true);
+      return new Blob(parts.concat(central, [new Uint8Array(e.buffer)]), { type: "application/zip" });
+    }
+    function inflate(bytes) {
+      if (typeof DecompressionStream === "undefined") return Promise.reject(new Error("This browser cannot read compressed .zip entries; re-zip without compression."));
+      var ds = new DecompressionStream("deflate-raw");
+      return new Response(new Blob([bytes]).stream().pipeThrough(ds)).arrayBuffer().then(function (b) { return new Uint8Array(b); });
+    }
+    /** ArrayBuffer -> Promise<{ name: Uint8Array }> */
+    function read(buf) {
+      var u = new Uint8Array(buf), v = new DataView(buf), eo = -1;
+      for (var i = u.length - 22; i >= Math.max(0, u.length - 65557); i--) if (v.getUint32(i, true) === 0x06054b50) { eo = i; break; }
+      if (eo < 0) return Promise.reject(new Error("Not a .zip file."));
+      var n = v.getUint16(eo + 10, true), p = v.getUint32(eo + 16, true), out = {}, jobs = [];
+      var dec = new TextDecoder();
+      for (var k = 0; k < n; k++) {
+        if (v.getUint32(p, true) !== 0x02014b50) return Promise.reject(new Error("Damaged .zip (central directory)."));
+        var method = v.getUint16(p + 10, true), csz = v.getUint32(p + 20, true), nl = v.getUint16(p + 28, true), xl = v.getUint16(p + 30, true), cl = v.getUint16(p + 32, true), lo = v.getUint32(p + 42, true);
+        var name = dec.decode(u.subarray(p + 46, p + 46 + nl));
+        var start = lo + 30 + v.getUint16(lo + 26, true) + v.getUint16(lo + 28, true), data = u.slice(start, start + csz);
+        if (!/\/$/.test(name)) {
+          if (method === 0) out[name] = data;
+          else if (method === 8) jobs.push((function (nm, d) { return inflate(d).then(function (r) { out[nm] = r; }); })(name, data));
+          else return Promise.reject(new Error("Unsupported .zip compression in " + name + "."));
+        }
+        p += 46 + nl + xl + cl;
+      }
+      return Promise.all(jobs).then(function () { return out; });
+    }
+    return { build: build, read: read, crc32: crc32 };
+  })();
   var PLUGIN_ID = "e5b612ae-cad5-47e9-8fb3-27a029c220d3";
   var MAX_SNAPSHOTS = 10;
   var MAX_UNDO = 500;
@@ -278,6 +338,7 @@ define([], function () {
       return Promise.all([pServer, pManage, pProviders, pConfig, pTags, pTypes]).then(function (res) {
         S.dummyAvailable = (res[5] || []).some(function (t) { return t && str(t.Id).toLowerCase() === DUMMY_TYPE; });
         S.config = normalizeConfig(res[3]);
+        renderOff();
         setProviders(res[2] || []);
         var tagMap = null;
         if (res[4] && res[4].Items) {
@@ -1581,6 +1642,7 @@ define([], function () {
 
     function save() {
       if (S.saving) return;
+      if (isOff()) { toast("IPTV Channel Mapper is switched off (General tab). Nothing was saved."); return; }
       closeCombo();
       try { if (document.activeElement && view.contains(document.activeElement)) document.activeElement.blur(); } catch (e) { /* commit pending input */ }
       var preErrors = [];
@@ -1812,6 +1874,279 @@ define([], function () {
     }
     function debounce(fn, ms) { var t; return function () { clearTimeout(t); t = setTimeout(fn, ms); }; }
 
+    // ------------------------------------------------------------ tabs + General (master switch, about)
+    function isOff() { return !!(S.config && S.config.Enabled === false); }
+    function showITab(t) {
+      Array.prototype.forEach.call(view.querySelectorAll(".iptvm-tab"), function (b) { b.classList.toggle("iptvm-tab-on", b.getAttribute("data-itab") === t); });
+      Array.prototype.forEach.call(view.querySelectorAll(".iptvm-pane"), function (p) { p.style.display = p.getAttribute("data-ipane") === t ? "" : "none"; });
+      if (t === "general") loadGeneral();
+    }
+    function renderOff() {
+      var off = isOff();
+      $(".iptvm-off-banner").style.display = off ? "" : "none";
+      Array.prototype.forEach.call(view.querySelectorAll(".iptvm-act-import"), function (b) { b.disabled = off; b.title = off ? "Switched off (General tab)" : "Load an export .zip, preview the changes, then apply"; });
+    }
+    function loadGeneral() {
+      $(".iptvm-g-enabled").checked = !isOff();
+      if (ApiClient.getInstalledPlugins) ApiClient.getInstalledPlugins().then(function (list) {
+        var me = (list || []).filter(function (x) { return str(x.Id).toLowerCase() === PLUGIN_ID; })[0];
+        if (me && me.Version) $(".iptvm-version").textContent = me.Version;
+      }, function () { });
+    }
+    function saveGeneral(e) {
+      if (e) e.preventDefault();
+      var on = $(".iptvm-g-enabled").checked;
+      ApiClient.getPluginConfiguration(PLUGIN_ID).then(null, function () { return {}; }).then(function (cfg) {
+        cfg = normalizeConfig(cfg);
+        cfg.Enabled = on;
+        return ApiClient.updatePluginConfiguration(PLUGIN_ID, cfg).then(function () {
+          S.config.Enabled = on;
+          renderOff();
+          $(".iptvm-g-msg").textContent = on ? "Saved. IPTV Channel Mapper is on." : "Saved. IPTV Channel Mapper is off.";
+        });
+      }, function (err) { errorText(err).then(function (m) { $(".iptvm-g-msg").textContent = "Save failed: " + m; }); });
+      return false;
+    }
+
+    // ------------------------------------------------------------ export / import (.zip with mapper.json + logos/)
+    var IMP = null;
+    function utf8(s) { return new TextEncoder().encode(s); }
+    function authHeaders() { var h = {}; try { var t = ApiClient.accessToken(); if (t) h["X-Emby-Token"] = t; } catch (e) { /* ignore */ } return h; }
+    function rowByOverride(o) {
+      if (!o) return null;
+      if (o.Key && S.byKey[o.Key]) return S.byKey[o.Key];
+      for (var i = 0; i < S.rows.length; i++) if (o.ManagementId && S.rows[i].managementId === o.ManagementId) return S.rows[i];
+      var tvg = str(o.SeenTvgId || o.TvgId);
+      if (tvg) for (var j = 0; j < S.rows.length; j++) if (S.rows[j].tvgId === tvg && (!o.TunerHostId || S.rows[j].tunerHostId === o.TunerHostId)) return S.rows[j];
+      return null;
+    }
+    function providerOut(pid) {
+      var p = S.providerById[pid];
+      return p ? { Id: p.id, Type: p.type, Label: p.label } : null;
+    }
+    function safeName(s) { return str(s).replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^_+|_+$/g, "").substring(0, 60) || "channel"; }
+    function extForType(t) { return t === "image/jpeg" ? "jpg" : t === "image/webp" ? "webp" : t === "image/gif" ? "gif" : t === "image/svg+xml" ? "svg" : "png"; }
+    function fetchPrimary(r) {
+      if (!r || !r.itemId || !r.primaryTag) return Promise.resolve(null);
+      return fetch(apiUrl("Items/" + r.itemId + "/Images/Primary", { tag: r.primaryTag }), { headers: authHeaders(), cache: "no-store" }).then(function (res) {
+        if (!res.ok) return null;
+        return res.blob().then(function (b) { return sniffImageType(b).then(function (t) { return { blob: b, type: t || b.type || "image/png" }; }); });
+      }, function () { return null; });
+    }
+    function exportZip() {
+      showLoading();
+      var stamp = new Date();
+      return ApiClient.getPluginConfiguration(PLUGIN_ID).then(null, function () { return {}; }).then(function (cfg) {
+        cfg = normalizeConfig(cfg);
+        var files = [], used = {}, channels = [];
+        var chain = cfg.Overrides.reduce(function (p, o) {
+          return p.then(function () {
+            var r = rowByOverride(o);
+            var ch = {
+              Key: o.Key, TunerHostId: o.TunerHostId, ManagementId: o.ManagementId, ItemId: o.ItemId,
+              Label: r ? rowLabel(r) : (o.Name || o.SeenM3uName || o.Key),
+              TvgId: o.SeenTvgId || null, M3uName: o.SeenM3uName || null, M3uNumber: o.SeenM3uNumber || null, M3uGroup: o.SeenM3uGroup || null, M3uLogoUrl: o.SeenM3uLogoUrl || null,
+              Number: o.Number != null ? o.Number : null, Name: o.Name != null ? o.Name : null, Group: o.Group != null ? o.Group : null,
+              Disabled: o.Disabled != null ? !!o.Disabled : null,
+              Guide: o.HasGuideOverride ? { ProviderId: str(o.ListingsProviderId), ChannelId: o.ListingsChannelId || "", Provider: providerOut(o.ListingsProviderId) } : null,
+              LockedFields: r && r.lockedFields ? r.lockedFields : null,
+              Logo: null, UpdatedUtc: o.UpdatedUtc || null
+            };
+            channels.push(ch);
+            if (o.LogoSource === "url" && o.LogoUrl) { ch.Logo = { Source: "url", Url: o.LogoUrl }; return; }
+            if (o.LogoSource === "upload" || o.LogoSource === "copy") {
+              ch.Logo = { Source: o.LogoSource, OriginalName: o.LogoFileName || null, CopiedFromKey: o.LogoSourceKey || null };
+              return fetchPrimary(r).then(function (img) {
+                if (!img) { ch.Logo.Missing = true; return; }
+                return img.blob.arrayBuffer().then(function (buf) {
+                  var base = safeName(ch.Label), n = base, i = 2;
+                  while (used[n]) n = base + "-" + (i++);
+                  used[n] = 1;
+                  ch.Logo.File = "logos/" + n + "." + extForType(img.type);
+                  files.push({ name: ch.Logo.File, data: new Uint8Array(buf) });
+                });
+              });
+            }
+          });
+        }, Promise.resolve());
+        return chain.then(function () {
+          var mapper = {
+            Format: "claw-iptvmapper", FormatVersion: 1, ExportedUtc: stamp.toISOString(),
+            Providers: S.providers.map(function (p) { return { Id: p.id, Type: p.type, Label: p.label }; }),
+            Channels: channels, Snapshots: cfg.Snapshots, MaxSnapshots: cfg.MaxSnapshots
+          };
+          files.unshift({ name: "mapper.json", data: utf8(JSON.stringify(mapper, null, 2)) });
+          var blob = ClawZip.build(files);
+          var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+          var fname = "iptv-mapper-export-" + stamp.getFullYear() + pad(stamp.getMonth() + 1) + pad(stamp.getDate()) + "-" + pad(stamp.getHours()) + pad(stamp.getMinutes()) + ".zip";
+          window.__iptvmLastExport = { blob: blob, name: fname, channels: channels.length, logos: files.length - 1 };
+          var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = fname;
+          document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+          hideLoading();
+          toast("Exported " + channels.length + " channel override(s) and " + (files.length - 1) + " logo file(s) to " + fname + ".");
+        });
+      }).then(null, function (err) { hideLoading(); errorText(err).then(function (m) { toast("Export failed: " + m); }); });
+    }
+
+    function importFile(file) {
+      if (!file) return Promise.resolve();
+      if (isOff()) { toast("IPTV Channel Mapper is switched off (General tab)."); return Promise.resolve(); }
+      return file.arrayBuffer().then(ClawZip.read).then(function (entries) {
+        if (!entries["mapper.json"]) throw new Error("mapper.json is missing in " + file.name + ".");
+        var m = JSON.parse(new TextDecoder().decode(entries["mapper.json"]));
+        if (!m || m.Format !== "claw-iptvmapper" || !Array.isArray(m.Channels)) throw new Error(file.name + " is not an IPTV Channel Mapper export.");
+        IMP = { name: file.name, m: m, entries: entries, changes: [] };
+        $(".iptvm-imp-file").textContent = file.name + " \u00b7 exported " + (m.ExportedUtc ? new Date(m.ExportedUtc).toLocaleString() : "?") + " \u00b7 " + m.Channels.length + " channel override(s), " +
+          Object.keys(entries).filter(function (k) { return k.indexOf("logos/") === 0; }).length + " logo file(s), " + (m.Snapshots || []).length + " snapshot(s)";
+        $(".iptvm-import-overlay").classList.add("iptvm-show");
+        computeImport();
+      }).then(null, function (err) { toast("Import failed: " + (err && err.message || err)); });
+    }
+    function impOpt(name) { var el = view.querySelector('input[name="' + name + '"]:checked'); return el ? el.value : ""; }
+    function mapProvider(g, m) {
+      if (!g) return null;
+      var pid = str(g.ProviderId);
+      if (pid === "" || pid === "none") return pid;
+      if (S.providerById[pid]) return pid;
+      var src = g.Provider || (m.Providers || []).filter(function (p) { return p.Id === pid; })[0];
+      if (!src) return undefined;
+      var hit = S.providers.filter(function (p) { return p.type === src.Type && p.label === src.Label; })[0] || S.providers.filter(function (p) { return p.type === src.Type; })[0];
+      return hit ? hit.id : undefined;
+    }
+    function m3uValue(r, f) {
+      // Fallback mode (no server-side M3U cache) does not know the M3U values: undefined = cannot reset this field.
+      if (S.mode === "fallback" && (f === "number" || f === "name" || f === "group" || f === "logo")) return undefined;
+      if (f === "number") return r.m3uNumber; if (f === "name") return r.m3uName; if (f === "group") return r.m3uTags.join(", ");
+      if (f === "enabled") return true; if (f === "guide") return { p: "", c: "" }; if (f === "logo") return r.m3uLogoUrl;
+      return "";
+    }
+    function overrideFields(o) {
+      var f = [];
+      if (!o) return f;
+      if (o.Number != null) f.push("number"); if (o.Name != null) f.push("name"); if (o.Group != null) f.push("group");
+      if (o.LogoSource) f.push("logo"); if (o.HasGuideOverride) f.push("guide"); if (o.Disabled != null) f.push("enabled");
+      return f;
+    }
+    function shownVal(f, v) {
+      if (f === "guide") { var p = str(v && v.p); return p === "" ? "Auto" : p === "none" ? "None" : (providerLabel(p) + (v.c ? " \u00b7 " + v.c : "")); }
+      if (f === "enabled") return v ? "enabled" : "disabled";
+      if (f === "logo") return v && v.file ? "file " + v.file : logoValueLabel(v);
+      return str(v);
+    }
+    function computeImport() {
+      if (!IMP) return;
+      var m = IMP.m, mode = impOpt("iptvmImpMode"), scope = impOpt("iptvmImpScope");
+      var changes = [], warnings = [], unmatched = [], touched = {};
+      function add(r, f, value) {
+        var cur = r.cur[f];
+        if (f !== "logo" && valEq(f, cur, value)) return;
+        if (f === "logo" && !(value && value.file) && (str(cur) === str(value) || (r.override && r.override.LogoSource === "url" && str(r.override.LogoUrl) === str(value)))) return;
+        changes.push({ r: r, field: f, value: value });
+      }
+      m.Channels.forEach(function (ch) {
+        var r = rowByOverride(ch);
+        if (!r) { unmatched.push(ch); return; }
+        touched[r.key] = 1;
+        var want = {};
+        if (ch.Number != null) want.number = str(ch.Number);
+        if (ch.Name != null) want.name = str(ch.Name);
+        if (ch.Group != null) want.group = str(ch.Group);
+        if (ch.Disabled != null) want.enabled = !ch.Disabled;
+        if (ch.Guide) {
+          var pid = mapProvider(ch.Guide, m);
+          if (pid === undefined) warnings.push(rowLabel(r) + ": guide provider \u201C" + ((ch.Guide.Provider && ch.Guide.Provider.Label) || ch.Guide.ProviderId) + "\u201D does not exist here; guide mapping skipped.");
+          else want.guide = { p: pid, c: pid && pid !== "none" ? str(ch.Guide.ChannelId) : "" };
+        }
+        if (ch.Logo) {
+          if (ch.Logo.Source === "url" && ch.Logo.Url) want.logo = ch.Logo.Url;
+          else if (ch.Logo.File && IMP.entries[ch.Logo.File]) want.logo = { file: ch.Logo.File };
+          else warnings.push(rowLabel(r) + ": logo image not included in the export; logo skipped.");
+        }
+        if (mode === "replace") overrideFields(r.override).forEach(function (f) { if (!(f in want)) { var mv = m3uValue(r, f); if (mv !== undefined) want[f] = mv; } });
+        Object.keys(want).forEach(function (f) { add(r, f, want[f]); });
+      });
+      if (mode === "replace" && scope === "all") {
+        S.rows.forEach(function (r) { if (r.override && !touched[r.key]) overrideFields(r.override).forEach(function (f) { var mv = m3uValue(r, f); if (mv !== undefined) add(r, f, mv); }); });
+      }
+      IMP.changes = changes; IMP.unmatched = unmatched; IMP.mode = mode; IMP.scope = scope;
+      var rows = {}; changes.forEach(function (c) { rows[c.r.key] = 1; });
+      var keepLater = scope === "all" ? unmatched.length : 0;
+      $(".iptvm-imp-summary").innerHTML = "<b>" + changes.length + " change(s) on " + Object.keys(rows).length + " channel(s)</b>" +
+        (unmatched.length ? " \u00b7 " + unmatched.length + " channel(s) from the file not found here" + (keepLater ? " (kept as overrides for later)" : " (ignored)") : "") +
+        " \u00b7 a snapshot of the current state is stored before applying, then you confirm the Save." +
+        (warnings.length ? '<div class="iptvm-imp-warn iptvm-small">' + warnings.map(esc).join("<br/>") + "</div>" : "");
+      $(".iptvm-imp-table tbody").innerHTML = changes.length ? changes.map(function (c) {
+        var thumb = c.field === "logo" ? (c.value && c.value.file ? '<img class="iptvm-imp-logo" data-file="' + esc(c.value.file) + '" alt="" /> ' : (isHttpUrl(c.value) ? '<img src="' + esc(c.value) + '" alt="" /> ' : "")) : "";
+        var curThumb = c.field === "logo" && imageUrlFor(c.r) ? '<img src="' + esc(imageUrlFor(c.r)) + '" alt="" /> ' : "";
+        return "<tr><td>" + esc(rowLabel(c.r)) + "</td><td>" + esc(FIELD_LABELS[c.field]) + "</td><td>" + curThumb + esc(shownVal(c.field, c.r.cur[c.field])) + "</td><td>" + thumb + esc(shownVal(c.field, c.value)) + "</td></tr>";
+      }).join("") : '<tr><td colspan="4" class="iptvm-empty">Nothing to change' + (keepLater ? "; the " + keepLater + " unmatched override(s) will be stored for later." : ".") + "</td></tr>";
+      Array.prototype.forEach.call(view.querySelectorAll(".iptvm-imp-logo[data-file]"), function (img) {
+        var d = IMP.entries[img.getAttribute("data-file")]; if (d) img.src = URL.createObjectURL(new Blob([d]));
+      });
+      $(".iptvm-imp-apply").disabled = !(changes.length || keepLater);
+    }
+    function overrideFromExport(ch) {
+      var o = { Key: ch.Key, TunerHostId: ch.TunerHostId, ManagementId: ch.ManagementId, ItemId: ch.ItemId, Number: ch.Number, Name: ch.Name, Group: ch.Group,
+        Disabled: ch.Disabled, HasGuideOverride: !!ch.Guide, ListingsProviderId: ch.Guide ? ch.Guide.ProviderId : null, ListingsChannelId: ch.Guide ? ch.Guide.ChannelId : null,
+        SeenTvgId: ch.TvgId, SeenM3uName: ch.M3uName, SeenM3uNumber: ch.M3uNumber, SeenM3uGroup: ch.M3uGroup, SeenM3uLogoUrl: ch.M3uLogoUrl, UpdatedUtc: nowIso() };
+      if (ch.Logo && ch.Logo.Source === "url") { o.LogoSource = "url"; o.LogoUrl = ch.Logo.Url; }
+      return o;
+    }
+    function applyImport() {
+      if (!IMP || isOff()) return Promise.resolve();
+      var imp = IMP, btn = $(".iptvm-imp-apply");
+      btn.disabled = true;
+      // 1) logo files from the zip become in-memory uploads (same path as "Upload image...")
+      var chain = imp.changes.reduce(function (p, c) {
+        return p.then(function () {
+          if (c.field !== "logo" || !(c.value && c.value.file)) return;
+          var name = c.value.file.split("/").pop(), ext = name.split(".").pop().toLowerCase();
+          var f = new File([imp.entries[c.value.file]], name, { type: EXT_TYPES[ext] || "image/png" });
+          return processUpload(f).then(function (u) { c.value = UPLOAD_PREFIX + u.id; });
+        });
+      }, Promise.resolve());
+      return chain.then(function () {
+        // 2) snapshot of the current state (before-values of every field the import changes), stored first
+        return ApiClient.getPluginConfiguration(PLUGIN_ID).then(null, function () { return {}; }).then(function (cfg) {
+          cfg = normalizeConfig(cfg);
+          var touched = {};
+          var snapChanges = imp.changes.map(function (c) {
+            touched[c.r.key] = 1;
+            return { Key: c.r.key, Label: rowLabel(c.r), ItemId: c.r.itemId, ManagementId: c.r.managementId, Field: c.field, Before: snapVal(c.field, c.r.cur[c.field]), After: snapVal(c.field, c.value) };
+          });
+          if (imp.scope === "all" && imp.unmatched.length) {
+            var byKey = {}; cfg.Overrides.forEach(function (o) { if (o && o.Key) byKey[o.Key] = o; });
+            imp.unmatched.forEach(function (ch) {
+              var o = overrideFromExport(ch);
+              if (byKey[ch.Key] && imp.mode === "merge") { Object.keys(o).forEach(function (k) { if (o[k] != null) byKey[ch.Key][k] = o[k]; }); }
+              else if (byKey[ch.Key]) cfg.Overrides[cfg.Overrides.indexOf(byKey[ch.Key])] = o;
+              else cfg.Overrides.push(o);
+            });
+          }
+          var have = {}; cfg.Snapshots.forEach(function (s) { have[s.Id] = 1; });
+          (imp.m.Snapshots || []).forEach(function (s) { if (s && s.Id && !have[s.Id]) cfg.Snapshots.push(s); });
+          cfg.Snapshots.sort(function (a, b) { return str(b.DateUtc) < str(a.DateUtc) ? -1 : str(b.DateUtc) > str(a.DateUtc) ? 1 : 0; });
+          cfg.Snapshots.unshift({ Id: String(Date.now()), DateUtc: nowIso(), Summary: "Before import of " + imp.name + " (" + imp.mode + ", " + (imp.scope === "all" ? "all channels" : "matching only") + "): " + snapChanges.length + " change(s) on " + Object.keys(touched).length + " channel(s)", Changes: snapChanges });
+          cfg.Snapshots = cfg.Snapshots.slice(0, cfg.MaxSnapshots || MAX_SNAPSHOTS);
+          return ApiClient.updatePluginConfiguration(PLUGIN_ID, cfg).then(function () { S.config = cfg; buildOverrideIndex(); });
+        });
+      }).then(function () {
+        // 3) queue the changes as pending edits (one undo step) and run the normal Save (it asks for confirmation)
+        var n = applyEdit(imp.changes.map(function (c) { return { key: c.r.key, field: c.field, value: c.value }; }), { full: true });
+        $(".iptvm-import-overlay").classList.remove("iptvm-show");
+        IMP = null;
+        toast("Import: snapshot stored, " + n + " change(s) queued.");
+        if (n) save();
+      }, function (err) {
+        btn.disabled = false;
+        errorText(err).then(function (m) { toast("Import failed: " + m); });
+      });
+    }
+    function buildOverrideIndex() {
+      var ov = {};
+      S.config.Overrides.forEach(function (o) { if (o && o.Key) ov[o.Key] = o; });
+      S.rows.forEach(function (r) { r.override = ov[r.key] || null; });
+    }
     function wire() {
       var tbody = $(".iptvm-tbody");
       tbody.addEventListener("change", onTbodyChange);
@@ -1892,6 +2227,22 @@ define([], function () {
       $(".iptvm-logo-clear").addEventListener("click", function () { $(".iptvm-logo-url").value = ""; logoDlg.copySrc = null; logoDlg.upload = ""; previewLogo(); });
       $(".iptvm-logo-usem3u").addEventListener("click", function () { if (logoDlg.row) { $(".iptvm-logo-url").value = logoDlg.row.m3uLogoUrl; logoDlg.copySrc = null; logoDlg.upload = ""; previewLogo(); } });
       $(".iptvm-snap-close").addEventListener("click", function () { $(".iptvm-snap-overlay").classList.remove("iptvm-show"); });
+      Array.prototype.forEach.call(view.querySelectorAll(".iptvm-tab"), function (b) { b.addEventListener("click", function () { showITab(b.getAttribute("data-itab")); }); });
+      $(".iptvm-general-form").addEventListener("submit", saveGeneral);
+      Array.prototype.forEach.call(view.querySelectorAll(".iptvm-act-export"), function (b) { b.addEventListener("click", function () { exportZip(); }); });
+      Array.prototype.forEach.call(view.querySelectorAll(".iptvm-act-import"), function (b) {
+        b.addEventListener("click", function () {
+          if (isOff()) { toast("IPTV Channel Mapper is switched off (General tab)."); return; }
+          if (pendingCount() && !window.confirm(pendingCount() + " pending change(s) are not saved yet. Import anyway? They stay pending and are saved together with the import.")) return;
+          $(".iptvm-import-file").click();
+        });
+      });
+      $(".iptvm-import-file").addEventListener("change", function (e) { var f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) importFile(f); });
+      Array.prototype.forEach.call(view.querySelectorAll('input[name="iptvmImpMode"],input[name="iptvmImpScope"]'), function (r) { r.addEventListener("change", computeImport); });
+      $(".iptvm-imp-cancel").addEventListener("click", function () { $(".iptvm-import-overlay").classList.remove("iptvm-show"); IMP = null; });
+      $(".iptvm-imp-apply").addEventListener("click", applyImport);
+      ClawColResize.attach(view.querySelector(".iptvm-imp-table"), "claw.iptvmapper.cols.import");
+      window.__iptvmTest = { importFile: importFile, exportZip: exportZip, zip: ClawZip, state: S };
       $(".iptvm-snap-list").addEventListener("click", function (e) {
         var b = e.target.closest && e.target.closest("[data-snap]");
         if (b) loadSnapshot(parseInt(b.getAttribute("data-snap"), 10));
