@@ -90,3 +90,12 @@ The C# harness compiles the plugin's `Core\*.cs` directly, with same-shape stubs
 
 - **1.1.0.0**: Settings page tabs (**Changed** | **Found movies**), manual Found scan with saved criteria (MinRuntimeMinutes 60, MaxChapters 3, ExcludeOverridden on), bulk and single-row Generate from the results.
 - **1.0.0.0**: Item menu Generate/Restore, confirm, refresh hook, stash store, Changed table with Revert.
+
+## Screenshots (fake data)
+
+All images are in [docs/screenshots/default-chapters/](../docs/screenshots/default-chapters/).
+
+| | |
+|---|---|
+| ![Changed movies (with Revert)](../docs/screenshots/default-chapters/changed.png)<br/>Changed movies (with Revert) | ![Found movies (bulk Generate)](../docs/screenshots/default-chapters/found.png)<br/>Found movies (bulk Generate) |
+| ![General tab: Enable switch and About](../docs/screenshots/default-chapters/general.png)<br/>General tab: Enable switch and About |   |

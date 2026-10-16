@@ -99,3 +99,11 @@ After this plugin is verified, disable or remove the scheduled task pieces that 
 `b7e4c2a1-9f3d-4e8b-a6c5-1d2e3f4a5b6c`
 
 Do not change once installed (Emby stores config by id).
+
+## Screenshots (fake data)
+
+All images are in [docs/screenshots/custom-item-ui/](../docs/screenshots/custom-item-ui/).
+
+| | |
+|---|---|
+| ![Dashboard Activity/Alerts tables](../docs/screenshots/custom-item-ui/dashboard-tables.png)<br/>Dashboard Activity/Alerts tables | ![Settings (tabs)](../docs/screenshots/custom-item-ui/settings.png)<br/>Settings (tabs) |

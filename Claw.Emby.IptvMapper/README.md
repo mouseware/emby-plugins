@@ -147,3 +147,13 @@ Test (offline, fake data): `node tests\web\test-iptv-io.js` (needs puppeteer-cor
 ## Plugin id
 
 `e5b612ae-cad5-47e9-8fb3-27a029c220d3`. Do not change it once installed; Emby stores the configuration by id.
+
+## Screenshots (fake data)
+
+All images are in [docs/screenshots/iptv-mapper/](../docs/screenshots/iptv-mapper/).
+
+| | |
+|---|---|
+| ![Channel table (number, name, group, logo, guide, enabled)](../docs/screenshots/iptv-mapper/channels.png)<br/>Channel table (number, name, group, logo, guide, enabled) | ![Import preview (Merge, all channels)](../docs/screenshots/iptv-mapper/import-preview.png)<br/>Import preview (Merge, all channels) |
+| ![Import preview (Replace, matching only)](../docs/screenshots/iptv-mapper/import-replace.png)<br/>Import preview (Replace, matching only) | ![Export with all logos: summary with failed downloads](../docs/screenshots/iptv-mapper/export-summary.png)<br/>Export with all logos: summary with failed downloads |
+| ![General tab: Enable switch, Backup, About](../docs/screenshots/iptv-mapper/general.png)<br/>General tab: Enable switch, Backup, About |   |

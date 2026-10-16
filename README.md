@@ -29,25 +29,54 @@ Each project builds on its own. Its `refs\` folder holds copies of the Emby SDK 
 
 ## Screenshots
 
-The screenshots use made-up sample data: documentation IP ranges, fake users and generic titles.
+The screenshots use made-up sample data: documentation IP ranges, fake users and generic titles. They are grouped by plugin under `docs/screenshots/<plugin>/`.
+
+### Claw Guard
 
 | | |
 |---|---|
-| ![Guard live log](docs/screenshots/guard-live-log.png) Guard: live log | ![Guard row menu](docs/screenshots/guard-row-menu.png) Guard: actions on a log row |
-| ![Guard bans](docs/screenshots/guard-bans.png) Guard: bans and history | ![Guard rules](docs/screenshots/guard-rules.png) Guard: rules and escalation |
-| ![Guard import](docs/screenshots/guard-import.png) Guard: import from Emby logs | ![Guard settings](docs/screenshots/guard-settings.png) Guard: settings |
-| ![Guard whitelist](docs/screenshots/guard-whitelist.png) Guard: whitelist | ![IPTV Mapper](docs/screenshots/iptvmapper-channels.png) IPTV Channel Mapper |
-| ![Default Chapters changed](docs/screenshots/defaultchapters-changed.png) Default Chapters: changed movies | ![Default Chapters found](docs/screenshots/defaultchapters-found.png) Default Chapters: found movies |
-| ![Custom Item UI dashboard](docs/screenshots/customitemui-dashboard-tables.png) Custom Item UI: dashboard tables | ![Custom Item UI settings](docs/screenshots/customitemui-settings.png) Custom Item UI: settings (tabs) |
-| ![Media Integrity problems](docs/screenshots/mediaintegrity-problems-running.png) Media Integrity: problems while a full scan runs | ![Media Integrity check now](docs/screenshots/mediaintegrity-checknow-progress.png) Media Integrity: live Check now (in-row progress) |
-| ![Media Integrity browse](docs/screenshots/mediaintegrity-browse-expanded.png) Media Integrity: browse a library | ![Media Integrity check library](docs/screenshots/mediaintegrity-check-library.png) Media Integrity: checking a whole library |
-| ![Media Integrity search](docs/screenshots/mediaintegrity-global-search.png) Media Integrity: search all files by status | ![Media Integrity history](docs/screenshots/mediaintegrity-history.png) Media Integrity: per-file history |
-| ![Media Integrity item menu](docs/screenshots/mediaintegrity-item-menu.png) Media Integrity: "Verify integrity" in the item menu | ![Media Integrity toast](docs/screenshots/mediaintegrity-item-toast-changed.png) Media Integrity: result toast with a link |
-| ![Media Integrity activity](docs/screenshots/mediaintegrity-activity.png) Media Integrity: past scans and import | ![Media Integrity settings](docs/screenshots/mediaintegrity-settings.png) Media Integrity: settings |
-| ![Media Integrity type filter](docs/screenshots/mediaintegrity-browse-type-filter.png) Media Integrity: File type column and filter | ![Media Integrity general](docs/screenshots/mediaintegrity-general.png) Media Integrity: General tab |
-| ![IPTV import preview](docs/screenshots/iptvmapper-import-preview.png) IPTV Channel Mapper: import preview (Merge) | ![IPTV import replace](docs/screenshots/iptvmapper-import-replace.png) IPTV Channel Mapper: import preview (Replace, matching only) |
-| ![IPTV general](docs/screenshots/iptvmapper-general.png) IPTV Channel Mapper: General tab, backup | ![Guard general](docs/screenshots/guard-general.png) Guard: General tab |
-| ![Default Chapters general](docs/screenshots/defaultchapters-general.png) Default Chapters: General tab | ![IPTV export summary](docs/screenshots/iptvmapper-export-summary.png) IPTV Channel Mapper: export with all logos (summary) |
+| ![Live log with summary cards and filters](docs/screenshots/guard/live-log.png)<br/>Live log with summary cards and filters | ![Actions on a log row (ban, whitelist, watch)](docs/screenshots/guard/row-menu.png)<br/>Actions on a log row (ban, whitelist, watch) |
+| ![Active bans and history](docs/screenshots/guard/bans.png)<br/>Active bans and history | ![Rules and escalation](docs/screenshots/guard/rules.png)<br/>Rules and escalation |
+| ![Whitelist](docs/screenshots/guard/whitelist.png)<br/>Whitelist | ![Import from Emby logs](docs/screenshots/guard/import.png)<br/>Import from Emby logs |
+| ![Settings (MaxMind, retention, filter status)](docs/screenshots/guard/settings.png)<br/>Settings (MaxMind, retention, filter status) | ![General tab: Enable switch and About](docs/screenshots/guard/general.png)<br/>General tab: Enable switch and About |
+
+### Claw IPTV Channel Mapper
+
+| | |
+|---|---|
+| ![Channel table (number, name, group, logo, guide, enabled)](docs/screenshots/iptv-mapper/channels.png)<br/>Channel table (number, name, group, logo, guide, enabled) | ![Import preview (Merge, all channels)](docs/screenshots/iptv-mapper/import-preview.png)<br/>Import preview (Merge, all channels) |
+| ![Import preview (Replace, matching only)](docs/screenshots/iptv-mapper/import-replace.png)<br/>Import preview (Replace, matching only) | ![Export with all logos: summary with failed downloads](docs/screenshots/iptv-mapper/export-summary.png)<br/>Export with all logos: summary with failed downloads |
+| ![General tab: Enable switch, Backup, About](docs/screenshots/iptv-mapper/general.png)<br/>General tab: Enable switch, Backup, About |   |
+
+### Claw Default Chapters
+
+| | |
+|---|---|
+| ![Changed movies (with Revert)](docs/screenshots/default-chapters/changed.png)<br/>Changed movies (with Revert) | ![Found movies (bulk Generate)](docs/screenshots/default-chapters/found.png)<br/>Found movies (bulk Generate) |
+| ![General tab: Enable switch and About](docs/screenshots/default-chapters/general.png)<br/>General tab: Enable switch and About |   |
+
+### Claw Custom Item UI
+
+| | |
+|---|---|
+| ![Dashboard Activity/Alerts tables](docs/screenshots/custom-item-ui/dashboard-tables.png)<br/>Dashboard Activity/Alerts tables | ![Settings (tabs)](docs/screenshots/custom-item-ui/settings.png)<br/>Settings (tabs) |
+
+### Media Integrity
+
+| | |
+|---|---|
+| ![Problems while a full scan runs](docs/screenshots/media-integrity/problems-running.png)<br/>Problems while a full scan runs | ![Problems filtered by file type](docs/screenshots/media-integrity/problems-type.png)<br/>Problems filtered by file type |
+| ![Problems: select all and bulk actions](docs/screenshots/media-integrity/problems-select-all.png)<br/>Problems: select all and bulk actions | ![Live Check now (in-row progress)](docs/screenshots/media-integrity/checknow-progress.png)<br/>Live Check now (in-row progress) |
+| ![Browse by library](docs/screenshots/media-integrity/browse-library.png)<br/>Browse by library | ![Browse a library (expanded)](docs/screenshots/media-integrity/browse-expanded.png)<br/>Browse a library (expanded) |
+| ![File type column and filter](docs/screenshots/media-integrity/browse-type-filter.png)<br/>File type column and filter | ![Browse by folder](docs/screenshots/media-integrity/browse-folder.png)<br/>Browse by folder |
+| ![Library with files not yet hashed](docs/screenshots/media-integrity/untracked-library.png)<br/>Library with files not yet hashed | ![Checking a whole library](docs/screenshots/media-integrity/check-library.png)<br/>Checking a whole library |
+| ![Two manual batches queued](docs/screenshots/media-integrity/two-batches.png)<br/>Two manual batches queued | ![Select a page of files](docs/screenshots/media-integrity/select-page.png)<br/>Select a page of files |
+| ![Select all matching files](docs/screenshots/media-integrity/select-all-matching.png)<br/>Select all matching files | ![Search all files by status](docs/screenshots/media-integrity/global-search.png)<br/>Search all files by status |
+| ![Per-file history](docs/screenshots/media-integrity/history.png)<br/>Per-file history | !["Verify integrity" in the item menu](docs/screenshots/media-integrity/item-menu.png)<br/>"Verify integrity" in the item menu |
+| ![Result toast (OK)](docs/screenshots/media-integrity/item-toast-ok.png)<br/>Result toast (OK) | ![Result toast (changed file) with a link](docs/screenshots/media-integrity/item-toast-changed.png)<br/>Result toast (changed file) with a link |
+| ![Past scans and import](docs/screenshots/media-integrity/activity.png)<br/>Past scans and import | ![Manual checks in Activity](docs/screenshots/media-integrity/activity-manual.png)<br/>Manual checks in Activity |
+| ![Settings (skip list, schedule)](docs/screenshots/media-integrity/settings.png)<br/>Settings (skip list, schedule) | ![General tab: Enable switch and About](docs/screenshots/media-integrity/general.png)<br/>General tab: Enable switch and About |
+| ![Switched off: banner](docs/screenshots/media-integrity/off-banner.png)<br/>Switched off: banner |   |
 
 ## Install (from a release)
 

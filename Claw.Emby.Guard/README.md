@@ -91,3 +91,14 @@ dotnet run -- --scan "$env:APPDATA\Emby-Server\logs"   # dry-run: what an import
 ```
 
 `tests\web` holds an offline UI harness: a mock ApiClient plus the real guard.html and guard.js. `node tests\web\test-guard.js` needs puppeteer-core and Chrome.
+
+## Screenshots (fake data)
+
+All images are in [docs/screenshots/guard/](../docs/screenshots/guard/).
+
+| | |
+|---|---|
+| ![Live log with summary cards and filters](../docs/screenshots/guard/live-log.png)<br/>Live log with summary cards and filters | ![Actions on a log row (ban, whitelist, watch)](../docs/screenshots/guard/row-menu.png)<br/>Actions on a log row (ban, whitelist, watch) |
+| ![Active bans and history](../docs/screenshots/guard/bans.png)<br/>Active bans and history | ![Rules and escalation](../docs/screenshots/guard/rules.png)<br/>Rules and escalation |
+| ![Whitelist](../docs/screenshots/guard/whitelist.png)<br/>Whitelist | ![Import from Emby logs](../docs/screenshots/guard/import.png)<br/>Import from Emby logs |
+| ![Settings (MaxMind, retention, filter status)](../docs/screenshots/guard/settings.png)<br/>Settings (MaxMind, retention, filter status) | ![General tab: Enable switch and About](../docs/screenshots/guard/general.png)<br/>General tab: Enable switch and About |

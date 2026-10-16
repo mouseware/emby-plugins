@@ -90,4 +90,19 @@ Tests:
 
 ## Screenshots (fake data)
 
-`docs/screenshots/mediaintegrity-*.png` in the repository root.
+All images are in [docs/screenshots/media-integrity/](../docs/screenshots/media-integrity/).
+
+| | |
+|---|---|
+| ![Problems while a full scan runs](../docs/screenshots/media-integrity/problems-running.png)<br/>Problems while a full scan runs | ![Problems filtered by file type](../docs/screenshots/media-integrity/problems-type.png)<br/>Problems filtered by file type |
+| ![Problems: select all and bulk actions](../docs/screenshots/media-integrity/problems-select-all.png)<br/>Problems: select all and bulk actions | ![Live Check now (in-row progress)](../docs/screenshots/media-integrity/checknow-progress.png)<br/>Live Check now (in-row progress) |
+| ![Browse by library](../docs/screenshots/media-integrity/browse-library.png)<br/>Browse by library | ![Browse a library (expanded)](../docs/screenshots/media-integrity/browse-expanded.png)<br/>Browse a library (expanded) |
+| ![File type column and filter](../docs/screenshots/media-integrity/browse-type-filter.png)<br/>File type column and filter | ![Browse by folder](../docs/screenshots/media-integrity/browse-folder.png)<br/>Browse by folder |
+| ![Library with files not yet hashed](../docs/screenshots/media-integrity/untracked-library.png)<br/>Library with files not yet hashed | ![Checking a whole library](../docs/screenshots/media-integrity/check-library.png)<br/>Checking a whole library |
+| ![Two manual batches queued](../docs/screenshots/media-integrity/two-batches.png)<br/>Two manual batches queued | ![Select a page of files](../docs/screenshots/media-integrity/select-page.png)<br/>Select a page of files |
+| ![Select all matching files](../docs/screenshots/media-integrity/select-all-matching.png)<br/>Select all matching files | ![Search all files by status](../docs/screenshots/media-integrity/global-search.png)<br/>Search all files by status |
+| ![Per-file history](../docs/screenshots/media-integrity/history.png)<br/>Per-file history | !["Verify integrity" in the item menu](../docs/screenshots/media-integrity/item-menu.png)<br/>"Verify integrity" in the item menu |
+| ![Result toast (OK)](../docs/screenshots/media-integrity/item-toast-ok.png)<br/>Result toast (OK) | ![Result toast (changed file) with a link](../docs/screenshots/media-integrity/item-toast-changed.png)<br/>Result toast (changed file) with a link |
+| ![Past scans and import](../docs/screenshots/media-integrity/activity.png)<br/>Past scans and import | ![Manual checks in Activity](../docs/screenshots/media-integrity/activity-manual.png)<br/>Manual checks in Activity |
+| ![Settings (skip list, schedule)](../docs/screenshots/media-integrity/settings.png)<br/>Settings (skip list, schedule) | ![General tab: Enable switch and About](../docs/screenshots/media-integrity/general.png)<br/>General tab: Enable switch and About |
+| ![Switched off: banner](../docs/screenshots/media-integrity/off-banner.png)<br/>Switched off: banner |   |
