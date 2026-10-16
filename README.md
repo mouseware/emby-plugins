@@ -20,7 +20,7 @@ Every plugin has a **General** tab like Custom Item UI: an **Enable plugin** swi
 | Project | Folder | Version | Output DLL |
 |---------|--------|---------|------------|
 | Claw Custom Item UI | `Claw.Emby.CustomItemUI` | 1.2.3.0 | `Claw.Emby.CustomItemUI\bin\Release\Claw.Emby.CustomItemUI.dll` |
-| Claw IPTV Mapper | `Claw.Emby.IptvMapper` | 1.4.0.0 | `Claw.Emby.IptvMapper\bin\Release\Claw.Emby.IptvMapper.dll` |
+| Claw IPTV Mapper | `Claw.Emby.IptvMapper` | 1.4.1.0 | `Claw.Emby.IptvMapper\bin\Release\Claw.Emby.IptvMapper.dll` |
 | Claw Guard | `Claw.Emby.Guard` | 1.2.0.0 | `Claw.Emby.Guard\bin\Release\Claw.Emby.Guard.dll` |
 | Claw Default Chapters | `Claw.Emby.DefaultChapters` | 1.2.0.0 | `Claw.Emby.DefaultChapters\bin\Release\Claw.Emby.DefaultChapters.dll` |
 | Media Integrity | `Claw.Emby.MediaIntegrity` | 1.0.6.0 | `Claw.Emby.MediaIntegrity\bin\Release\Claw.Emby.MediaIntegrity.dll` |
@@ -47,7 +47,7 @@ The screenshots use made-up sample data: documentation IP ranges, fake users and
 | ![Media Integrity type filter](docs/screenshots/mediaintegrity-browse-type-filter.png) Media Integrity: File type column and filter | ![Media Integrity general](docs/screenshots/mediaintegrity-general.png) Media Integrity: General tab |
 | ![IPTV import preview](docs/screenshots/iptvmapper-import-preview.png) IPTV Channel Mapper: import preview (Merge) | ![IPTV import replace](docs/screenshots/iptvmapper-import-replace.png) IPTV Channel Mapper: import preview (Replace, matching only) |
 | ![IPTV general](docs/screenshots/iptvmapper-general.png) IPTV Channel Mapper: General tab, backup | ![Guard general](docs/screenshots/guard-general.png) Guard: General tab |
-| ![Default Chapters general](docs/screenshots/defaultchapters-general.png) Default Chapters: General tab | |
+| ![Default Chapters general](docs/screenshots/defaultchapters-general.png) Default Chapters: General tab | ![IPTV export summary](docs/screenshots/iptvmapper-export-summary.png) IPTV Channel Mapper: export with all logos (summary) |
 
 ## Install (from a release)
 

@@ -3,6 +3,7 @@
 Emby Server plugin: **IPTV Channel Mapper**. A dashboard table for editing IPTV Live TV channels, meant as a better replacement for Emby's built-in channel mapping.
 
 - One row per tuner channel, across all M3U tuners.
+- **v1.4.1:** Export option **Include all logos** (on by default): every channel's current logo goes into `logos/`, failures keep their link and are listed in an export summary; Import restores the embedded logos.
 - **v1.4.0:** **General** tab (Enable switch, Backup, About) and **Export/Import** (see below).
 - **v1.3.1:** Cleaner dialog layout. The logo dialog has a left-aligned tool row (Upload image…, Copy from channel…, Use M3U logo, Clear override) and a separate right-aligned footer (Cancel, Apply). All buttons have the same height, margins are reset, and narrow screens get a 2×2 grid. Snapshot row buttons don't wrap. Esc in the copy-from-channel picker closes only the picker.
 - **v1.3:** **Channel Name Guide**, a built-in dummy guide data provider (type `clawdummy`, `Guide/ChannelNameGuideProvider.cs`).
@@ -126,6 +127,8 @@ Column widths: drag the right edge of any column header to resize it. Widths are
 - **All channels**: with Replace, channels the file does not list are reset as well, and entries for channels that do not exist here are stored as overrides for later. **Matching only** touches only channels that are in both.
 - Guide providers are matched by id, then by type and label; a provider that does not exist here is skipped with a warning.
 - **Apply** first stores a snapshot ("Before import of ...") with the current values of every field it changes, plus the snapshots from the file, then queues the changes as pending edits and runs the normal Save (with its confirmation). Cancelling the Save leaves them pending; Undo and Restore snapshot work as usual.
+
+**Include all logos** (1.4.1, checkbox next to Export, on by default, remembered per browser): every channel's current logo is read on the server by `GET /IptvMapper/Logo` (admin only, read-only): Emby's stored Primary image from disk first, otherwise the override URL or the M3U tvg-logo, downloaded with a 15 s timeout, a 5 MB cap and a magic-byte image check (PNG, JPEG, GIF, WebP, BMP, SVG). Only URLs the plugin already knows (tuner tvg-logo or an override) are fetched, so the endpoint is not an open proxy. The page reads 6 logos at a time with a progress bar. `mapper.json` gets `Logos` (Key, ids, Source emby/m3u/url/upload, Url, File) and `LogoFailures`; a failed logo keeps its link and is listed in the export summary. Older servers without the endpoint fall back to reading Emby images in the browser. On **Import**, Merge uses embedded logos only for channels that have no logo yet; Replace restores all of them (each becomes an upload saved with the normal Save).
 
 Test (offline, fake data): `node tests\web\test-iptv-io.js` (needs puppeteer-core, jszip and Chrome; env `PUPPETEER`, `JSZIP`, `CHROME`, `SHOTDIR`).
 

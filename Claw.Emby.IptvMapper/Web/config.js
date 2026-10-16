@@ -1933,61 +1933,141 @@ define([], function () {
         return res.blob().then(function (b) { return sniffImageType(b).then(function (t) { return { blob: b, type: t || b.type || "image/png" }; }); });
       }, function () { return null; });
     }
+    var EXPORT_ALL_KEY = "claw.iptvmapper.exportAllLogos";
+    var LOGO_CONCURRENCY = 6, LOGO_TIMEOUT_MS = 30000;
+    function exportAllLogos() { try { return localStorage.getItem(EXPORT_ALL_KEY) !== "0"; } catch (e) { return true; } }
+    function setExportAllLogos(on) {
+      try { localStorage.setItem(EXPORT_ALL_KEY, on ? "1" : "0"); } catch (e) { /* ignore */ }
+      Array.prototype.forEach.call(view.querySelectorAll(".iptvm-exp-all"), function (c) { c.checked = on; });
+    }
+    function b64Bytes(s) { var bin = atob(s), u = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; }
+    function withTimeout(p, ms, what) {
+      return new Promise(function (resolve, reject) {
+        var t = setTimeout(function () { reject(new Error(what + " timed out after " + Math.round(ms / 1000) + " s")); }, ms);
+        p.then(function (v) { clearTimeout(t); resolve(v); }, function (e) { clearTimeout(t); reject(e); });
+      });
+    }
+    /** Runs fn over items with at most n in flight; onDone(doneCount) after each. */
+    function pool(items, n, fn, onDone) {
+      var i = 0, done = 0;
+      return new Promise(function (resolve) {
+        if (!items.length) { resolve(); return; }
+        function next() {
+          if (i >= items.length) return;
+          var it = items[i++];
+          Promise.resolve().then(function () { return fn(it); }).then(null, function () { }).then(function () {
+            done++; if (onDone) onDone(done);
+            if (done === items.length) resolve(); else next();
+          });
+        }
+        for (var k = 0; k < Math.min(n, items.length); k++) next();
+      });
+    }
+    /** The channel's current logo: what Emby shows (its stored image), else the override URL, else the M3U tvg-logo. */
+    function currentLogoJob(r, o) {
+      var src = o && o.LogoSource ? o.LogoSource : "", url = "";
+      if (src === "url" && o.LogoUrl) url = o.LogoUrl;
+      else if (!src || src === "m3u") url = r.m3uLogoUrl || "";
+      var hasEmby = !!(r.inLibrary && r.primaryTag && r.itemId);
+      if (!hasEmby && !url) return null;
+      return { r: r, o: o, source: src === "url" ? "url" : (src === "upload" || src === "copy") ? src : hasEmby ? "emby" : "m3u", url: url, itemId: hasEmby ? r.itemId : "" };
+    }
+    var LOGO_API = { missing: false };
+    /** Server-side read (Emby's stored image or a known logo URL); falls back to the browser for Emby images on old servers. */
+    function readLogo(job) {
+      function viaBrowser() {
+        return fetchPrimary(job.r).then(function (img) {
+          if (!img) throw new Error(job.itemId ? "stored image could not be read" : "logo URL not reachable without the server helper");
+          return img.blob.arrayBuffer().then(function (buf) { return { bytes: new Uint8Array(buf), type: img.type, from: "emby" }; });
+        });
+      }
+      if (LOGO_API.missing) return viaBrowser();
+      return withTimeout(apiGet("IptvMapper/Logo", { ItemId: job.itemId, Url: job.url }), LOGO_TIMEOUT_MS, "logo").then(function (res) {
+        if (!res || !res.Ok) throw new Error((res && res.Error) || "no logo");
+        return { bytes: b64Bytes(res.Base64), type: res.ContentType, from: res.Source };
+      }, function (err) {
+        if (err && (err.status === 404 || err.status === 405)) { LOGO_API.missing = true; return viaBrowser(); }
+        throw err;
+      });
+    }
     function exportZip() {
+      var all = exportAllLogos();
       showLoading();
       var stamp = new Date();
       return ApiClient.getPluginConfiguration(PLUGIN_ID).then(null, function () { return {}; }).then(function (cfg) {
         cfg = normalizeConfig(cfg);
-        var files = [], used = {}, channels = [];
-        var chain = cfg.Overrides.reduce(function (p, o) {
-          return p.then(function () {
-            var r = rowByOverride(o);
-            var ch = {
-              Key: o.Key, TunerHostId: o.TunerHostId, ManagementId: o.ManagementId, ItemId: o.ItemId,
-              Label: r ? rowLabel(r) : (o.Name || o.SeenM3uName || o.Key),
-              TvgId: o.SeenTvgId || null, M3uName: o.SeenM3uName || null, M3uNumber: o.SeenM3uNumber || null, M3uGroup: o.SeenM3uGroup || null, M3uLogoUrl: o.SeenM3uLogoUrl || null,
-              Number: o.Number != null ? o.Number : null, Name: o.Name != null ? o.Name : null, Group: o.Group != null ? o.Group : null,
-              Disabled: o.Disabled != null ? !!o.Disabled : null,
-              Guide: o.HasGuideOverride ? { ProviderId: str(o.ListingsProviderId), ChannelId: o.ListingsChannelId || "", Provider: providerOut(o.ListingsProviderId) } : null,
-              LockedFields: r && r.lockedFields ? r.lockedFields : null,
-              Logo: null, UpdatedUtc: o.UpdatedUtc || null
-            };
-            channels.push(ch);
-            if (o.LogoSource === "url" && o.LogoUrl) { ch.Logo = { Source: "url", Url: o.LogoUrl }; return; }
-            if (o.LogoSource === "upload" || o.LogoSource === "copy") {
-              ch.Logo = { Source: o.LogoSource, OriginalName: o.LogoFileName || null, CopiedFromKey: o.LogoSourceKey || null };
-              return fetchPrimary(r).then(function (img) {
-                if (!img) { ch.Logo.Missing = true; return; }
-                return img.blob.arrayBuffer().then(function (buf) {
-                  var base = safeName(ch.Label), n = base, i = 2;
-                  while (used[n]) n = base + "-" + (i++);
-                  used[n] = 1;
-                  ch.Logo.File = "logos/" + n + "." + extForType(img.type);
-                  files.push({ name: ch.Logo.File, data: new Uint8Array(buf) });
-                });
-              });
-            }
-          });
-        }, Promise.resolve());
-        return chain.then(function () {
-          var mapper = {
-            Format: "claw-iptvmapper", FormatVersion: 1, ExportedUtc: stamp.toISOString(),
-            Providers: S.providers.map(function (p) { return { Id: p.id, Type: p.type, Label: p.label }; }),
-            Channels: channels, Snapshots: cfg.Snapshots, MaxSnapshots: cfg.MaxSnapshots
+        var files = [], used = {}, channels = [], logos = [], failures = [], byKey = {};
+        function fileName(label, type) {
+          var base = safeName(label), n = base, i = 2;
+          while (used[n]) n = base + "-" + (i++);
+          used[n] = 1;
+          return "logos/" + n + "." + extForType(type);
+        }
+        cfg.Overrides.forEach(function (o) {
+          var r = rowByOverride(o);
+          var ch = {
+            Key: o.Key, TunerHostId: o.TunerHostId, ManagementId: o.ManagementId, ItemId: o.ItemId,
+            Label: r ? rowLabel(r) : (o.Name || o.SeenM3uName || o.Key),
+            TvgId: o.SeenTvgId || null, M3uName: o.SeenM3uName || null, M3uNumber: o.SeenM3uNumber || null, M3uGroup: o.SeenM3uGroup || null, M3uLogoUrl: o.SeenM3uLogoUrl || null,
+            Number: o.Number != null ? o.Number : null, Name: o.Name != null ? o.Name : null, Group: o.Group != null ? o.Group : null,
+            Disabled: o.Disabled != null ? !!o.Disabled : null,
+            Guide: o.HasGuideOverride ? { ProviderId: str(o.ListingsProviderId), ChannelId: o.ListingsChannelId || "", Provider: providerOut(o.ListingsProviderId) } : null,
+            LockedFields: r && r.lockedFields ? r.lockedFields : null,
+            Logo: null, UpdatedUtc: o.UpdatedUtc || null
           };
+          if (o.LogoSource === "url" && o.LogoUrl) ch.Logo = { Source: "url", Url: o.LogoUrl };
+          else if (o.LogoSource === "upload" || o.LogoSource === "copy") ch.Logo = { Source: o.LogoSource, OriginalName: o.LogoFileName || null, CopiedFromKey: o.LogoSourceKey || null };
+          channels.push(ch);
+          if (o.Key) byKey[o.Key] = { ch: ch, o: o, r: r };
+        });
+        // Which logos to read: every channel's current logo ("Include all logos"), else only uploaded/copied ones.
+        var jobs = [];
+        if (all) {
+          S.rows.forEach(function (r) { var x = byKey[r.key]; var j = currentLogoJob(r, x ? x.o : null); if (j) jobs.push(j); });
+        } else {
+          Object.keys(byKey).forEach(function (k) { var x = byKey[k]; if (x.ch.Logo && x.ch.Logo.Source !== "url") jobs.push({ r: x.r, o: x.o, source: x.ch.Logo.Source, url: "", itemId: x.r && x.r.primaryTag ? x.r.itemId : "" }); });
+        }
+        var total = jobs.length;
+        if (total) setProgress(0, total, "Reading logos 0 / " + total);
+        return pool(jobs, LOGO_CONCURRENCY, function (job) {
+          var label = job.r ? rowLabel(job.r) : (job.o && job.o.Key) || "?";
+          var x = job.r ? byKey[job.r.key] : null;
+          if (!job.r) { if (x) x.ch.Logo.Missing = true; failures.push({ Label: label, Source: job.source, Url: job.url || null, Error: "channel not found here" }); return; }
+          return readLogo(job).then(function (img) {
+            var file = fileName(label, img.type);
+            files.push({ name: file, data: img.bytes });
+            if (x && x.ch.Logo) x.ch.Logo.File = file;
+            logos.push({ Key: job.r.key, ManagementId: job.r.managementId || null, TvgId: job.r.tvgId || null, Label: label, Source: job.source, Url: job.url || null, File: file, Bytes: img.bytes.length });
+          }, function (err) {
+            var msg = (err && (err.message || err.statusText)) || String(err);
+            if (x && x.ch.Logo && x.ch.Logo.Source !== "url") x.ch.Logo.Missing = true;
+            logos.push({ Key: job.r.key, ManagementId: job.r.managementId || null, TvgId: job.r.tvgId || null, Label: label, Source: job.source, Url: job.url || null, File: null, Error: msg });
+            failures.push({ Label: label, Source: job.source, Url: job.url || null, Error: msg });
+          });
+        }, function (d) { setProgress(d, total, "Reading logos " + d + " / " + total); }).then(function () {
+          setProgress(0, 0, "");
+          var mapper = {
+            Format: "claw-iptvmapper", FormatVersion: 1, ExportedUtc: stamp.toISOString(), AllLogos: all,
+            Providers: S.providers.map(function (p) { return { Id: p.id, Type: p.type, Label: p.label }; }),
+            Channels: channels, Logos: logos, LogoFailures: failures, Snapshots: cfg.Snapshots, MaxSnapshots: cfg.MaxSnapshots
+          };
+          files.sort(function (a, b) { return a.name < b.name ? -1 : 1; });
           files.unshift({ name: "mapper.json", data: utf8(JSON.stringify(mapper, null, 2)) });
           var blob = ClawZip.build(files);
           var pad = function (n) { return (n < 10 ? "0" : "") + n; };
           var fname = "iptv-mapper-export-" + stamp.getFullYear() + pad(stamp.getMonth() + 1) + pad(stamp.getDate()) + "-" + pad(stamp.getHours()) + pad(stamp.getMinutes()) + ".zip";
-          window.__iptvmLastExport = { blob: blob, name: fname, channels: channels.length, logos: files.length - 1 };
+          var nFiles = files.length - 1;
+          window.__iptvmLastExport = { blob: blob, name: fname, channels: channels.length, logos: nFiles, attempted: total, failures: failures.slice(), all: all, rows: S.rows.length };
           var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = fname;
           document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
           hideLoading();
-          toast("Exported " + channels.length + " channel override(s) and " + (files.length - 1) + " logo file(s) to " + fname + ".");
+          var head = "Exported " + channels.length + " channel override(s) and " + nFiles + " logo file(s)" + (all ? " (" + nFiles + " of " + total + " channel logos, " + S.rows.length + " channels)" : "") + " to " + fname + ".";
+          toast(head);
+          showResults("<b>" + esc(head) + "</b>" + (failures.length ? "<br/>" + failures.length + " logo(s) could not be read; their links are kept in mapper.json:<br/>" +
+            failures.slice(0, 50).map(function (f) { return esc(f.Label) + " \u2014 " + esc(f.Url || f.Source) + ": " + esc(f.Error); }).join("<br/>") + (failures.length > 50 ? "<br/>\u2026 and " + (failures.length - 50) + " more (see LogoFailures in mapper.json)." : "") : ""), !failures.length);
         });
-      }).then(null, function (err) { hideLoading(); errorText(err).then(function (m) { toast("Export failed: " + m); }); });
+      }).then(null, function (err) { hideLoading(); setProgress(0, 0, ""); errorText(err).then(function (m) { toast("Export failed: " + m); }); });
     }
-
     function importFile(file) {
       if (!file) return Promise.resolve();
       if (isOff()) { toast("IPTV Channel Mapper is switched off (General tab)."); return Promise.resolve(); }
@@ -2065,6 +2145,18 @@ define([], function () {
         if (mode === "replace") overrideFields(r.override).forEach(function (f) { if (!(f in want)) { var mv = m3uValue(r, f); if (mv !== undefined) want[f] = mv; } });
         Object.keys(want).forEach(function (f) { add(r, f, want[f]); });
       });
+      // Embedded logos of every channel ("Include all logos" exports): Merge fills channels without a logo, Replace restores them all.
+      var chLogoKeys = {}, nEmb = 0;
+      m.Channels.forEach(function (ch) { if (ch && ch.Logo) chLogoKeys[ch.Key] = 1; });
+      (m.Logos || []).forEach(function (lg) {
+        if (!lg || !lg.File || !IMP.entries[lg.File] || chLogoKeys[lg.Key]) return;
+        var r = rowByOverride(lg);
+        if (!r) return;
+        if (mode !== "replace" && (r.primaryTag || isPendingImageValue(r.cur.logo))) return;
+        touched[r.key] = 1; nEmb++;
+        add(r, "logo", { file: lg.File });
+      });
+      IMP.embedded = nEmb;
       if (mode === "replace" && scope === "all") {
         S.rows.forEach(function (r) { if (r.override && !touched[r.key]) overrideFields(r.override).forEach(function (f) { var mv = m3uValue(r, f); if (mv !== undefined) add(r, f, mv); }); });
       }
@@ -2072,7 +2164,7 @@ define([], function () {
       var rows = {}; changes.forEach(function (c) { rows[c.r.key] = 1; });
       var keepLater = scope === "all" ? unmatched.length : 0;
       $(".iptvm-imp-summary").innerHTML = "<b>" + changes.length + " change(s) on " + Object.keys(rows).length + " channel(s)</b>" +
-        (unmatched.length ? " \u00b7 " + unmatched.length + " channel(s) from the file not found here" + (keepLater ? " (kept as overrides for later)" : " (ignored)") : "") +
+        (nEmb ? " \u00b7 " + nEmb + " embedded logo(s)" : "") + (unmatched.length ? " \u00b7 " + unmatched.length + " channel(s) from the file not found here" + (keepLater ? " (kept as overrides for later)" : " (ignored)") : "") +
         " \u00b7 a snapshot of the current state is stored before applying, then you confirm the Save." +
         (warnings.length ? '<div class="iptvm-imp-warn iptvm-small">' + warnings.map(esc).join("<br/>") + "</div>" : "");
       $(".iptvm-imp-table tbody").innerHTML = changes.length ? changes.map(function (c) {
@@ -2230,6 +2322,7 @@ define([], function () {
       Array.prototype.forEach.call(view.querySelectorAll(".iptvm-tab"), function (b) { b.addEventListener("click", function () { showITab(b.getAttribute("data-itab")); }); });
       $(".iptvm-general-form").addEventListener("submit", saveGeneral);
       Array.prototype.forEach.call(view.querySelectorAll(".iptvm-act-export"), function (b) { b.addEventListener("click", function () { exportZip(); }); });
+      Array.prototype.forEach.call(view.querySelectorAll(".iptvm-exp-all"), function (c) { c.checked = exportAllLogos(); c.addEventListener("change", function () { setExportAllLogos(c.checked); }); });
       Array.prototype.forEach.call(view.querySelectorAll(".iptvm-act-import"), function (b) {
         b.addEventListener("click", function () {
           if (isOff()) { toast("IPTV Channel Mapper is switched off (General tab)."); return; }

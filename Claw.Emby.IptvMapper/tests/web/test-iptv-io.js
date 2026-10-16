@@ -22,6 +22,11 @@ window.ApiClient = { accessToken: function(){return 't';}, getCurrentUserId: fun
   getUrl: function (p, q) { var s = Object.keys(q || {}).map(function (k) { return k + '=' + encodeURIComponent(q[k]); }).join('&'); return p + (s ? '?' + s : ''); },
   getImageUrl: function(){return '';},
   getJSON: function (u) { var p = u.split('?')[0];
+    if (p === 'IptvMapper/Logo') { var q = {}; (u.split('?')[1] || '').split('&').forEach(function (kv) { var a = kv.split('='); if (a[0]) q[a[0]] = decodeURIComponent(a[1] || ''); }); window.__logoCalls = (window.__logoCalls || 0) + 1;
+      if (window.__noLogoApi) return Promise.reject({ status: 404 });
+      if ((q.Url || '').slice(-10) === '/m3u/3.png' && !q.ItemId) return Promise.resolve({ Ok: false, Error: 'HTTP 404' });
+      var lbl = q.ItemId === 'c1' ? 'CBS' : (q.Url || '').split('/').pop().replace('.png', '');
+      return logoPng(lbl, q.ItemId ? '#333' : '#2e7d32').then(function (b) { return b.arrayBuffer(); }).then(function (buf) { var u8 = new Uint8Array(buf), str = ''; for (var i = 0; i < u8.length; i++) str += String.fromCharCode(u8[i]); return { Ok: true, Source: q.ItemId ? 'emby' : 'url', ContentType: 'image/png', Base64: btoa(str), Bytes: u8.length }; }); }
     if (p === 'IptvMapper/Channels') return Promise.resolve({ Rows: window.__serverRows, Tuners: [], Warnings: [] });
     if (p === 'LiveTv/Manage/Channels') return Promise.resolve({ Items: window.__items, TotalRecordCount: window.__items.length });
     if (p === 'Items') return Promise.resolve({ Items: window.__items.map(function (c, i) { return { Id: c.Id, TagItems: [{ Name: i === 6 ? 'Sports HD' : i < 6 ? 'Local' : (i < 8 ? 'Sports' : 'News & Lifestyle') }] }; }) });
@@ -82,13 +87,28 @@ const PAGE = path.join(__dirname, 'iptv-io-page.html');
   const mj = JSON.parse(await z.file('mapper.json').async('string'));
   ok(mj.Format === 'claw-iptvmapper' && mj.FormatVersion === 1 && mj.Channels.length === 4, 'mapper.json: format + 4 channel overrides');
   const c0 = mj.Channels.find(c => c.Key === keys[0]), c1 = mj.Channels.find(c => c.Key === keys[1]), c6 = mj.Channels.find(c => c.Key === keys[6]);
-  ok(c0 && c0.Logo && c0.Logo.Source === 'url' && c0.Logo.Url === 'https://logos.example.invalid/abc7.png' && !c0.Logo.File && c0.Name === 'ABC 7 New York' && c0.Number === '7', 'URL logo stored as a link, name/number kept');
+  ok(c0 && c0.Logo && c0.Logo.Source === 'url' && c0.Logo.Url === 'https://logos.example.invalid/abc7.png' && /^logos\//.test(c0.Logo.File || '') && c0.Name === 'ABC 7 New York' && c0.Number === '7', 'URL logo keeps its link and (all logos) gets a file too');
   ok(c1 && c1.Logo && c1.Logo.Source === 'upload' && /^logos\/\d*_?WCBS_2\.png$/.test(c1.Logo.File) && zn.includes(c1.Logo.File), 'uploaded logo stored as file ' + (c1 && c1.Logo && c1.Logo.File));
   const png = await z.file(c1.Logo.File).async('uint8array');
   ok(png[0] === 0x89 && png[1] === 0x50 && png.length > 100, 'logo file is a PNG (' + png.length + ' bytes)');
   ok(c6 && c6.Group === 'Sports HD' && c6.Guide && c6.Guide.ProviderId === 'xmltv1' && c6.Guide.ChannelId === 'espn.us' && c6.Guide.Provider && c6.Guide.Provider.Type === 'xmltv', 'group + guide mapping with provider info');
   ok(mj.Snapshots.length === 1 && mj.Providers.length === 1 && mj.Channels.some(c => c.Key === 'm3u1|name:oldchannel'), 'snapshots, providers and offline overrides included');
-  ok(zn.filter(n => n.startsWith('logos/')).length === 1, 'only uploaded logos become files');
+  ok(zn.filter(n => n.startsWith('logos/')).length === 13 && mj.AllLogos === true, 'include all logos (default): 13 of 14 channel logos in logos/, got ' + zn.filter(n => n.startsWith('logos/')).length);
+  ok(mj.Logos.length === 14 && mj.Logos.filter(l => l.File).every(l => zn.includes(l.File)) && mj.Logos.find(l => l.Key === keys[1]).Source === 'upload' && mj.Logos.find(l => l.Key === keys[5]).Source === 'm3u', 'mapper.json Logos reference the files, with their source');
+  const fl = mj.LogoFailures; const l3 = mj.Logos.find(l => l.Key === keys[3]);
+  ok(fl.length === 1 && /HTTP 404/.test(fl[0].Error) && l3 && !l3.File && /\/m3u\/3\.png$/.test(l3.Url), 'failed download: link kept, listed in LogoFailures');
+  const res = await p.$eval('.iptvm-results', e => e.classList.contains('iptvm-show') ? e.textContent : '');
+  ok(/13 of 14 channel logos/.test(res) && /1 logo\(s\) could not be read/.test(res) && /FOX 5 NY/.test(res) && /HTTP 404/.test(res), 'export summary lists the failure: ' + res.slice(0, 160));
+  await p.screenshot({ path: SHOT + '/iptvmapper-export-summary.png' });
+  ok(await p.$$eval('.iptvm-exp-all', a => a.length === 2 && a.every(c => c.checked)), '"Include all logos" on by default (toolbar + General)');
+  await p.click('.iptvm-toolbar .iptvm-exp-all, .iptvm-exp-all');
+  ok(await p.evaluate(() => localStorage.getItem('claw.iptvmapper.exportAllLogos') === '0') && await p.$$eval('.iptvm-exp-all', a => a.every(c => !c.checked)), 'option persisted and both boxes synced');
+  await p.evaluate(() => __iptvmTest.exportZip()); await sleep(800);
+  ok(await p.evaluate(() => __iptvmLastExport.logos === 1 && __iptvmLastExport.all === false), 'option off: only the uploaded logo is stored (old behaviour)');
+  await p.click('.iptvm-exp-all'); await sleep(100);
+  await p.evaluate(() => { window.__noLogoApi = true; }); await p.evaluate(() => __iptvmTest.exportZip()); await sleep(800);
+  ok(await p.evaluate(() => __iptvmLastExport.logos === 1 && __iptvmLastExport.failures.length === 13), 'old server without the logo endpoint: Emby image read by the browser, the rest kept as links');
+  await p.evaluate(() => { window.__noLogoApi = false; });
 
   // ---------------- Import: build a deflate-compressed zip with JSZip
   const nbc = Buffer.from((await p.evaluate(async () => { const bl = await __logoPng('NBC 4', '#6a1b9a'); const u = new Uint8Array(await bl.arrayBuffer()); let s = ''; for (let i = 0; i < u.length; i++) s += String.fromCharCode(u[i]); return btoa(s); })), 'base64');
@@ -99,14 +119,15 @@ const PAGE = path.join(__dirname, 'iptv-io-page.html');
       { Key: keys[8], TunerHostId: 'm3u1', ManagementId: 'm3u1_8', Label: 'CNN', Guide: { ProviderId: 'oldxml', ChannelId: 'cnn.us' } },
       { Key: keys[9], TunerHostId: 'm3u1', ManagementId: 'm3u1_9', Label: 'MSNBC', Guide: { ProviderId: 'sd9', ChannelId: '123', Provider: { Id: 'sd9', Type: 'SchedulesDirect', Label: 'Schedules Direct' } } },
       { Key: 'm3u9|name:ghosttv', TunerHostId: 'm3u9', Label: 'Ghost TV', Name: 'Ghost TV', Number: '500' }],
+    Logos: [{ Key: keys[10], Label: 'HGTV', Source: 'm3u', File: 'logos/HGTV.png' }, { Key: keys[1], Label: 'WCBS 2', Source: 'emby', File: 'logos/WCBS_2.png' }, { Key: keys[11], Label: 'Food Network', Source: 'm3u', Url: 'https://x.invalid/f.png', File: null, Error: 'HTTP 404' }],
     Snapshots: [{ Id: '1759000000000', DateUtc: '2026-10-01T08:00:00Z', Summary: 'From the other server', Changes: [] }], MaxSnapshots: 20 };
-  const zi = new JSZip(); zi.file('mapper.json', JSON.stringify(imp, null, 2)); zi.file('logos/WNBC_4.png', nbc);
+  const zi = new JSZip(); zi.file('mapper.json', JSON.stringify(imp, null, 2)); zi.file('logos/WNBC_4.png', nbc); zi.file('logos/HGTV.png', nbc); zi.file('logos/WCBS_2.png', nbc);
   const impPath = path.join(os.tmpdir(), 'iptv-mapper-import-sample.zip');
   fs.writeFileSync(impPath, await zi.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }));
   await p.evaluate(() => { window.__conf = []; });
   await (await p.$('.iptvm-import-file')).uploadFile(impPath); await sleep(900);
   ok(await p.$eval('.iptvm-import-overlay', e => e.classList.contains('iptvm-show')), 'import preview opens');
-  ok(/5 channel override\(s\), 1 logo file\(s\), 1 snapshot/.test(await p.$eval('.iptvm-imp-file', e => e.textContent)), 'preview header describes the file');
+  ok(/5 channel override\(s\), 3 logo file\(s\), 1 snapshot/.test(await p.$eval('.iptvm-imp-file', e => e.textContent)), 'preview header describes the file');
   const prev = () => p.$$eval('.iptvm-imp-table tbody tr', t => t.map(r => Array.from(r.cells).map(c => c.textContent.trim()).join(' | ')));
   const summary = () => p.$eval('.iptvm-imp-summary', e => e.textContent);
   const setOpt = async (n, v) => { await p.$eval('input[name="' + n + '"][value="' + v + '"]', e => { e.checked = true; e.dispatchEvent(new Event('change', { bubbles: true })); }); await sleep(250); };
@@ -119,6 +140,7 @@ const PAGE = path.join(__dirname, 'iptv-io-page.html');
   ok(/Schedules Direct.*does not exist here/.test(sm), 'merge: missing provider warned');
   ok(/1 channel\(s\) from the file not found here \(kept as overrides for later\)/.test(sm), 'merge/all: unmatched kept for later');
   ok(await p.$eval('.iptvm-imp-logo', e => e.src.startsWith('blob:')), 'logo preview thumbnail from the zip');
+  ok(rows.some(r => /HGTV \| logo \|.*file logos\/HGTV\.png/.test(r)) && !rows.some(r => /WCBS 2 \| logo/.test(r)) && /2 embedded logo|1 embedded logo/.test(sm), 'merge: embedded logo restores a channel without a logo, keeps existing ones');
   const nMerge = rows.length;
   await p.screenshot({ path: SHOT + '/iptvmapper-import-preview.png' });
   await setOpt('iptvmImpMode', 'replace');
@@ -128,7 +150,7 @@ const PAGE = path.join(__dirname, 'iptv-io-page.html');
   const nReplAll = rows.length;
   await setOpt('iptvmImpScope', 'matching');
   rows = await prev(); sm = await summary();
-  ok(!rows.some(r => /WCBS 2 \||^\d+ ESPN \|/.test(r)) && rows.some(r => /\| name \| ABC 7 New York/.test(r)), 'replace + matching only: unlisted channels untouched');
+  ok(!rows.some(r => /^\d+ ESPN \|/.test(r)) && rows.some(r => /WCBS 2 \| logo \|.*file logos\/WCBS_2\.png/.test(r)) && rows.some(r => /\| name \| ABC 7 New York/.test(r)), 'replace + matching only: unlisted channels untouched, embedded logos restored');
   ok(/\(ignored\)/.test(sm), 'matching only: unmatched ignored');
   ok(nReplAll > rows.length && rows.length > nMerge - 1, 'change counts: merge ' + nMerge + ', replace/all ' + nReplAll + ', replace/matching ' + rows.length);
   await p.screenshot({ path: SHOT + '/iptvmapper-import-replace.png' });
@@ -151,7 +173,7 @@ const PAGE = path.join(__dirname, 'iptv-io-page.html');
   ok(await p.evaluate(() => /^Apply \d+ change\(s\) to Emby\?/.test(window.__conf[window.__conf.length - 1] || '')), 'normal Save confirmation asked: ' + await p.evaluate(() => (window.__conf[window.__conf.length - 1] || '').split('\n')[0]));
   ok(!(await p.$eval('.iptvm-import-overlay', e => e.classList.contains('iptvm-show'))), 'preview closed');
   ok(await p.$eval('.iptvm-act-save', e => !e.disabled), 'imported changes stay pending after cancelling Save');
-  ok(await p.evaluate(() => Object.keys(__iptvmTest.state.uploads).length >= 1), 'zip logo became an upload');
+  ok(await p.evaluate(() => Object.keys(__iptvmTest.state.uploads).length >= 2), 'zip logos became uploads');
   await p.screenshot({ path: SHOT + '/iptvmapper-import-pending.png' });
   // accept the save
   await p.evaluate(() => { window.__confAns = true; window.__ajax = []; });

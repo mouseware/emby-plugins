@@ -136,6 +136,7 @@
 .iptvMapperPage .iptvm-imp-table th,.iptvMapperPage .iptvm-imp-table td{padding:.35em .55em;border-bottom:1px solid rgba(128,128,128,.16);text-align:left;vertical-align:top;overflow:hidden;text-overflow:ellipsis}
 .iptvMapperPage .iptvm-imp-table th{position:sticky;top:0;background:rgba(40,40,40,.98)}
 .iptvMapperPage .iptvm-imp-table img{max-height:1.8em;max-width:4em;vertical-align:middle;background:#222}
+.iptvMapperPage .iptvm-exp-all-l{display:inline-flex;align-items:center;gap:.3em;font-size:88%;margin:0 .6em 0 .2em;cursor:pointer;white-space:nowrap}
 .iptvMapperPage .iptvm-imp-warn{color:#e0a030}
 </style>
   <div data-role="content">
@@ -192,7 +193,7 @@
         <input type="file" class="iptvm-bulk-file" accept="image/*" style="display:none" />
         <button type="button" class="iptvm-btn iptvm-act-enabledummy" style="display:none" title="Add the Channel Name Guide provider (all-day guide tile titled with the channel name) to Emby's guide providers">Enable Channel Name Guide</button>
         <button type="button" class="iptvm-btn iptvm-act-snapshots" title="Previous saves (rollback)">Snapshots</button>
-        <button type="button" class="iptvm-btn iptvm-act-export" title="Download all overrides, guide mappings, snapshots and uploaded logos as one .zip">Export&#x2026;</button>
+        <button type="button" class="iptvm-btn iptvm-act-export" title="Download all overrides, guide mappings, snapshots and logos as one .zip">Export&#x2026;</button><label class="iptvm-exp-all-l" title="Read every channel's current logo (Emby's stored image, a URL or the M3U tvg-logo) into logos/ in the zip"><input type="checkbox" class="iptvm-exp-all" checked /> Include all logos</label>
         <button type="button" class="iptvm-btn iptvm-act-import" title="Load an export .zip, preview the changes, then apply">Import&#x2026;</button>
         <input type="file" class="iptvm-import-file" accept=".zip,application/zip" style="display:none" />
         <button type="button" class="iptvm-btn iptvm-act-reload" title="Reload from server">&#x21BB; Reload</button>
@@ -228,8 +229,8 @@
           <div class="iptvm-small iptvm-muted iptvm-gdesc">Off = Save and Import are blocked on this page and the <i>Channel Name Guide</i> provider returns no channels or programs. Changes already saved to Emby stay as they are; overrides, guide mappings and snapshots are kept and can still be exported.</div>
           <button type="submit" class="iptvm-btn iptvm-btn-primary">Save</button> <span class="iptvm-small iptvm-g-msg"></span>
           <h3>Backup</h3>
-          <div class="iptvm-small iptvm-muted iptvm-gdesc"><b>Export</b> downloads one .zip with <code>mapper.json</code> (every channel override: number, name, group, enabled, guide-source mapping, locked fields, plus the snapshots) and a <code>logos/</code> folder with the uploaded or copied logo images. Logos set from a URL are stored as links. <b>Import</b> shows a preview first (Merge or Replace, all channels or matching only) and stores a snapshot of the current state before anything is applied.</div>
-          <button type="button" class="iptvm-btn iptvm-act-export">Export&#x2026;</button>
+          <div class="iptvm-small iptvm-muted iptvm-gdesc"><b>Export</b> downloads one .zip with <code>mapper.json</code> (every channel override: number, name, group, enabled, guide-source mapping, locked fields, plus the snapshots) and a <code>logos/</code> folder with the uploaded or copied logo images. With <b>Include all logos</b> (default) every channel's current logo is read on the server (Emby's stored image, else the URL or M3U tvg-logo) and stored in <code>logos/</code>; logos that cannot be read keep their link and are listed in the export summary. Without it, logos set from a URL are stored as links only. <b>Import</b> shows a preview first (Merge or Replace, all channels or matching only) and stores a snapshot of the current state before anything is applied.</div>
+          <button type="button" class="iptvm-btn iptvm-act-export">Export&#x2026;</button> <label class="iptvm-exp-all-l" title="Read every channel's current logo (Emby's stored image, a URL or the M3U tvg-logo) into logos/ in the zip"><input type="checkbox" class="iptvm-exp-all" checked /> Include all logos</label>
           <button type="button" class="iptvm-btn iptvm-act-import">Import&#x2026;</button>
           <h3>About</h3>
           <table class="iptvm-about"><tbody>
