@@ -19,7 +19,8 @@ namespace Claw.Emby.MediaIntegrity.Core
     public static class CheckResult
     {
         public const string Baseline = "baseline", Match = "match", Changed = "changed", Modified = "modified", ModifiedAccepted = "modified-accepted",
-            Missing = "missing", Unreadable = "unreadable", Accepted = "accepted", Legacy = "legacy-match", LegacyDiffers = "legacy-differs";
+            Missing = "missing", Unreadable = "unreadable", Accepted = "accepted", Legacy = "legacy-match", LegacyDiffers = "legacy-differs",
+            Moved = "moved", MovedForced = "moved-forced";
     }
 
     public class FileRecord
@@ -45,6 +46,8 @@ namespace Claw.Emby.MediaIntegrity.Core
         public long? LastScanId { get; set; }
         public long? LegacyId { get; set; }
         public string Error { get; set; }
+        /// <summary>Missing rows: likely new path (same name and size, not yet confirmed by hash).</summary>
+        public string MoveHint { get; set; }
     }
 
     public class CheckRecord

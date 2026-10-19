@@ -22,8 +22,14 @@ Finds silent corruption (bit rot), missing and unreadable files in your Emby lib
   - They are separate from the full scan, so they also run while the scan is paused or stopped.
   - Only the speed limit applies to them; they don't pause for playback, because you asked for them.
   - Progress shows in the same panel as the scan: file x of y, current file, speed, time left, result counts, and a Cancel button.
+- **Moved files (1.0.7):** when files are moved or renamed outside Emby, their old rows show as *missing* and the new paths as new files. Media Integrity can match them up and keep the history.
+  - **Likely moved hint:** after every full scan and file-list refresh, a missing row shows *likely moved: <path>* when a new file (not yet hashed, only just hashed, or first seen after the old one was last seen) has the same file name and size. It is a hint only; nothing is changed.
+  - **Find moved files** (Problems toolbar, for the selected missing files or all of them): candidates are new files with the same size on every library and extra folder, plus untracked files in optional extra folders (any drive). Same file name first; renamed candidates (a few per file) only for files still unresolved. Candidates are hashed in the manual-check queue, with progress in the usual panel; a candidate whose hash is already known is compared without reading it. Only an identical MD5 counts. Read-only until you migrate.
+  - **Results:** old path → new path with a **confidence** (high: same MD5 and name; medium: same MD5, renamed; low: same name and size, not confirmed) and the match type. **Migrate** (per row or **Migrate all confirmed**) moves the record and its whole check history to the new path, removes the duplicate row of the new path, adds a *moved* check and logs the move in Activity. A match whose new file changed since it was hashed is skipped. **Ignore** (not the same file) is remembered; neither the search nor the hint suggests that pair again. Low-confidence rows offer **Verify & relink** instead.
+  - **Relink** (missing rows): enter the new path; the file is hashed and relinked only when it matches the baseline. If it doesn't, the dialog explains why and offers **Relink anyway**, which makes the new hash the baseline (recorded as *moved-forced*). A path that is already tracked with its own history (a copy) is refused.
+  - Files on disk are never touched. While the plugin is switched off (General tab), Find, Migrate and Relink are refused.
 - **Page:** Main menu → Media Integrity.
-  - Problems: accept new hash, **Check now** (a live hash; the row updates in place), ignore.
+  - Problems: accept new hash, **Check now** (a live hash; the row updates in place), ignore, **Find moved files**, **Relink** and Forget on missing rows.
   - Browse:
     - search across all files with a status filter (OK, never verified, changed, modified, missing, unreadable, problems, ignored);
     - grouped by library or by drive/folder, each with a **Check this library/folder** button;
@@ -36,11 +42,16 @@ Finds silent corruption (bit rot), missing and unreadable files in your Emby lib
 Data is stored in `<Emby data>\claw-mediaintegrity\integrity.db` (SQLite, through Emby's bundled sqlite3).
 
 Tests:
-- `tests/Claw.Emby.MediaIntegrity.Tests`: `dotnet run`. Set `LEGACY_DB` and `VERIFY_DIR` to also test against a copy of a real database.
+- `tests/Claw.Emby.MediaIntegrity.Tests`: `dotnet run`. Set `LEGACY_DB` and `VERIFY_DIR` to also test against a copy of a real database, and `MI_DB_COPY` (a copy of `integrity.db`) for a read-only moved-files dry run (no file is hashed).
 - `tests/web`: `node build-page.js && node test-integrity.js [shotDir]` for the page and `node test-inject.js [shotDir]` for the item menu. Both use fake data only.
 
 ## Changes
 
+- **1.0.7.0**
+  - **Find moved files**, **Migrate**, **Ignore** and **Relink** for missing files, plus a *likely moved* hint from normal scans (see *Moved files* above). API: `POST /ClawMediaIntegrity/Moves/Find` (`Ids`, `Folders`), `GET /ClawMediaIntegrity/Moves`, `POST .../Moves/Migrate` (`Ids`, empty = all confirmed), `POST .../Moves/Ignore` (`Id`, `Path`), `POST .../Moves/Clear`, `POST .../Files/{Id}/Relink` (`Path`, `Force`). Searches and relinks are jobs of the manual-check queue (`Kind` = `moves` / `relink`; `Outcome` and `Message` carry the result).
+  - Database: column `files.move_hint`, table `move_ignores`, index on `files(size)`. The last search result is kept, so it shows again after a reload or restart.
+  - Activity: type **Moved files** for searches, migrations and relinks; the entry lists the moved files.
+  - Fix: the Type cell of file tables no longer breaks the row layout; row action buttons don't wrap.
 - **1.0.6.0**
   - **File type column.** The Problems table and every file table under Browse (library, folder and search boxes) have a **Type** column with the file extension. It sorts like the other columns, and a **type filter** dropdown lists the extensions with their counts (server-side via `GET /ClawMediaIntegrity/Files/Types`; `Type` is also accepted by `Files` and `Check/Matching`, so "Check all matching" respects the filter). Columns stay resizable.
   - **General tab** with an **Enable plugin** switch and an About section (version, injected script `claw-media-integrity.js`, GitHub link). Switching off asks first, then stops the full scan (it resumes later), the background hashing, the file-list refresh and manual checks, and hides "Verify integrity" in the item menu. Hashes and history are kept; a banner shows the off state. `GET /ClawMediaIntegrity/Info` returns `{ Enabled, Version }`.
@@ -96,6 +107,9 @@ All images are in [docs/screenshots/media-integrity/](../docs/screenshots/media-
 |---|---|
 | ![Problems while a full scan runs](../docs/screenshots/media-integrity/problems-running.png)<br/>Problems while a full scan runs | ![Problems filtered by file type](../docs/screenshots/media-integrity/problems-type.png)<br/>Problems filtered by file type |
 | ![Problems: select all and bulk actions](../docs/screenshots/media-integrity/problems-select-all.png)<br/>Problems: select all and bulk actions | ![Live Check now (in-row progress)](../docs/screenshots/media-integrity/checknow-progress.png)<br/>Live Check now (in-row progress) |
+| ![Missing files with a "likely moved" hint and Relink](../docs/screenshots/media-integrity/moves-hints.png)<br/>Missing files with a "likely moved" hint and Relink | ![Find moved files: scope and extra folders](../docs/screenshots/media-integrity/moves-dialog.png)<br/>Find moved files: scope and extra folders |
+| ![Find moved files: hashing candidates in the progress panel](../docs/screenshots/media-integrity/moves-progress.png)<br/>Find moved files: hashing candidates in the progress panel | ![Moved files found: confidence, match, Migrate / Ignore](../docs/screenshots/media-integrity/moves-results.png)<br/>Moved files found: confidence, match, Migrate / Ignore |
+| ![Relink a missing file (prefilled with the hint)](../docs/screenshots/media-integrity/relink-dialog.png)<br/>Relink a missing file (prefilled with the hint) | ![Relink: hash does not match, Relink anyway offered](../docs/screenshots/media-integrity/relink-mismatch.png)<br/>Relink: hash does not match, Relink anyway offered |
 | ![Browse by library](../docs/screenshots/media-integrity/browse-library.png)<br/>Browse by library | ![Browse a library (expanded)](../docs/screenshots/media-integrity/browse-expanded.png)<br/>Browse a library (expanded) |
 | ![File type column and filter](../docs/screenshots/media-integrity/browse-type-filter.png)<br/>File type column and filter | ![Browse by folder](../docs/screenshots/media-integrity/browse-folder.png)<br/>Browse by folder |
 | ![Library with files not yet hashed](../docs/screenshots/media-integrity/untracked-library.png)<br/>Library with files not yet hashed | ![Checking a whole library](../docs/screenshots/media-integrity/check-library.png)<br/>Checking a whole library |
@@ -104,5 +118,5 @@ All images are in [docs/screenshots/media-integrity/](../docs/screenshots/media-
 | ![Per-file history](../docs/screenshots/media-integrity/history.png)<br/>Per-file history | !["Verify integrity" in the item menu](../docs/screenshots/media-integrity/item-menu.png)<br/>"Verify integrity" in the item menu |
 | ![Result toast (OK)](../docs/screenshots/media-integrity/item-toast-ok.png)<br/>Result toast (OK) | ![Result toast (changed file) with a link](../docs/screenshots/media-integrity/item-toast-changed.png)<br/>Result toast (changed file) with a link |
 | ![Past scans and import](../docs/screenshots/media-integrity/activity.png)<br/>Past scans and import | ![Manual checks in Activity](../docs/screenshots/media-integrity/activity-manual.png)<br/>Manual checks in Activity |
-| ![Settings (skip list, schedule)](../docs/screenshots/media-integrity/settings.png)<br/>Settings (skip list, schedule) | ![General tab: Enable switch and About](../docs/screenshots/media-integrity/general.png)<br/>General tab: Enable switch and About |
-| ![Switched off: banner](../docs/screenshots/media-integrity/off-banner.png)<br/>Switched off: banner |   |
+| ![Moves and relinks in Activity](../docs/screenshots/media-integrity/activity-moves.png)<br/>Moves and relinks in Activity | ![Settings (skip list, schedule)](../docs/screenshots/media-integrity/settings.png)<br/>Settings (skip list, schedule) |
+| ![General tab: Enable switch and About](../docs/screenshots/media-integrity/general.png)<br/>General tab: Enable switch and About | ![Switched off: banner](../docs/screenshots/media-integrity/off-banner.png)<br/>Switched off: banner |

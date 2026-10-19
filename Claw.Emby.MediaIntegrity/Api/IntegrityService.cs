@@ -130,6 +130,30 @@ namespace Claw.Emby.MediaIntegrity.Api
     public class GetSkipRecommended : IReturn<string[]> { }
     public class SkipPreview { public long WouldRemove { get; set; } public long TrackedNow { get; set; } }
 
+    [Route("/ClawMediaIntegrity/Moves/Find", "POST", Summary = "Media Integrity: find where missing files moved (Ids = missing file ids, empty = all; Folders = extra folders to search, one per line)")]
+    [Authenticated(Roles = "Admin")]
+    public class PostMovesFind : IReturn<CheckJob> { public string Ids { get; set; } public string Folders { get; set; } }
+
+    [Route("/ClawMediaIntegrity/Moves", "GET", Summary = "Media Integrity: result of the last Find moved files")]
+    [Authenticated(Roles = "Admin")]
+    public class GetMoves : IReturn<MoveSearch> { }
+
+    [Route("/ClawMediaIntegrity/Moves/Migrate", "POST", Summary = "Media Integrity: move records (with history) to their found new path (Ids = missing file ids, empty = all confirmed)")]
+    [Authenticated(Roles = "Admin")]
+    public class PostMovesMigrate : IReturn<MigrateResult> { public string Ids { get; set; } }
+
+    [Route("/ClawMediaIntegrity/Moves/Ignore", "POST", Summary = "Media Integrity: not the same file; never suggest this new path for this missing file again")]
+    [Authenticated(Roles = "Admin")]
+    public class PostMovesIgnore : IReturn<OkResult> { public long Id { get; set; } public string Path { get; set; } }
+
+    [Route("/ClawMediaIntegrity/Moves/Clear", "POST", Summary = "Media Integrity: dismiss the last Find moved files result")]
+    [Authenticated(Roles = "Admin")]
+    public class PostMovesClear : IReturn<OkResult> { }
+
+    [Route("/ClawMediaIntegrity/Files/{Id}/Relink", "POST", Summary = "Media Integrity: relink a missing file to a new path (hashed; accepted only when it matches unless Force)")]
+    [Authenticated(Roles = "Admin")]
+    public class PostRelink : IReturn<CheckJob> { public long Id { get; set; } public string Path { get; set; } public bool Force { get; set; } }
+
     public class DiscoveryStatus { public bool Running { get; set; } public DateTime? Scheduled { get; set; } public DiscoveryResult Last { get; set; } }
 
     public class ManualStatus
@@ -164,10 +188,12 @@ namespace Claw.Emby.MediaIntegrity.Api
         public bool Ignored { get; set; }
         public string Error { get; set; }
         public DateTime? Mtime { get; set; }
+        /// <summary>Missing rows: likely new path found by the last scan / file list (same name and size).</summary>
+        public string MoveHint { get; set; }
         public static FileDto From(FileRecord f) => new FileDto
         {
             Id = f.Id, Path = f.Path, Name = f.Name, Folder = f.Folder, Ext = IntegrityStore.ExtOf(f.Name), Size = f.Size, Hash = f.BaselineMd5, LastHash = f.LastMd5, LastChecked = f.LastChecked, BaselineDate = f.BaselineDate,
-            Status = f.Status, LastResult = f.LastResult, Ignored = f.Ignored, Error = f.Error, Mtime = f.Mtime
+            Status = f.Status, LastResult = f.LastResult, Ignored = f.Ignored, Error = f.Error, Mtime = f.Mtime, MoveHint = f.MoveHint
         };
     }
     public class PagedDto { public long Total { get; set; } public int StartIndex { get; set; } public List<FileDto> Items { get; set; } }
@@ -459,6 +485,19 @@ namespace Claw.Emby.MediaIntegrity.Api
             return new SkipPreview { WouldRemove = h.Store.MatchingSkip(ScanEngine.GlobsToRegex(pats)).Count, TrackedNow = h.Store.FileCount };
         }
         public object Get(GetSkipRecommended r) => PluginConfiguration.RecommendedExclude;
+
+        // ---- moved files (1.0.7) ----
+        public object Post(PostMovesFind r)
+        {
+            var h = H;
+            var folders = (r.Folders ?? "").Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+            return h.Snap(h.Moves.Find(ParseIds(r.Ids), folders));
+        }
+        public object Get(GetMoves r) => (object)H.Moves.Last() ?? new MoveSearch { State = "none" };
+        public object Post(PostMovesMigrate r) => H.Moves.Migrate(ParseIds(r.Ids));
+        public object Post(PostMovesIgnore r) => new OkResult { Ok = H.Moves.Ignore(r.Id, r.Path) > 0 };
+        public object Post(PostMovesClear r) { H.Moves.Clear(); return new OkResult { Ok = true }; }
+        public object Post(PostRelink r) { var h = H; return h.Snap(h.Moves.Relink(r.Id, r.Path, r.Force)); }
 
         public object Post(PostFileListRefresh r) { H.RequestDiscovery("refresh button", 0); return new OkResult { Ok = true }; }
     }

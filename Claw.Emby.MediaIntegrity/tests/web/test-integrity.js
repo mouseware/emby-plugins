@@ -15,7 +15,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   await p.evaluate(() => document.fonts.ready); await sleep(600);
   const click = (s) => p.$eval(s, e => e.click());
   const txt = (s) => p.$eval(s, e => e.textContent.trim());
-  const shot = async (n) => { if (shots) await p.screenshot({ path: path.join(shots, 'mediaintegrity-' + n + '.png') }); };
+  const shot = async (n) => { if (shots) await p.screenshot({ path: path.join(shots, n + '.png') }); };
   const vis = (s) => p.$eval(s, e => !!(e.offsetWidth || e.offsetHeight));
 
   // icon
@@ -41,7 +41,6 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   ok(await vis('.mi-act-pause'), 'resumed');
   await click('.mi-act-stop'); await sleep(2300);
   ok(await vis('.mi-act-start') && await vis('.mi-act-fresh'), 'stopped -> start + start over');
-  await shot('problems-stopped');
   // bulk / actions
   ok(await p.$eval('.mi-bulk[data-act=accept]', e => e.disabled), 'bulk disabled with no selection');
   await p.$eval('.mi-prob-t tbody tr:nth-child(1) .mi-sel', e => e.click());
@@ -379,10 +378,95 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   await shot('problems-type');
   await p.$eval('.mi-prob-type', e => { e.value = ''; e.dispatchEvent(new Event('change', { bubbles: true })); }); await sleep(300);
   ok((await p.$$('.mi-prob-t tbody tr[data-id]')).length === pAll, 'Problems type filter cleared');
+  // ---------------- 1.0.7: moved files ----------------
+  await p.evaluate(() => { window.__confAns = true; window.confirm = (m) => { (window.__conf = window.__conf || []).push(m); return window.__confAns; }; __srv.addMoves(); localStorage.removeItem('claw.mediaintegrity.cols.problems'); });
+  await click('.mi-tab[data-tab=browse]'); await sleep(200); await click('.mi-tab[data-tab=problems]'); await sleep(500);
+  await p.$eval('.mi-prob-kind', e => { e.value = 'missing'; e.dispatchEvent(new Event('change', { bubbles: true })); }); await sleep(300);
+  const nMiss = (await p.$$('.mi-prob-t tbody tr[data-id]')).length;
+  ok(nMiss === 8, 'missing filter: 8 missing rows (' + nMiss + ')');
+  const hints = await p.$$eval('.mi-prob-t .mi-hint', a => a.map(x => x.textContent));
+  ok(hints.length === 4 && hints.some(h => /Archive\\Movies\\Night Ride/.test(h)), 'scan hint "likely moved" on 4 missing rows');
+  ok((await p.$$('.mi-prob-t button[data-act=relink]')).length === nMiss, 'Relink button on every missing row');
+  ok(!(await p.$eval('.mi-moves-find', e => e.disabled)), 'Find moved files enabled');
+  ok(!(await vis('.mi-moves')), 'no result panel before a search');
+  await shot('moves-hints');
+  await click('.mi-moves-find'); await sleep(300);
+  ok(/Looks for 8 missing files/.test(await txt('.mi-dlg-body')), 'find dialog: scope = all missing');
+  await p.type('.mi-mv-folders', 'G:\\Restored');
+  await shot('moves-dialog');
+  await p.evaluate(() => { __srv.freeze = true; });
+  await click('.mi-mv-start'); await sleep(2600);
+  ok(await p.evaluate(() => __srv.lastFind && __srv.lastFind.Folders === 'G:\\Restored' && __srv.lastFind.Ids === ''), 'Moves/Find called with the extra folder');
+  await p.evaluate(() => { __srv.freeze = false; __srv.advance(); __srv.advance(); __srv.freeze = true; }); await sleep(2300);
+  ok(/Finding moved files/.test(await txt('.mi-man-title')), 'progress panel: Finding moved files');
+  ok(await p.$eval('.mi-moves-find', e => e.disabled), 'Find disabled while searching');
+  await shot('moves-progress');
+  await p.evaluate(() => { __srv.freeze = false; });
+  for (let i = 0; i < 40 && !(await p.$$('.mi-moves-t tbody tr')).length; i++) await sleep(500);
+  const mrows = await p.$$eval('.mi-moves-t tbody tr', a => a.map(tr => tr.textContent));
+  ok(mrows.length === 5, 'results: 5 rows (' + mrows.length + ')');
+  ok(/4 exact, 1 likely, 3 not found/.test(await p.evaluate(() => __toasts.slice(-1)[0])), 'finish toast: ' + await p.evaluate(() => __toasts.slice(-1)[0]));
+  ok(/5 moved files found/.test(await txt('.mi-moves-title')) && /searched 8 missing files, 4 candidates hashed/.test(await txt('.mi-moves-sub')), 'result header');
+  const confs = await p.$$eval('.mi-moves-t .mi-conf', a => a.map(x => x.textContent));
+  ok(confs.join(',') === 'high,high,high,medium,low', 'confidence column: ' + confs.join(','));
+  ok((await p.$$('.mi-moves-t button[data-act=migrate]')).length === 4 && (await p.$$('.mi-moves-t button[data-act=relink]')).length === 1, 'Migrate on confirmed, Verify & relink on likely');
+  ok(/Migrate all confirmed \(4\)/.test(await txt('.mi-moves-all')), 'Migrate all (4)');
+  ok(/renamed: Beach\.mov → Beach day 1\.mov/.test(mrows.join('|')), 'rename note');
+  ok((await p.$$('.mi-moves-t th .cr-h')).length >= 4, 'results table has resizable columns');
+  await shot('moves-results');
+  // ignore the likely one
+  await p.$eval('.mi-moves-t tr:last-child button[data-act=ignore]', e => e.click()); await sleep(500);
+  ok((await p.$$('.mi-moves-t tbody tr')).length === 4 && await p.evaluate(() => (__srv.ignoredMoves || []).length === 1 && /Old Title \(Unabridged\)/.test(__srv.ignoredMoves[0])), 'Ignore removes the row and remembers the pair');
+  // migrate one row
+  const beachId = await p.$eval('.mi-moves-t tr:nth-child(4)', tr => tr.getAttribute('data-id'));
+  await p.$eval('.mi-moves-t tr:nth-child(4) button[data-act=migrate]', e => e.click()); await sleep(600);
+  ok(await p.evaluate(id => { const f = __srv.files.filter(x => x.Id === +id)[0]; return f.Status === 'ok' && /Summer\\Beach day 1\.mov$/.test(f.Path) && !__srv.files.some(x => x !== f && x.Path === f.Path); }, beachId), 'Migrate: record moved, duplicate row removed');
+  ok(/1 file migrated/.test(await p.evaluate(() => __toasts.slice(-1)[0])), 'migrate toast');
+  ok((await p.$$('.mi-moves-t tbody tr')).length === 3, '3 rows left');
+  // relink dialog for a hinted row (prefilled with the hint) + Not this file
+  const oldTitle = await p.evaluate(() => __srv.files.filter(f => /Old Title\.m4b$/.test(f.Path) && f.Status === 'missing')[0].Id);
+  // migrate all
+  await click('.mi-moves-all'); await sleep(700);
+  ok(/Migrate 3 confirmed moved files/.test(await p.evaluate(() => window.__conf.slice(-1)[0])), 'Migrate all asks first');
+  ok(/3 files migrated/.test(await p.evaluate(() => __toasts.slice(-1)[0])), 'migrate all toast');
+  ok(/No moved files left/.test(await txt('.mi-moves-title')) && !(await vis('.mi-moves-t')), 'nothing left to migrate');
+  ok((await p.$$('.mi-prob-t tbody tr[data-id]')).length === 4, '4 missing left after migrating');
+  // relink by hand: wrong file -> mismatch + force offered; right file -> relinked
+  const party = await p.evaluate(() => __srv.mv.relink.Id);
+  await p.$eval('.mi-prob-t tr[data-id="' + party + '"] button[data-act=relink]', e => e.click()); await sleep(300);
+  ok((await p.$eval('.mi-rl-path', e => e.value)) === 'E:\\Family\\Videos\\2023\\Party.mov', 'relink dialog prefilled with the old path');
+  await p.$eval('.mi-rl-path', e => { e.value = 'E:\\Family\\Videos\\2023\\Summer\\Party (edit).mov'; });
+  await click('.mi-rl-go');
+  for (let i = 0; i < 20 && !(await p.$('.mi-warnbox')); i++) await sleep(400);
+  ok(/Hash does not match/.test(await txt('.mi-rl-state')) && await vis('.mi-rl-force'), 'mismatch: warning + Relink anyway');
+  ok(await p.evaluate(id => __srv.files.filter(x => x.Id === id)[0].Status === 'missing', party), 'mismatch: not relinked');
+  await shot('relink-mismatch');
+  await p.$eval('.mi-rl-path', e => { e.value = 'E:\\Family\\Videos\\2023\\Summer\\Party.mov'; });
+  await click('.mi-rl-go');
+  for (let i = 0; i < 20 && await p.evaluate(() => document.querySelector('.mi-modal').classList.contains('mi-on')); i++) await sleep(400);
+  ok(await p.evaluate(id => { const f = __srv.files.filter(x => x.Id === id)[0]; return f.Status === 'ok' && /Summer\\Party\.mov$/.test(f.Path); }, party), 'relink with matching hash: moved');
+  ok(/Relinked: hash matches/.test(await p.evaluate(() => __toasts.slice(-1)[0])), 'relink toast');
+  // hinted row: dialog prefilled with the hint, "Not this file"
+  await p.evaluate(id => { const f = __srv.files.filter(x => x.Id === id)[0]; f.MoveHint = 'F:\\Books\\Jane Example\\Old Title (Unabridged)\\Old Title.m4b'; }, oldTitle);
+  await click('.mi-prob-ign'); await sleep(200); await click('.mi-prob-ign'); await sleep(400);
+  await p.$eval('.mi-prob-t tr[data-id="' + oldTitle + '"] button[data-act=relink]', e => e.click()); await sleep(300);
+  ok(/Old Title \(Unabridged\)/.test(await p.$eval('.mi-rl-path', e => e.value)) && await vis('.mi-rl-notthis'), 'hinted row: dialog prefilled with the hint, Not this file offered');
+  await shot('relink-dialog');
+  await click('.mi-rl-notthis'); await sleep(500);
+  ok(await p.evaluate(id => !__srv.files.filter(x => x.Id === id)[0].MoveHint, oldTitle), 'Not this file clears the hint');
+  // activity
+  await click('.mi-tab[data-tab=activity]'); await sleep(500);
+  await p.$eval('.mi-act-type', e => { e.value = 'moves'; e.dispatchEvent(new Event('change', { bubbles: true })); }); await sleep(300);
+  const acts = await p.$$eval('.mi-scans-t tbody tr[data-scan]', a => a.map(x => x.textContent));
+  ok(acts.length === 3 && acts.every(t => /Moved files/.test(t)) && acts.some(t => /Migrated 3 moved files/.test(t)) && acts.some(t => /Relink Party\.mov/.test(t)), 'Activity: moves logged (' + acts.length + ')');
+  await shot('activity-moves');
+  await p.$eval('.mi-act-type', e => { e.value = ''; e.dispatchEvent(new Event('change', { bubbles: true })); });
+  await click('.mi-tab[data-tab=problems]'); await sleep(300);
+  await p.$eval('.mi-prob-kind', e => { e.value = ''; e.dispatchEvent(new Event('change', { bubbles: true })); }); await sleep(200);
   // General tab
   await click('.mi-tab[data-tab=general]'); await sleep(500);
   ok(await p.$eval('.mi-s-enabled', e => e.checked), 'General: Enable switch on');
-  ok((await txt('.mi-version')) === '1.0.6.0', 'General: About shows the version');
+  ok((await txt('.mi-version')) === '1.0.7.0', 'General: About shows the version');
   const gAbout = await p.$eval('.mi-general-form', e => e.innerHTML);
   ok(/claw-media-integrity\.js/.test(gAbout) && /github\.com\/mouseware\/emby-plugins/.test(gAbout), 'General: injected script + GitHub link');
   await shot('general');
@@ -394,6 +478,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   await p.$eval('.mi-s-enabled', e => { e.checked = false; }); await p.$eval('.mi-general-form', f => f.requestSubmit()); await sleep(1500);
   ok(await p.evaluate(() => __srv.cfg.Enabled === false), 'switch off saved');
   ok(await vis('.mi-off-banner'), 'off banner shown');
+  ok(await p.$eval('.mi-moves-find', e => e.disabled), 'switched off: Find moved files disabled');
   await shot('off-banner');
   const nSave2 = await p.evaluate(() => __srv.saved.length);
   await p.$eval('.mi-s-enabled', e => { e.checked = true; }); await p.$eval('.mi-general-form', f => f.requestSubmit()); await sleep(1500);

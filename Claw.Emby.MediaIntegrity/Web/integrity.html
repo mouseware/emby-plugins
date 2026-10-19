@@ -76,10 +76,23 @@
 #clawMediaIntegrityPage .mi-btn.mi-mini{padding:.12em .5em;font-size:.86em}
 #clawMediaIntegrityPage .mi-btn[disabled]{opacity:.4;cursor:default}
 #clawMediaIntegrityPage .mi-acts{display:flex;gap:.3em;flex-wrap:nowrap}
+#clawMediaIntegrityPage .mi-acts .mi-btn{white-space:nowrap}
+#clawMediaIntegrityPage td.mi-type{display:table-cell;padding:.42em .5em;border-radius:0;background:none;font-size:inherit}
 #clawMediaIntegrityPage .mi-note{background:rgba(82,181,75,.08);border:1px solid rgba(82,181,75,.35);border-radius:.35em;padding:.6em .9em;margin:.6em 0 1em;font-size:.92em}
 #clawMediaIntegrityPage .mi-warn{background:rgba(224,160,48,.1);border-color:rgba(224,160,48,.5)}
 #clawMediaIntegrityPage .mi-empty{opacity:.6;padding:1em .3em}
 #clawMediaIntegrityPage .mi-pager{display:flex;gap:.6em;align-items:center;margin-top:.6em;font-size:.9em}
+#clawMediaIntegrityPage .mi-moves{margin:.2em 0 1em;padding:.7em .9em;border-radius:.35em;background:rgba(61,143,214,.1);border:1px solid rgba(61,143,214,.35)}
+#clawMediaIntegrityPage .mi-moves-head{display:flex;align-items:center;gap:.6em;flex-wrap:wrap;margin-bottom:.5em}
+#clawMediaIntegrityPage .mi-moves-head .md-icon{color:#8ec0ec}
+#clawMediaIntegrityPage .mi-conf{display:inline-block;font-size:.8em;padding:.05em .55em;border-radius:1em;text-transform:uppercase;letter-spacing:.03em}
+#clawMediaIntegrityPage .mi-conf-high{background:#2f6b2b;color:#d8f5d5}#clawMediaIntegrityPage .mi-conf-medium{background:#2b5a7d;color:#d6ebfa}#clawMediaIntegrityPage .mi-conf-low{background:#7a5a1c;color:#fbe9c4}
+#clawMediaIntegrityPage .mi-small{font-size:.85em}
+#clawMediaIntegrityPage .mi-hint{display:block;max-width:18em;align-items:center;gap:.3em;color:#8ec0ec;font-size:.88em;margin-top:.15em;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+#clawMediaIntegrityPage .mi-hint .md-icon{font-size:1.1em}
+#clawMediaIntegrityPage .mi-warnbox{margin-top:.8em;padding:.6em .8em;border-radius:.3em;background:rgba(179,58,58,.18);border:1px solid rgba(179,58,58,.5)}
+#clawMediaIntegrityPage .mi-dlg textarea,#clawMediaIntegrityPage .mi-dlg input.mi-in{font:inherit;color:inherit;background:#2a2a2a;border:1px solid #444;border-radius:.25em;padding:.45em .6em;width:100%;box-sizing:border-box}
+#clawMediaIntegrityPage .mi-dlg{min-width:min(44em,90vw)}
 #clawMediaIntegrityPage .mi-modal{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10001;display:none;align-items:center;justify-content:center}
 #clawMediaIntegrityPage .mi-modal.mi-on{display:flex}
 #clawMediaIntegrityPage .mi-dlg{background:#202020;color:#eee;border-radius:.5em;padding:1.2em 1.4em;max-width:min(64em,94vw);max-height:88vh;overflow:auto;box-shadow:0 1em 3em rgba(0,0,0,.6)}
@@ -155,10 +168,22 @@
           <button type="button" class="mi-btn mi-mini mi-bulk" data-act="accept" disabled><i class="md-icon">done_all</i>Accept new hash</button>
           <button type="button" class="mi-btn mi-mini mi-bulk" data-act="recheck" disabled><i class="md-icon">health_and_safety</i>Check now</button>
           <button type="button" class="mi-btn mi-mini mi-bulk" data-act="ignore" disabled><i class="md-icon">visibility_off</i>Ignore</button>
+          <button type="button" class="mi-btn mi-mini mi-moves-find" title="Look for missing files at a new path (same size; confirmed by hash)" disabled><i class="md-icon">travel_explore</i>Find moved files</button>
         </div>
         <div class="mi-pend-note" style="display:none"><i class="md-icon">schedule</i><span class="mi-pend-text"></span>
           <button type="button" class="mi-btn mi-mini mi-pend-browse"><i class="md-icon">list</i>Show in Browse</button>
           <button type="button" class="mi-btn mi-mini mi-pend-check"><i class="md-icon">health_and_safety</i>Check all not yet hashed</button></div>
+        <div class="mi-moves" style="display:none">
+          <div class="mi-moves-head"><i class="md-icon">drive_file_move</i><b class="mi-moves-title"></b><span class="mi-dim mi-moves-sub"></span>
+            <span style="margin-left:auto"></span>
+            <button type="button" class="mi-btn mi-mini mi-pri mi-moves-all"><i class="md-icon">done_all</i>Migrate all confirmed</button>
+            <button type="button" class="mi-btn mi-mini mi-moves-close" title="Hide this result (nothing is changed)"><i class="md-icon">close</i>Dismiss</button></div>
+          <table class="mi-t mi-moves-t"><thead><tr>
+            <th class="mi-ns" data-col="old">Missing file (old path)</th><th class="mi-ns" data-col="new">Found at (new path)</th><th class="mi-ns mi-num" data-col="size">Size</th>
+            <th class="mi-ns" data-col="conf">Confidence</th><th class="mi-ns" data-col="match">Match</th><th class="mi-ns" data-col="actions">Actions</th>
+          </tr></thead><tbody></tbody></table>
+          <div class="fieldDescription"><b>Migrate</b> moves the record and its whole check history to the new path, removes the duplicate "not yet hashed" row of the new path and logs the move in Activity. Only matches confirmed by an identical MD5 can be migrated; <b>likely</b> matches (same name and size) are hashed first by <b>Verify &amp; relink</b>. <b>Ignore</b>: not the same file, never suggested again. Files on disk are never touched.</div>
+        </div>
         <div class="mi-selall mi-prob-selall" style="display:none"></div>
         <table class="mi-t mi-prob-t"><thead><tr>
           <th class="mi-ns" data-col="sel"><input type="checkbox" class="mi-sel-all" /></th>
@@ -167,7 +192,7 @@
         </tr></thead><tbody class="mi-click"></tbody></table>
         <div class="mi-pager mi-prob-pager" style="display:none"><button type="button" class="mi-btn mi-mini mi-prob-prev">‹ Previous</button><span class="mi-prob-page"></span><button type="button" class="mi-btn mi-mini mi-prob-next">Next ›</button></div>
         <div class="mi-empty mi-prob-empty" style="display:none">No problems. Every checked file matches its baseline.</div>
-        <div class="fieldDescription"><b>Changed</b>: content differs but size and modified time did not: typical of bit rot or a bad copy. <b>Modified</b>: the file was rewritten (size or time changed). Accept the new hash if that was intended. <b>Check now</b> hashes the file right away (separate from the full scan, also while it is paused) and updates the row when done.</div>
+        <div class="fieldDescription"><b>Changed</b>: content differs but size and modified time did not: typical of bit rot or a bad copy. <b>Modified</b>: the file was rewritten (size or time changed). Accept the new hash if that was intended. <b>Check now</b> hashes the file right away (separate from the full scan, also while it is paused) and updates the row when done. <b>Missing</b> files that a scan sees at a new path (same name and size) show <i>likely moved</i>: use <b>Find moved files</b> to confirm by hash and migrate, or <b>Relink</b> to point one file at its new path.</div>
       </div>
 
       <!-- Browse -->
@@ -191,7 +216,7 @@
       <!-- Activity -->
       <div class="mi-panel" data-panel="activity">
         <div class="mi-import-note"></div>
-        <div class="mi-bar2"><select class="mi-act-type"><option value="">All activity</option><option value="scheduled">Scheduled scans</option><option value="fullmanual">Full scans started by you</option><option value="manual">Manual checks</option><option value="item">Item menu</option><option value="newmedia">New media</option></select>
+        <div class="mi-bar2"><select class="mi-act-type"><option value="">All activity</option><option value="scheduled">Scheduled scans</option><option value="fullmanual">Full scans started by you</option><option value="manual">Manual checks</option><option value="item">Item menu</option><option value="newmedia">New media</option><option value="moves">Moved files</option></select>
           <span class="mi-dim mi-act-count"></span></div>
         <table class="mi-t mi-scans-t"><thead><tr>
           <th class="mi-ns" data-col="type">Type</th><th class="mi-ns" data-col="what">What was checked</th><th class="mi-ns" data-col="started">Started</th><th class="mi-ns" data-col="ended">Ended</th><th class="mi-ns" data-col="dur">Duration</th><th class="mi-ns" data-col="state">Result</th><th class="mi-ns mi-num" data-col="files">Files</th>

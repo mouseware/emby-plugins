@@ -63,6 +63,13 @@ CREATE TABLE IF NOT EXISTS queue (
             var cols = Db.Query("PRAGMA table_info(scans)").Select(r => r.Str("name")).ToList();
             if (!cols.Contains("label", StringComparer.OrdinalIgnoreCase)) Db.ExecScript("ALTER TABLE scans ADD COLUMN label TEXT");
             if (!cols.Contains("trigger", StringComparer.OrdinalIgnoreCase)) Db.ExecScript("ALTER TABLE scans ADD COLUMN trigger TEXT");
+            // 1.0.7: moved-file detection (hint of the likely new path on missing rows; pairs the user ignored)
+            var fcols = Db.Query("PRAGMA table_info(files)").Select(r => r.Str("name")).ToList();
+            bool hintAdded = false;
+            if (!fcols.Contains("move_hint", StringComparer.OrdinalIgnoreCase)) { Db.ExecScript("ALTER TABLE files ADD COLUMN move_hint TEXT"); hintAdded = true; }
+            Db.ExecScript(@"CREATE INDEX IF NOT EXISTS ix_files_size ON files(size);
+CREATE TABLE IF NOT EXISTS move_ignores (file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE, new_path TEXT NOT NULL COLLATE NOCASE, added TEXT, PRIMARY KEY(file_id, new_path))");
+            if (hintAdded) RefreshMoveHints();
             if (GetMeta("schema") == null) SetMeta("schema", SchemaVersion.ToString());
         }
 
@@ -73,7 +80,7 @@ CREATE TABLE IF NOT EXISTS queue (
         public static string FolderOf(string path) { var d = System.IO.Path.GetDirectoryName(path); return string.IsNullOrEmpty(d) ? path : d; }
         public static string NormHash(string h) => string.IsNullOrWhiteSpace(h) ? null : h.Trim().ToUpperInvariant();
 
-        private const string FileCols = "id,path,folder,name,ext,size,mtime,baseline_md5,baseline_size,baseline_mtime,baseline_date,last_md5,last_checked,last_result,status,ignored,first_seen,last_seen,last_scan_id,legacy_id,error";
+        private const string FileCols = "id,path,folder,name,ext,size,mtime,baseline_md5,baseline_size,baseline_mtime,baseline_date,last_md5,last_checked,last_result,status,ignored,first_seen,last_seen,last_scan_id,legacy_id,error,move_hint";
 
         public static FileRecord ToFile(Row r) => new FileRecord
         {
@@ -82,7 +89,7 @@ CREATE TABLE IF NOT EXISTS queue (
             BaselineMd5 = r.Str("baseline_md5"), BaselineSize = r.LongN("baseline_size"), BaselineMtime = Time.FromDb(r.Str("baseline_mtime")), BaselineDate = Time.FromDb(r.Str("baseline_date")),
             LastMd5 = r.Str("last_md5"), LastChecked = Time.FromDb(r.Str("last_checked")), LastResult = r.Str("last_result"),
             Status = r.Str("status"), Ignored = r.Long("ignored") != 0, FirstSeen = Time.FromDb(r.Str("first_seen")), LastSeen = Time.FromDb(r.Str("last_seen")),
-            LastScanId = r.LongN("last_scan_id"), LegacyId = r.LongN("legacy_id"), Error = r.Str("error")
+            LastScanId = r.LongN("last_scan_id"), LegacyId = r.LongN("legacy_id"), Error = r.Str("error"), MoveHint = r.Str("move_hint")
         };
 
         public FileRecord GetFile(string path) => Db.Query("SELECT " + FileCols + " FROM files WHERE path=@p", ("p", path)).Select(ToFile).FirstOrDefault();
@@ -338,6 +345,111 @@ CREATE TABLE IF NOT EXISTS queue (
                 ("p", p), ("pl", (long)p.Length), ("s", scanId)).Select(ToFile).ToList();
         }
 
+        // ---------------- moved files (1.0.7) ----------------
+        /// <summary>SQL condition: candidate row c could be the new location of missing row m. It is not missing itself and it is "new":
+        /// never hashed, or only its first hash recorded, or first seen after the missing file was last seen. A file that already had its
+        /// own history while the old one still existed is a copy, not the moved file.</summary>
+        public const string NewishSql = @"(c.status IN ('pending','never_hashed') OR c.baseline_md5 IS NULL
+            OR (SELECT COUNT(*) FROM checks k WHERE k.file_id=c.id) <= 1
+            OR (m.last_seen IS NOT NULL AND c.first_seen IS NOT NULL AND c.first_seen > m.last_seen))";
+
+        /// <summary>Missing, not ignored rows (all, or the given ids).</summary>
+        public List<FileRecord> MissingFiles(IList<long> ids = null)
+        {
+            var all = Db.Query("SELECT " + FileCols + " FROM files WHERE status='missing' AND ignored=0 ORDER BY path COLLATE NOCASE").Select(ToFile).ToList();
+            if (ids == null || ids.Count == 0) return all;
+            var set = new HashSet<long>(ids);
+            return all.Where(f => set.Contains(f.Id)).ToList();
+        }
+
+        /// <summary>Tracked, not missing rows with one of the sizes (candidates for moved files).</summary>
+        public List<FileRecord> WithSizes(IEnumerable<long> sizes)
+        {
+            var outp = new List<FileRecord>();
+            foreach (var chunk in sizes.Distinct().Select((v, i) => (v, i)).GroupBy(x => x.i / 400))
+            {
+                var args = chunk.Select((x, j) => ("s" + j, (object)x.v)).ToArray();
+                outp.AddRange(Db.Query("SELECT " + FileCols + " FROM files WHERE status<>'missing' AND size IN (" + string.Join(",", args.Select(a => "@" + a.Item1)) + ")", args).Select(ToFile));
+            }
+            return outp;
+        }
+
+        /// <summary>Number of hash checks recorded for a row (1 = only its first hash).</summary>
+        public long CheckCountOf(long fileId) => Db.ScalarLong("SELECT COUNT(*) FROM checks WHERE file_id=@f", ("f", fileId));
+
+        /// <summary>True when <paramref name="candidate"/> may be the moved copy of <paramref name="missing"/> (same rule as <see cref="NewishSql"/>).</summary>
+        public bool IsNewish(FileRecord candidate, FileRecord missing)
+        {
+            if (candidate.Status == FileStatus.Pending || candidate.Status == FileStatus.NeverHashed || string.IsNullOrEmpty(candidate.BaselineMd5)) return true;
+            if (missing.LastSeen.HasValue && candidate.FirstSeen.HasValue && candidate.FirstSeen.Value > missing.LastSeen.Value) return true;
+            return CheckCountOf(candidate.Id) <= 1;
+        }
+
+        public HashSet<string> MoveIgnores(long fileId) => new HashSet<string>(Db.Query("SELECT new_path FROM move_ignores WHERE file_id=@f", ("f", fileId)).Select(r => r.Str("new_path")), StringComparer.OrdinalIgnoreCase);
+        public void IgnoreMove(long fileId, string newPath, DateTime now)
+        {
+            Db.Exec("INSERT OR IGNORE INTO move_ignores(file_id,new_path,added) VALUES(@f,@p,@t)", ("f", fileId), ("p", newPath), ("t", now));
+            Db.Exec("UPDATE files SET move_hint=NULL WHERE id=@f AND move_hint=@p COLLATE NOCASE", ("f", fileId), ("p", newPath));
+        }
+
+        /// <summary>Recomputes the "likely moved" hint of every missing row: a new-ish, not missing row with the same file name and size
+        /// (not yet confirmed by hash). Runs after scans and file-list refreshes. Returns the number of missing rows with a hint.</summary>
+        public long RefreshMoveHints()
+        {
+            lock (Db.SyncRoot)
+            {
+                Db.Transaction(() =>
+                {
+                    Db.Exec("UPDATE files SET move_hint=NULL WHERE move_hint IS NOT NULL AND (status<>'missing' OR ignored=1)");
+                    Db.Exec((@"UPDATE files SET move_hint=(SELECT c.path FROM files c WHERE c.id<>m.id AND c.status<>'missing' AND c.name=m.name COLLATE NOCASE
+                          AND c.size=COALESCE(m.baseline_size,m.size) AND " + NewishSql + @"
+                          AND NOT EXISTS (SELECT 1 FROM move_ignores i WHERE i.file_id=m.id AND i.new_path=c.path COLLATE NOCASE)
+                          ORDER BY c.first_seen DESC, c.path LIMIT 1) WHERE status='missing' AND ignored=0").Replace("m.", "files."));
+                });
+                return Db.ScalarLong("SELECT COUNT(*) FROM files WHERE status='missing' AND move_hint IS NOT NULL");
+            }
+        }
+
+        /// <summary>
+        /// Moves the record of missing file <paramref name="id"/> (with its whole history) to <paramref name="newPath"/>. A row already
+        /// tracking the new path (the duplicate found by the file list or a scan) is removed with its history, and its queue entry dropped.
+        /// <paramref name="md5"/> is the hash just computed for the new path. When it differs from the baseline (forced relink) the new hash
+        /// becomes the baseline. One "moved" check is added (note: old path). Throws ArgumentException when it cannot be done.
+        /// </summary>
+        public FileRecord MoveRecord(long id, string newPath, string md5, bool force, string source, long? logId, DateTime now)
+        {
+            var f = GetFile(id) ?? throw new ArgumentException("file " + id + " is not tracked");
+            if (f.Status != FileStatus.Missing) throw new ArgumentException(f.Name + " is not missing (" + f.Status + ")");
+            if (string.IsNullOrWhiteSpace(newPath)) throw new ArgumentException("no new path");
+            FileInfo fi; try { fi = new FileInfo(newPath); } catch (Exception ex) { throw new ArgumentException("bad path: " + ex.Message); }
+            if (!fi.Exists) throw new ArgumentException("not found: " + newPath);
+            md5 = NormHash(md5) ?? throw new ArgumentException("no hash for the new path");
+            bool same = md5 != null && md5 == NormHash(f.BaselineMd5);
+            if (!same && !force) throw new ArgumentException("hash differs from the baseline (" + (f.BaselineMd5 ?? "none") + " vs " + (md5 ?? "none") + ")");
+            var dup = GetFile(fi.FullName);
+            if (dup != null && dup.Id == f.Id) throw new ArgumentException("same path");
+            var old = f.Path;
+            var mtime = DateTime.SpecifyKind(fi.LastWriteTimeUtc, DateTimeKind.Utc);
+            Db.Transaction(() =>
+            {
+                if (dup != null) { Db.Exec("DELETE FROM checks WHERE file_id=@id", ("id", dup.Id)); Db.Exec("DELETE FROM files WHERE id=@id", ("id", dup.Id)); }
+                Db.Exec("DELETE FROM queue WHERE path=@p", ("p", fi.FullName));
+                Db.Exec("UPDATE files SET path=@p, folder=@fo, name=@n, ext=@e, move_hint=NULL WHERE id=@id",
+                    ("p", fi.FullName), ("fo", FolderOf(fi.FullName)), ("n", fi.Name), ("e", fi.Extension), ("id", f.Id));
+                f.Path = fi.FullName; f.Folder = FolderOf(fi.FullName); f.Name = fi.Name; f.Ext = fi.Extension; f.MoveHint = null;
+                if (!same) { f.BaselineMd5 = md5; f.BaselineSize = fi.Length; f.BaselineMtime = mtime; f.BaselineDate = now; }
+                if (f.BaselineSize == null) f.BaselineSize = fi.Length;
+                if (f.BaselineMtime == null) f.BaselineMtime = mtime;
+                f.Size = fi.Length; f.Mtime = mtime; f.LastMd5 = md5; f.LastChecked = now; f.LastSeen = now; f.Status = FileStatus.Ok;
+                f.LastResult = same ? CheckResult.Moved : CheckResult.MovedForced; f.Error = null;
+                UpdateFile(f);
+                Db.Exec("DELETE FROM move_ignores WHERE file_id=@id", ("id", f.Id));
+                AddCheck(new CheckRecord { FileId = f.Id, Time = now, Md5 = md5, Size = fi.Length, Result = f.LastResult, Source = source, ScanId = logId,
+                    Note = "moved from " + old + (dup != null ? "; replaced duplicate row " + dup.Id : "") + (same ? "" : "; hash differed, new baseline") });
+            });
+            return f;
+        }
+
         // ---------------- scans ----------------
         private const string ScanCols = "id,kind,state,started,ended,total,done,bytes_total,bytes_done,matched,changed,modified,new,missing,unreadable,position,roots,note,active_seconds,bytes_hashed,label,trigger";
         private static ScanRecord ToScan(Row r) => new ScanRecord
@@ -379,7 +491,7 @@ CREATE TABLE IF NOT EXISTS queue (
         /// <summary>At startup: a scan left 'running'/'paused' by a restart becomes 'interrupted' (it resumes next run).</summary>
         public int MarkInterrupted() => Db.Exec("UPDATE scans SET state='interrupted' WHERE state IN ('running','paused')");
         public List<FileRecord> ScanFindings(long scanId, int limit = 50) => Db.Query("SELECT " + FileCols + @" FROM files WHERE id IN
-            (SELECT file_id FROM checks WHERE scan_id=@s AND result IN ('changed','modified','missing','unreadable')) ORDER BY path LIMIT @l", ("s", scanId), ("l", limit)).Select(ToFile).ToList();
+            (SELECT file_id FROM checks WHERE scan_id=@s AND result IN ('changed','modified','missing','unreadable','moved','moved-forced')) ORDER BY path LIMIT @l", ("s", scanId), ("l", limit)).Select(ToFile).ToList();
 
         // ---------------- queue ----------------
         public void Enqueue(string path, string reason, DateTime notBefore, DateTime now) =>

@@ -44,6 +44,7 @@ namespace Claw.Emby.MediaIntegrity.Server
         public Gate QueueGate { get; }
         public ManualGateImpl ManualGate { get; }
         public ManualCheckQueue Manual { get; private set; }
+        public MoveService Moves { get; private set; }
         public string DataDir { get; private set; }
         public ImportResult Import { get; private set; }
         public string QueueCurrent { get; private set; }
@@ -161,10 +162,11 @@ namespace Claw.Emby.MediaIntegrity.Server
                 IsEnabled = () => IsOn,
                 OnError = (path, ex) => _log.ErrorException("Media Integrity: manual check " + (path ?? ""), ex),
                 Queued = () => { try { _tasks.QueueIfNotRunning<ManualCheckTask>(); } catch (Exception ex) { _log.ErrorException("Media Integrity: start manual task", ex); } },
-                JobStarted = j => { try { j.LogId = Store.NewScan(j.Source == "item" ? "item" : "manual", j.Started ?? DateTime.UtcNow, null, j.Label, j.Source).Id; } catch (Exception ex) { _log.ErrorException("Media Integrity: activity entry", ex); } },
+                JobStarted = j => { try { j.LogId = Store.NewScan(j.Kind != "check" ? j.Kind : j.Source == "item" ? "item" : "manual", j.Started ?? DateTime.UtcNow, null, j.Label, j.Source).Id; } catch (Exception ex) { _log.ErrorException("Media Integrity: activity entry", ex); } },
                 JobFinished = j => { LogJob(j); _log.Info("Media Integrity: manual check \"{0}\" {1}: {2} files, {3} ok, {4} new, {5} changed, {6} modified, {7} missing, {8} unreadable",
                     j.Label, j.State, j.Done, j.Ok, j.New, j.Changed, j.Modified, j.Missing, j.Unreadable); }
             };
+            Moves = new MoveService(Store, Manual, ExcludeRegex) { IsEnabled = () => IsOn, Log = m => _log.Info("Media Integrity: " + m) };
             Manual.Start();
             _log.Info("Media Integrity started: {0} files, {1} checks, {2} queued", Store.FileCount, Store.CheckCount, Store.QueueLength);
         }
@@ -386,6 +388,13 @@ namespace Claw.Emby.MediaIntegrity.Server
                 s.Matched = j.Ok; s.New = j.New; s.Changed = j.Changed; s.Modified = j.Modified; s.Missing = j.Missing; s.Unreadable = j.Unreadable;
                 s.ActiveSeconds = ((s.Ended ?? DateTime.UtcNow) - s.Started).TotalSeconds;
                 s.Note = (j.Batches > 1 ? j.Batches + " batches combined" : "") + (j.Absent > 0 ? (j.Batches > 1 ? "; " : "") + j.Absent + " not on disk (untracked)" : "");
+                if (j.Kind != "check")
+                {
+                    // Find moved files / Relink: candidates hashed; the result is the note (no check counts)
+                    s.Matched = s.New = s.Changed = s.Modified = s.Missing = s.Unreadable = 0;
+                    if (j.Kind == "relink" && j.Outcome == "migrated") s.Matched = 1;
+                    s.Note = j.Message ?? "";
+                }
                 Store.SaveScan(s);
             }
             catch (Exception ex) { _log.ErrorException("Media Integrity: activity entry", ex); }

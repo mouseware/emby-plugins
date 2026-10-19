@@ -6,7 +6,7 @@ Five plugins for Emby Server, one per subfolder:
 - **Claw IPTV Channel Mapper**: a spreadsheet-style editor for IPTV channels (number, name, group, logo, guide mapping, enabled), with undo, snapshots and bulk actions. 1.4 adds Export/Import of the whole mapping as one .zip (mapper.json plus a logos/ folder), with a preview (Merge or Replace, All channels or Matching only) before anything is applied.
 - **Claw Default Chapters**: generates "Chapter 1, 2 …" interval chapters for movies that have few or no chapters, from the item menu or in bulk (Found movies), with revert.
 - **Claw Custom Item UI**: item-page link tweaks, VLC path links, a rearrangeable admin dashboard, and Activity/Alerts tables on the dashboard.
-- **Media Integrity**: finds bit rot, missing and unreadable files by comparing each library file's MD5 with a stored baseline. It has a resumable, low-priority full scan (scheduled task), background hashing of new items, "Verify integrity" in the item menu, a live **Check now** on any file, folder or library, search across all files, per-file history, and an import of the old `get-all-hashes.ps1` database. 1.0.5 skips Emby metadata, artwork and `.old` backups by default (subtitles and media stay hashed), and a file-list refresh drops skipped rows from tracking without touching the files on disk. 1.0.6 adds a sortable File type column with a type filter to the file tables.
+- **Media Integrity**: finds bit rot, missing and unreadable files by comparing each library file's MD5 with a stored baseline. It has a resumable, low-priority full scan (scheduled task), background hashing of new items, "Verify integrity" in the item menu, a live **Check now** on any file, folder or library, search across all files, per-file history, and an import of the old `get-all-hashes.ps1` database. 1.0.5 skips Emby metadata, artwork and `.old` backups by default (subtitles and media stay hashed), and a file-list refresh drops skipped rows from tracking without touching the files on disk. 1.0.6 adds a sortable File type column with a type filter to the file tables. 1.0.7 finds where missing files moved: **Find moved files** confirms candidates by MD5 and **Migrate** moves the record and its history to the new path; **Relink** points one missing file at a path you enter, and scans flag likely moves on missing rows.
 
 All data tables have resizable columns. The widths are saved per table in the browser.
 
@@ -23,7 +23,7 @@ Every plugin has a **General** tab like Custom Item UI: an **Enable plugin** swi
 | Claw IPTV Mapper | `Claw.Emby.IptvMapper` | 1.4.1.0 | `Claw.Emby.IptvMapper\bin\Release\Claw.Emby.IptvMapper.dll` |
 | Claw Guard | `Claw.Emby.Guard` | 1.2.0.0 | `Claw.Emby.Guard\bin\Release\Claw.Emby.Guard.dll` |
 | Claw Default Chapters | `Claw.Emby.DefaultChapters` | 1.2.0.0 | `Claw.Emby.DefaultChapters\bin\Release\Claw.Emby.DefaultChapters.dll` |
-| Media Integrity | `Claw.Emby.MediaIntegrity` | 1.0.6.0 | `Claw.Emby.MediaIntegrity\bin\Release\Claw.Emby.MediaIntegrity.dll` |
+| Media Integrity | `Claw.Emby.MediaIntegrity` | 1.0.7.0 | `Claw.Emby.MediaIntegrity\bin\Release\Claw.Emby.MediaIntegrity.dll` |
 
 Each project builds on its own. Its `refs\` folder holds copies of the Emby SDK DLLs (`MediaBrowser.Common.dll`, `MediaBrowser.Controller.dll`, `MediaBrowser.Model.dll`), and the csproj HintPaths point there through `$(EmbyServerPath)`, which defaults to `refs`.
 
@@ -67,6 +67,9 @@ The screenshots use made-up sample data: documentation IP ranges, fake users and
 |---|---|
 | ![Problems while a full scan runs](docs/screenshots/media-integrity/problems-running.png)<br/>Problems while a full scan runs | ![Problems filtered by file type](docs/screenshots/media-integrity/problems-type.png)<br/>Problems filtered by file type |
 | ![Problems: select all and bulk actions](docs/screenshots/media-integrity/problems-select-all.png)<br/>Problems: select all and bulk actions | ![Live Check now (in-row progress)](docs/screenshots/media-integrity/checknow-progress.png)<br/>Live Check now (in-row progress) |
+| ![Missing files with a "likely moved" hint and Relink](docs/screenshots/media-integrity/moves-hints.png)<br/>Missing files with a "likely moved" hint and Relink | ![Find moved files: scope and extra folders](docs/screenshots/media-integrity/moves-dialog.png)<br/>Find moved files: scope and extra folders |
+| ![Find moved files: hashing candidates in the progress panel](docs/screenshots/media-integrity/moves-progress.png)<br/>Find moved files: hashing candidates in the progress panel | ![Moved files found: confidence, match, Migrate / Ignore](docs/screenshots/media-integrity/moves-results.png)<br/>Moved files found: confidence, match, Migrate / Ignore |
+| ![Relink a missing file (prefilled with the hint)](docs/screenshots/media-integrity/relink-dialog.png)<br/>Relink a missing file (prefilled with the hint) | ![Relink: hash does not match, Relink anyway offered](docs/screenshots/media-integrity/relink-mismatch.png)<br/>Relink: hash does not match, Relink anyway offered |
 | ![Browse by library](docs/screenshots/media-integrity/browse-library.png)<br/>Browse by library | ![Browse a library (expanded)](docs/screenshots/media-integrity/browse-expanded.png)<br/>Browse a library (expanded) |
 | ![File type column and filter](docs/screenshots/media-integrity/browse-type-filter.png)<br/>File type column and filter | ![Browse by folder](docs/screenshots/media-integrity/browse-folder.png)<br/>Browse by folder |
 | ![Library with files not yet hashed](docs/screenshots/media-integrity/untracked-library.png)<br/>Library with files not yet hashed | ![Checking a whole library](docs/screenshots/media-integrity/check-library.png)<br/>Checking a whole library |
@@ -75,8 +78,8 @@ The screenshots use made-up sample data: documentation IP ranges, fake users and
 | ![Per-file history](docs/screenshots/media-integrity/history.png)<br/>Per-file history | !["Verify integrity" in the item menu](docs/screenshots/media-integrity/item-menu.png)<br/>"Verify integrity" in the item menu |
 | ![Result toast (OK)](docs/screenshots/media-integrity/item-toast-ok.png)<br/>Result toast (OK) | ![Result toast (changed file) with a link](docs/screenshots/media-integrity/item-toast-changed.png)<br/>Result toast (changed file) with a link |
 | ![Past scans and import](docs/screenshots/media-integrity/activity.png)<br/>Past scans and import | ![Manual checks in Activity](docs/screenshots/media-integrity/activity-manual.png)<br/>Manual checks in Activity |
-| ![Settings (skip list, schedule)](docs/screenshots/media-integrity/settings.png)<br/>Settings (skip list, schedule) | ![General tab: Enable switch and About](docs/screenshots/media-integrity/general.png)<br/>General tab: Enable switch and About |
-| ![Switched off: banner](docs/screenshots/media-integrity/off-banner.png)<br/>Switched off: banner |   |
+| ![Moves and relinks in Activity](docs/screenshots/media-integrity/activity-moves.png)<br/>Moves and relinks in Activity | ![Settings (skip list, schedule)](docs/screenshots/media-integrity/settings.png)<br/>Settings (skip list, schedule) |
+| ![General tab: Enable switch and About](docs/screenshots/media-integrity/general.png)<br/>General tab: Enable switch and About | ![Switched off: banner](docs/screenshots/media-integrity/off-banner.png)<br/>Switched off: banner |
 
 ## Install (from a release)
 

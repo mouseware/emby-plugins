@@ -276,6 +276,7 @@ namespace Claw.Emby.MediaIntegrity.Core
                 }
                 scan.State = "completed"; scan.Ended = _now(); res.Completed = true;
                 _store.SaveScan(scan);
+                try { _store.RefreshMoveHints(); } catch { } // 1.0.7: flag likely moves (same name + size) on missing rows
                 taskProgress?.Invoke(100);
             }
             catch (OperationCanceledException)

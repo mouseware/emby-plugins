@@ -183,7 +183,7 @@ define([], function () {
     var q = function (s) { return view.querySelector(s); };
     var qa = function (s) { return Array.prototype.slice.call(view.querySelectorAll(s)); };
     try { S.groupBy = localStorage.getItem(GROUP_KEY) === "folder" ? "folder" : "library"; } catch (e) { }
-    [["mi-prob-t", "problems"], ["mi-grp-t", "groups"], ["mi-scans-t", "scans"]].forEach(function (t) { ClawColResize.attach(q("table." + t[0]), "claw.mediaintegrity.cols." + t[1]); });
+    [["mi-prob-t", "problems"], ["mi-grp-t", "groups"], ["mi-scans-t", "scans"], ["mi-moves-t", "moves"]].forEach(function (t) { ClawColResize.attach(q("table." + t[0]), "claw.mediaintegrity.cols." + t[1]); });
 
     function toast(msg) { try { require(["toast"], function (t) { t(msg); }); } catch (e) { } }
     function modal(title, html) {
@@ -200,7 +200,7 @@ define([], function () {
       qa(".mi-tab").forEach(function (b) { b.classList.toggle("mi-on", b.getAttribute("data-tab") === t); });
       qa(".mi-panel").forEach(function (p) { p.classList.toggle("mi-on", p.getAttribute("data-panel") === t); });
       try { localStorage.setItem(TAB_KEY, t); } catch (e) { }
-      if (t === "problems") loadProblems();
+      if (t === "problems") { loadProblems(); loadMoves(); }
       else if (t === "browse") loadGroups();
       else if (t === "activity") loadScans();
       else if (t === "settings") loadSettings();
@@ -215,6 +215,8 @@ define([], function () {
     function renderStatus() {
       var s = S.status; if (!s) return;
       q(".mi-off-banner").style.display = s.Enabled === false ? "" : "none";
+      var mj = s.Manual && s.Manual.Job; if (mj && mj.Kind === "moves" && !S.movesJob) watchMoves(mj.Id);
+      movesBtn();
       var now = new Date(s.Now || Date.now()), c = s.Counts || {};
       q(".mi-c-files").textContent = fmtNum(s.Files);
       q(".mi-c-size").textContent = s.RootCount + " folder" + (s.RootCount === 1 ? "" : "s") + " in scope";
@@ -287,6 +289,7 @@ define([], function () {
     function chipsHtml(src, chips) { return chips.map(function (x) { var n = src[x[1]] || 0; return '<span class="mi-chip">' + x[0] + '<b class="' + (n ? x[2] : "") + '">' + fmtNum(n) + "</b></span>"; }).join(""); }
     var MCHIPS = [["OK", "Ok", "mi-ok"], ["New", "New", ""], ["Changed", "Changed", "mi-f"], ["Modified", "Modified", "mi-w"], ["Missing", "Missing", "mi-w"], ["Unreadable", "Unreadable", "mi-f"]];
     function jobSummary(j) {
+      if (j.Kind === "moves" || j.Kind === "relink") return { problems: j.Outcome === "mismatch" || j.Outcome === "error" ? 1 : 0, text: (j.State === "cancelled" ? "Cancelled: " : "") + (j.Label || "") + (j.Message ? ": " + j.Message : "") };
       var p = (j.Changed || 0) + (j.Modified || 0) + (j.Missing || 0) + (j.Unreadable || 0), parts = [];
       MCHIPS.forEach(function (x) { if (j[x[1]]) parts.push(fmtNum(j[x[1]]) + " " + x[0].toLowerCase().replace("ok", "OK")); });
       return { problems: p, text: (j.State === "cancelled" ? "Cancelled: " : p ? "Problems found: " : "OK: ") + (j.Label || "check") + (parts.length ? " (" + parts.join(", ") + ")" : j.Total ? "" : " (no files)") };
@@ -297,14 +300,14 @@ define([], function () {
       if (m.Active && j) {
         box.style.display = ""; box.classList.add("mi-man-on");
         var pct = j.BytesTotal ? 100 * j.BytesDone / j.BytesTotal : (j.Total ? 100 * j.Done / j.Total : 0);
-        q(".mi-man-title").textContent = "Checking now: " + (j.Label || "");
+        q(".mi-man-title").textContent = (j.Kind === "moves" ? "Finding moved files: hashing candidates" : j.Kind === "relink" ? "Relinking: " : "Checking now: ") + (j.Kind === "moves" ? "" : (j.Label || ""));
         q(".mi-man-bar i").style.width = Math.min(100, pct).toFixed(2) + "%";
         q(".mi-man-meta").innerHTML = "<span>" + pct.toFixed(1) + "%</span><span class=\"mi-man-files\">File " + fmtNum(Math.min(j.Done + 1, j.Total)) + " of " + fmtNum(j.Total) + "</span><span>" + fmtBytes(j.BytesDone) + " of " + fmtBytes(j.BytesTotal) + "</span>" +
           (m.SecondsLeft != null ? "<span>about " + fmtDur(m.SecondsLeft) + " left</span>" : "") +
           (j.Batches > 1 ? '<span class="mi-man-batches">' + j.Batches + " batches combined</span>" : "") +
           (m.QueuedJobs ? '<span class="mi-man-queued">' + m.QueuedJobs + " more check" + (m.QueuedJobs === 1 ? "" : "s") + " queued</span>" : "");
         fileBar(q(".mi-man-fb"), j.CurrentFile, j.CurrentDone, j.CurrentSize, m.BytesPerSecond || j.BytesPerSecond, false);
-        q(".mi-man-chips").innerHTML = chipsHtml(j, MCHIPS);
+        q(".mi-man-chips").innerHTML = j.Kind === "moves" ? '<span class="mi-chip">Candidates hashed<b>' + fmtNum(j.Done) + "</b></span>" : chipsHtml(j, MCHIPS);
         q(".mi-man-live").style.display = ""; q(".mi-man-last").style.display = "none"; q(".mi-man-cancel").style.display = "";
         return;
       }
@@ -451,15 +454,16 @@ define([], function () {
       q(".mi-prob-empty").style.display = list.length ? "none" : "";
       q(".mi-prob-t").style.display = list.length ? "" : "none";
       q(".mi-prob-empty").textContent = S.problems.length ? "Nothing matches the filter." : "No problems. Every checked file matches its baseline.";
-      updateBulk();
+      updateBulk(); movesBtn();
     }
     function probRow(f) {
         var st = STATUS[f.Status] || {};
-        var hashes = f.Status === "missing" ? '<span class="mi-dim">file not found</span>' : f.Status === "unreadable" ? '<span class="mi-f mi-ell mi-err" title="' + esc(f.Error) + '">' + esc(f.Error || "read error") + "</span>"
+        var hashes = f.Status === "missing" ? '<span class="mi-dim">file not found</span>' + (f.MoveHint ? '<div class="mi-hint" title="Likely moved (same name and size, not confirmed yet): ' + esc(f.MoveHint) + '"><i class="md-icon">drive_file_move</i>likely moved: ' + esc(f.MoveHint) + "</div>" : "") : f.Status === "unreadable" ? '<span class="mi-f mi-ell mi-err" title="' + esc(f.Error) + '">' + esc(f.Error || "read error") + "</span>"
           : '<span class="mi-mono">' + esc(shortHash(f.Hash)) + ' → <span class="' + (st.cls || "") + '">' + esc(shortHash(f.LastHash)) + "</span></span>";
         var acts = (f.Status === "changed" || f.Status === "modified" ? '<button type="button" class="mi-btn mi-mini mi-row-act" data-act="accept" title="Use the current hash as the new baseline">Accept</button>' : "")
           + '<button type="button" class="mi-btn mi-mini mi-row-act" data-act="checknow" title="Hash this file now and show the result here">Check now</button>'
           + (f.Ignored ? '<button type="button" class="mi-btn mi-mini mi-row-act" data-act="unignore">Unignore</button>' : '<button type="button" class="mi-btn mi-mini mi-row-act" data-act="ignore" title="Hide from Problems">Ignore</button>')
+          + (f.Status === "missing" ? '<button type="button" class="mi-btn mi-mini mi-row-act" data-act="relink" title="Point this record at the file\'s new path (hashed first)">Relink</button>' : "")
           + (f.Status === "missing" ? '<button type="button" class="mi-btn mi-mini mi-row-act" data-act="forget" title="Stop tracking (deletes its history)">Forget</button>' : "");
         return '<tr data-kind="prob" data-id="' + f.Id + '" data-path="' + esc(f.Path) + '"><td><input type="checkbox" class="mi-sel"' + (S.sel[f.Id] ? " checked" : "") + "></td>" +
           '<td class="mi-nowrap"><i class="md-icon ' + (st.cls || "") + '">' + (st.icon || "") + "</i> " + pill(f.Status, f.Ignored) + '<div class="mi-live"></div></td>' +
@@ -492,7 +496,7 @@ define([], function () {
       var tr = e.target.closest("tr"); if (!tr) return;
       var id = tr.getAttribute("data-id");
       var b = e.target.closest(".mi-row-act");
-      if (b) { e.stopPropagation(); if (b.getAttribute("data-act") === "checknow") checkNow([id]); else fileAction([id], b.getAttribute("data-act")); return; }
+      if (b) { e.stopPropagation(); var act = b.getAttribute("data-act"); if (act === "checknow") checkNow([id]); else if (act === "relink") relinkDialog(id); else fileAction([id], act); return; }
       if (e.target.classList.contains("mi-sel")) { S.sel[id] = e.target.checked; updateBulk(); return; }
       showHistory(id);
     });
@@ -524,6 +528,123 @@ define([], function () {
     q(".mi-prob-type").addEventListener("change", function () { S.probStart = 0; S.probAll = false; renderProblems(); });
     q(".mi-prob-filter").addEventListener("input", function () { S.probStart = 0; S.probAll = false; renderProblems(); });
     q(".mi-prob-ign").addEventListener("change", loadProblems);
+
+    // ---------------- moved files (1.0.7) ----------------
+    var MATCH = { "hash+name": "Same content (MD5) and file name", hash: "Same content (MD5), renamed", "name+size": "Same name and size, not confirmed by hash" };
+    function errText(e) { return (e && (e.message || e.statusText)) || "request failed"; }
+    function isOff() { return !!(S.status && S.status.Enabled === false); }
+    function missingList() { return (S.problems || []).filter(function (f) { return f.Status === "missing" && !f.Ignored; }); }
+    function movesBtn() {
+      var b = q(".mi-moves-find"); if (!b) return;
+      b.disabled = isOff() || !missingList().length || !!S.movesJob;
+      b.title = isOff() ? "Media Integrity is switched off (General tab)" : "Look for missing files at a new path (same size; confirmed by hash)";
+      var all = q(".mi-moves-all"); if (all && S.moves) all.disabled = isOff() || !pendingMoves().some(function (x) { return x.Verified; });
+    }
+    function pendingMoves() { return S.moves ? (S.moves.Matches || []).filter(function (x) { return x.State === "pending"; }) : []; }
+    function loadMoves() { return getJSON("Moves").then(function (m) { S.moves = m && m.State && m.State !== "none" ? m : null; renderMoves(); }, function () { }); }
+    function renderMoves() {
+      var m = S.moves, box = q(".mi-moves");
+      if (!m || m.State === "running" || S.movesHidden === (m.JobId || 0)) { box.style.display = "none"; movesBtn(); return; }
+      var rows = pendingMoves(), conf = rows.filter(function (x) { return x.Verified; }).length;
+      box.style.display = "";
+      q(".mi-moves-title").textContent = m.State === "cancelled" ? "Search for moved files was cancelled" : rows.length ? fmtNum(rows.length) + " moved file" + (rows.length === 1 ? "" : "s") + " found" : "No moved files left to migrate";
+      q(".mi-moves-sub").textContent = "searched " + fmtNum(m.MissingSearched) + " missing file" + (m.MissingSearched === 1 ? "" : "s") + ", " + fmtNum(m.Hashed) + " candidate" + (m.Hashed === 1 ? "" : "s") + " hashed (" + fmtBytes(m.BytesHashed) + ")" +
+        (m.NoMatch ? ", " + fmtNum(m.NoMatch) + " not found" : "") + (m.Ended ? " · " + fmtTime(m.Ended) : "");
+      q(".mi-moves-all").innerHTML = '<i class="md-icon">done_all</i>Migrate all confirmed (' + fmtNum(conf) + ")";
+      q(".mi-moves-t").style.display = rows.length ? "" : "none";
+      q(".mi-moves-t tbody").innerHTML = rows.map(moveRow).join("");
+      movesBtn();
+    }
+    function moveRow(x) {
+      var acts = (x.Verified ? '<button type="button" class="mi-btn mi-mini mi-pri mi-mv-act" data-act="migrate" title="Move the record and its history to the new path">Migrate</button>'
+        : '<button type="button" class="mi-btn mi-mini mi-mv-act" data-act="relink" title="Hash the new file and relink when it matches">Verify &amp; relink</button>') +
+        '<button type="button" class="mi-btn mi-mini mi-mv-act" data-act="ignore" title="Not the same file: never suggest it again">Ignore</button>';
+      return '<tr data-id="' + x.FileId + '" data-new="' + esc(x.NewPath) + '"><td class="mi-ell" title="' + esc(x.OldPath) + '">' + esc(x.OldPath) + '</td>' +
+        '<td class="mi-ell" title="' + esc(x.NewPath) + '">' + esc(x.NewPath) + (x.NewStatus === "untracked" ? ' <span class="mi-dim">(untracked)</span>' : "") + "</td>" +
+        '<td class="mi-num mi-nowrap">' + fmtBytes(x.Size) + '</td><td class="mi-nowrap"><span class="mi-conf mi-conf-' + esc(x.Confidence) + '">' + esc(x.Confidence) + "</span></td>" +
+        '<td><div class="mi-nowrap">' + esc(MATCH[x.Match] || x.Match) + "</div>" + (x.Note ? '<div class="mi-dim mi-small">' + esc(x.Note) + "</div>" : "") + "</td>" +
+        '<td><div class="mi-acts">' + acts + "</div></td></tr>";
+    }
+    function afterMoves() { return Promise.all([loadProblems(), loadMoves(), loadStatus()]); }
+    function migrate(ids) {
+      return post("Moves/Migrate", { Ids: ids.join(",") }).then(function (r) {
+        toast(fmtNum(r.Done || 0) + " file" + (r.Done === 1 ? "" : "s") + " migrated to the new path" + (r.Skipped ? " (" + r.Skipped + " skipped" + (r.Errors && r.Errors.length ? ": " + r.Errors[0] : "") + ")" : ""));
+        return afterMoves();
+      }, function (e) { toast("Migrate failed: " + errText(e)); });
+    }
+    function watchMoves(id) {
+      S.movesJob = id; movesBtn();
+      getJSON("Check/Jobs/" + id).then(function (j) {
+        if (j.State === "done" || j.State === "cancelled" || j.State === "unknown") { S.movesJob = null; S.movesHidden = null; toast(jobSummary(j).text); afterMoves(); return; }
+        setTimeout(function () { watchMoves(id); }, 1000);
+      }, function () { S.movesJob = null; movesBtn(); });
+    }
+    q(".mi-moves-find").addEventListener("click", function () {
+      var miss = missingList(), sel = miss.filter(function (f) { return S.sel[f.Id] || S.probAll && (S.probList || []).indexOf(f) >= 0; });
+      var scope = sel.length ? sel : miss;
+      modal("Find moved files", '<div class="mi-moves-dlg"><p>Looks for <b>' + fmtNum(scope.length) + "</b> " + (sel.length ? "selected " : "") + "missing file" + (scope.length === 1 ? "" : "s") +
+        " at a new path: files that are not yet hashed or only just hashed, on every library and extra folder, with the same size. Same file name first; each candidate is hashed and only an identical MD5 counts as a match. Nothing is changed until you migrate.</p>" +
+        '<label class="inputLabel">Also search these folders (optional, one per line, any drive):</label><textarea class="mi-mv-folders" rows="3" placeholder="e.g. G:\\Restored"></textarea>' +
+        '<div class="mi-btns"><button type="button" class="mi-btn mi-pri mi-mv-start"><i class="md-icon">travel_explore</i>Start search</button></div></div>');
+      q(".mi-mv-start").onclick = function () {
+        var folders = q(".mi-mv-folders").value;
+        post("Moves/Find", { Ids: sel.length ? sel.map(function (f) { return f.Id; }).join(",") : "", Folders: folders }).then(function (j) {
+          q(".mi-modal").classList.remove("mi-on"); toast("Searching for " + fmtNum(scope.length) + " moved file" + (scope.length === 1 ? "" : "s") + "…");
+          if (S.moves) S.moves.State = "running"; renderMoves(); setTimeout(loadStatus, 300); watchMoves(j.Id);
+        }, function (e) { toast("Could not start: " + errText(e)); });
+      };
+    });
+    q(".mi-moves-all").addEventListener("click", function () {
+      var ids = pendingMoves().filter(function (x) { return x.Verified; }).map(function (x) { return x.FileId; });
+      if (!ids.length || !confirm("Migrate " + fmtNum(ids.length) + " confirmed moved file" + (ids.length === 1 ? "" : "s") + "? Each record and its history move to the new path; the duplicate not-yet-hashed rows are removed.")) return;
+      migrate(ids);
+    });
+    q(".mi-moves-close").addEventListener("click", function () { post("Moves/Clear").then(function () { S.moves = null; renderMoves(); }); });
+    q(".mi-moves-t tbody").addEventListener("click", function (e) {
+      var b = e.target.closest(".mi-mv-act"); if (!b) return;
+      var tr = b.closest("tr"), id = tr.getAttribute("data-id"), np = tr.getAttribute("data-new"), act = b.getAttribute("data-act");
+      if (act === "migrate") migrate([id]);
+      else if (act === "relink") relinkDialog(id, np);
+      else post("Moves/Ignore", { Id: id, Path: np }).then(function () { toast("Ignored: not the same file"); afterMoves(); });
+    });
+    function relinkDialog(id, path) {
+      var f = (S.problems || []).filter(function (x) { return String(x.Id) === String(id); })[0] || { Id: id, Name: "", Path: "" };
+      var guess = path || f.MoveHint || f.Path || "";
+      modal("Relink " + (f.Name || "missing file"), '<div class="mi-relink"><table class="mi-kv"><tbody><tr><td>Old path</td><td>' + esc(f.Path) + "</td></tr><tr><td>Baseline</td><td class=\"mi-mono\">" + esc(f.Hash || "none") + "</td></tr><tr><td>Size</td><td>" + fmtBytes(f.Size) + "</td></tr></tbody></table>" +
+        '<label class="inputLabel" style="margin-top:.8em">New path of this file:</label><input type="text" class="mi-in mi-rl-path" value="' + esc(guess) + '" />' +
+        '<div class="fieldDescription">The file is hashed first. It is relinked only when the MD5 matches the baseline; the record keeps its history.</div>' +
+        '<div class="mi-rl-state"></div>' +
+        '<div class="mi-btns">' + (f.MoveHint && !path ? '<button type="button" class="mi-btn mi-rl-notthis" title="The suggested file is not this one">Not this file</button>' : "") +
+        '<button type="button" class="mi-btn mi-dan mi-rl-force" style="display:none"><i class="md-icon">warning</i>Relink anyway</button>' +
+        '<button type="button" class="mi-btn mi-pri mi-rl-go"><i class="md-icon">link</i>Hash and relink</button></div></div>');
+      var st = q(".mi-rl-state");
+      function run(force) {
+        var p = q(".mi-rl-path").value.trim(); if (!p) { st.innerHTML = '<div class="mi-warnbox">Enter the new path.</div>'; return; }
+        q(".mi-rl-go").disabled = true; q(".mi-rl-force").style.display = "none";
+        st.innerHTML = '<div class="mi-dim" style="margin-top:.6em">Hashing ' + esc(p) + "…</div>";
+        post("Files/" + id + "/Relink", { Path: p, Force: !!force }).then(function (j) { setTimeout(loadStatus, 300); poll(j.Id); }, function (e) { q(".mi-rl-go").disabled = false; st.innerHTML = '<div class="mi-warnbox">' + esc(errText(e)) + "</div>"; });
+      }
+      function poll(jid) {
+        getJSON("Check/Jobs/" + jid).then(function (j) {
+          if (j.State !== "done" && j.State !== "cancelled" && j.State !== "unknown") {
+            var pct = j.BytesTotal ? 100 * j.BytesDone / j.BytesTotal : 0;
+            st.innerHTML = '<div style="margin-top:.6em">Hashing… ' + pct.toFixed(0) + '%</div><div class="mi-bar mi-man-bar"><i style="width:' + pct.toFixed(1) + '%"></i></div>';
+            setTimeout(function () { poll(jid); }, 700); return;
+          }
+          q(".mi-rl-go").disabled = false;
+          if (j.Outcome === "migrated") { q(".mi-modal").classList.remove("mi-on"); toast(j.Message || "Relinked"); afterMoves(); return; }
+          if (j.Outcome === "mismatch") {
+            st.innerHTML = '<div class="mi-warnbox"><b>Hash does not match.</b> ' + esc(j.Message) + "<br>Only relink anyway if you know this is the same file (e.g. it was re-encoded or repaired on purpose): the new hash becomes its baseline and future checks compare against it.</div>";
+            q(".mi-rl-force").style.display = ""; return;
+          }
+          st.innerHTML = '<div class="mi-warnbox">' + esc(j.State === "cancelled" ? "Cancelled." : j.Message || "Relink failed.") + "</div>";
+        });
+      }
+      q(".mi-rl-go").onclick = function () { run(false); };
+      q(".mi-rl-force").onclick = function () { if (confirm("Relink although the hash differs? The new hash becomes the baseline of this file.")) run(true); };
+      var nt = q(".mi-rl-notthis");
+      if (nt) nt.onclick = function () { post("Moves/Ignore", { Id: id, Path: f.MoveHint }).then(function () { q(".mi-modal").classList.remove("mi-on"); toast("Suggestion ignored"); afterMoves(); }); };
+    }
 
     // ---------------- history ----------------
     function showHistory(id) {
@@ -744,8 +865,8 @@ define([], function () {
       q(".mi-scans-empty").style.display = S.scans.length ? "none" : "";
     }
 
-    var ACT_TYPES = { scheduled: "Scheduled", fullmanual: "Full scan (you)", manual: "Manual", item: "Item menu", newmedia: "New media" };
-    function actType(s) { return s.Kind === "full" ? (s.Trigger === "manual" ? "fullmanual" : "scheduled") : s.Kind === "item" ? "item" : s.Kind === "newmedia" ? "newmedia" : "manual"; }
+    var ACT_TYPES = { scheduled: "Scheduled", fullmanual: "Full scan (you)", manual: "Manual", item: "Item menu", newmedia: "New media", moves: "Moved files" };
+    function actType(s) { return s.Kind === "full" ? (s.Trigger === "manual" ? "fullmanual" : "scheduled") : s.Kind === "item" ? "item" : s.Kind === "newmedia" ? "newmedia" : s.Kind === "moves" || s.Kind === "move" || s.Kind === "relink" ? "moves" : "manual"; }
     function loadActDetail(id) {
       return getJSON("Scans/" + id).then(function (d) {
         var td = q('.mi-act-detail[data-for="' + id + '"] td'); if (!td) return;

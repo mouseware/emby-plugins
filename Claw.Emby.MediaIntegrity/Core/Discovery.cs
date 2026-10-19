@@ -58,6 +58,7 @@ namespace Claw.Emby.MediaIntegrity.Core
                 var (a, d) = store.SyncDiscovered(r.Path, found, now());
                 res.Added += a; res.Removed += d;
             }
+            try { store.RefreshMoveHints(); } catch { } // 1.0.7: missing rows get a "likely moved" hint when a new file has the same name + size
             res.Seconds = (DateTime.UtcNow - t0).TotalSeconds;
             return res;
         }

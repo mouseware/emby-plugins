@@ -48,6 +48,16 @@ namespace Claw.Emby.MediaIntegrity.Core
         public int LastBatchAdded { get; set; }
         /// <summary>Index into Results where this response starts (GET .../Jobs/{id}?Since=n returns only newer results).</summary>
         public int ResultsOffset { get; set; }
+        /// <summary>check (hash files) | moves (Find moved files) | relink (hash one new path for a missing file).</summary>
+        public string Kind { get; set; } = "check";
+        /// <summary>Custom jobs (moves, relink): result code and message for the page (e.g. relink: migrated | mismatch | error).</summary>
+        public string Outcome { get; set; }
+        public string Message { get; set; }
+        /// <summary>Relink: hash of the new path; target file id.</summary>
+        public string Hash { get; set; }
+        public long? TargetId { get; set; }
+        /// <summary>Custom work run instead of hashing Paths (moves / relink).</summary>
+        [JsonIgnore] public Action<JobContext> Work { get; set; }
         [JsonIgnore] public HashSet<string> Pending { get; set; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         [JsonIgnore] public string FirstLabel { get; set; }
 
@@ -58,6 +68,25 @@ namespace Claw.Emby.MediaIntegrity.Core
             c.ResultsOffset = since; c.Results = Results.Skip(since).ToList(); c.Findings = Findings.ToList();
             return c;
         }
+    }
+
+    /// <summary>Handed to a custom job: report files and bytes so the progress panel shows them like a check.</summary>
+    public sealed class JobContext
+    {
+        private readonly ManualCheckQueue _q; public CheckJob Job { get; }
+        public CancellationToken Ct { get; } public IHashGate Gate { get; }
+        internal JobContext(ManualCheckQueue q, CheckJob j, CancellationToken ct, IHashGate gate) { _q = q; Job = j; Ct = ct; Gate = gate; }
+        /// <summary>More files to process (grows Total / BytesTotal like an appended batch).</summary>
+        public void AddWork(int files, long bytes) => _q.Locked(() => { Job.Total += files; Job.BytesTotal += bytes; });
+        /// <summary>Hashes one file with the queue's gate, shown as the current file; counts it as done.</summary>
+        public HashOutcome Hash(string path, long size)
+        {
+            Ct.ThrowIfCancellationRequested();
+            _q.Locked(() => { Job.CurrentFile = path; Job.CurrentSize = size; Job.CurrentDone = 0; });
+            try { return Hasher.Hash(path, Gate, Ct, n => _q.AddBytes(Job, n)); }
+            finally { _q.Locked(() => { Job.Done++; Job.CurrentFile = null; Job.CurrentSize = Job.CurrentDone = 0; }); }
+        }
+        public void Update(Action<CheckJob> a) => _q.Locked(() => a(Job));
     }
 
     public sealed class JobFinding { public long FileId { get; set; } public string Path { get; set; } public string Result { get; set; } }
@@ -115,7 +144,7 @@ namespace Claw.Emby.MediaIntegrity.Core
             CheckJob job;
             lock (_l)
             {
-                job = append ? _jobs.Where(x => x.State == "running" || x.State == "queued").OrderBy(x => x.Id).FirstOrDefault() : null;
+                job = append ? _jobs.Where(x => (x.State == "running" || x.State == "queued") && x.Work == null).OrderBy(x => x.Id).FirstOrDefault() : null;
                 if (job != null && list.Count > 0)
                 {
                     int added = 0;
@@ -139,6 +168,22 @@ namespace Claw.Emby.MediaIntegrity.Core
             if (job.Total == 0 && job.State == "done") JobFinished?.Invoke(job); else { _wake.Set(); try { Queued?.Invoke(); } catch { } }
             return job;
         }
+
+        /// <summary>Queues a custom job (Find moved files, Relink): it runs in turn with the checks and shows in the same progress panel.</summary>
+        public CheckJob EnqueueWork(string label, string kind, string source, Action<JobContext> work, int total = 0, long bytes = 0)
+        {
+            if (!IsEnabled()) throw new ArgumentException(OffMessage);
+            CheckJob job;
+            lock (_l)
+            {
+                job = new CheckJob { Id = Interlocked.Increment(ref _nextId), Label = label, FirstLabel = label, Source = source, Kind = kind, Created = _now(), Total = total, BytesTotal = bytes, Work = work, LastBatchAdded = total };
+                _jobs.Add(job); Trim();
+            }
+            _wake.Set(); try { Queued?.Invoke(); } catch { }
+            return job;
+        }
+        internal void Locked(Action a) { lock (_l) a(); }
+        internal void AddBytes(CheckJob job, long n) => Bytes(job, n);
 
         public static List<string> Distinct(IEnumerable<string> paths)
         {
@@ -234,6 +279,14 @@ namespace Claw.Emby.MediaIntegrity.Core
         private void RunJob(CheckJob job, CancellationToken ct)
         {
             _rateT = _now(); _rateB = 0;
+            if (job.Work != null)
+            {
+                try { job.Work(new JobContext(this, job, ct, _gate)); lock (_l) job.State = "done"; }
+                catch (OperationCanceledException) { lock (_l) job.State = "cancelled"; }
+                catch (Exception ex) { lock (_l) { job.State = "done"; job.Outcome = "error"; job.Message = ex.Message; } OnError?.Invoke(job.Label, ex); }
+                finally { lock (_l) { job.Ended = _now(); job.CurrentFile = null; job.CurrentSize = job.CurrentDone = 0; Trim(); } }
+                return;
+            }
             try
             {
                 for (int idx = 0; ; idx++)

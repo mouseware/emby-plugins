@@ -22,9 +22,11 @@ static class Program
         var keep = new List<string>();
         try
         {
-            SqliteBasics(); Hashing(); Import(); Checks(); FullScan(); Browse(); Manual(); Discovery(); Skip(); FileTypes(); MasterSwitch(); ManualTask(); Patcher();
+            SqliteBasics(); Hashing(); Import(); Checks(); FullScan(); Browse(); Manual(); Discovery(); Skip(); FileTypes(); MasterSwitch(); ManualTask(); Patcher(); Moves();
             var legacy = Environment.GetEnvironmentVariable("LEGACY_DB");
             if (!string.IsNullOrEmpty(legacy)) RealDb(legacy, Environment.GetEnvironmentVariable("VERIFY_DIR"));
+            var realMi = Environment.GetEnvironmentVariable("MI_DB_COPY");
+            if (!string.IsNullOrEmpty(realMi)) RealMovesDryRun(realMi);
         }
         catch (Exception ex) { Ok(false, "unexpected: " + ex); }
         Console.WriteLine(pass + " passed, " + fail + " failed");
@@ -220,7 +222,7 @@ static class Program
             bool threw = false; try { s.InsertFile(new FileRecord { Path = p.ToLowerInvariant(), Status = FileStatus.Pending }); } catch (SqliteException) { threw = true; }
             Ok(threw, "unique path constraint (case-insensitive)");
             var idx = s.Db.Query("SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'ix_%'").Select(r => r.Str("name")).ToList();
-            Ok(idx.Count == 5, "indexes created: " + string.Join(",", idx));
+            Ok(idx.Count == 6 && idx.Contains("ix_files_size"), "indexes created (1.0.7: + size): " + string.Join(",", idx));
             s.Db.Transaction(() => s.SetMeta("k", "v")); Ok(s.GetMeta("k") == "v", "meta + transaction");
             try { s.Db.Transaction(() => { s.SetMeta("k", "w"); throw new InvalidOperationException("x"); }); } catch (InvalidOperationException) { }
             Ok(s.GetMeta("k") == "v", "transaction rolls back on error");
@@ -537,5 +539,167 @@ static class Program
         }
         Ok(new FileInfo(legacy).Length == size && new FileInfo(legacy).LastWriteTimeUtc == mt && Sha() == sha, "real original unchanged (size, mtime, SHA-256)");
         Directory.Delete(d, true);
+    }
+
+    static void Bytes(string p, int n, byte seed) { Directory.CreateDirectory(Path.GetDirectoryName(p)); var b = new byte[n]; for (int i = 0; i < n; i++) b[i] = (byte)(seed + i * 31); File.WriteAllBytes(p, b); }
+
+    static void Moves()
+    {
+        var d = Tmp(); var lib = Path.Combine(d, "lib"); var extra = Path.Combine(d, "elsewhere");
+        var roots = new[] { new ScanRoot(lib, "Lib") };
+        string P(params string[] x) => Path.Combine(new[] { lib }.Concat(x).ToArray());
+        Bytes(P("Movies", "A (2001)", "A (2001).mkv"), 300_000, 1);      // moved, same name
+        Bytes(P("Movies", "B", "b.mkv"), 310_000, 2);                    // moved and renamed
+        Bytes(P("Movies", "C", "c.mkv"), 320_000, 3);                    // gone for good
+        Bytes(P("Movies", "D", "d.mkv"), 330_000, 4);                    // a same name + size file appears with other content
+        Bytes(P("Movies", "E", "e.mkv"), 340_000, 5);                    // an old copy with its own history exists
+        Bytes(P("Copies", "e-copy.mkv"), 340_000, 5);
+        Bytes(P("Movies", "F", "f.mkv"), 350_000, 6);                    // moved outside the libraries
+        Bytes(P("Movies", "G", "g.mkv"), 360_000, 7);                    // relinked by hand
+        using (var s = new IntegrityStore(Path.Combine(d, "t.db")))
+        {
+            var e = new ScanEngine(s); var t0 = DateTime.UtcNow;
+            e.RunFull(roots, null, new ScanProgress(), CancellationToken.None);
+            e.RunFull(roots, null, new ScanProgress(), CancellationToken.None, false); // second scan: every row has history (2 checks)
+            long Id(params string[] x) => s.GetFile(P(x)).Id;
+            long a = Id("Movies", "A (2001)", "A (2001).mkv"), b = Id("Movies", "B", "b.mkv"), c = Id("Movies", "C", "c.mkv"), dd = Id("Movies", "D", "d.mkv"), ee = Id("Movies", "E", "e.mkv"), f = Id("Movies", "F", "f.mkv"), g = Id("Movies", "G", "g.mkv");
+            var histA = s.History(a).Count;
+            File.Move(P("Movies", "A (2001)", "A (2001).mkv"), Path.Combine(Directory.CreateDirectory(P("Movies", "A (2001) [new]")).FullName, "A (2001).mkv"));
+            File.Move(P("Movies", "B", "b.mkv"), Path.Combine(Directory.CreateDirectory(P("Moved")).FullName, "B renamed.mkv"));
+            File.Delete(P("Movies", "C", "c.mkv"));
+            File.Delete(P("Movies", "D", "d.mkv")); Bytes(P("Other", "d.mkv"), 330_000, 99);
+            File.Delete(P("Movies", "E", "e.mkv"));
+            Directory.CreateDirectory(extra); File.Move(P("Movies", "F", "f.mkv"), Path.Combine(extra, "f.mkv"));
+            File.Move(P("Movies", "G", "g.mkv"), Path.Combine(extra, "g-moved.mkv")); Bytes(Path.Combine(extra, "g-other.mkv"), 360_000, 70);
+            // the file list finds the new files (pending) and the next scan's missing pass flags the old rows
+            var disc = FileDiscovery.Run(s, roots, null, "test", CancellationToken.None);
+            foreach (var id in new[] { a, b, c, dd, ee, f, g }) e.CheckFile(s.GetFile(id).Path, "scan", null, null, CancellationToken.None);
+            Ok(s.MissingFiles().Count == 7, "7 missing rows");
+            var hints = s.RefreshMoveHints();
+            Ok(s.GetFile(a).MoveHint == P("Movies", "A (2001) [new]", "A (2001).mkv"), "scan hint: same name + size -> likely moved");
+            Ok(s.GetFile(dd).MoveHint == P("Other", "d.mkv"), "hint is size + name only (content not checked yet)");
+            Ok(s.GetFile(b).MoveHint == null && s.GetFile(ee).MoveHint == null, "no hint for renamed files or old copies with their own history");
+            Ok(hints == 2, "2 missing rows with a hint (" + hints + ")");
+            Ok(s.GetFile(P("Movies", "A (2001) [new]", "A (2001).mkv")).MoveHint == null, "hints only on missing rows");
+
+            bool on = true;
+            using (var q = new ManualCheckQueue(e, new G()) { IsEnabled = () => on })
+            {
+                var ms = new MoveService(s, q, () => null) { IsEnabled = () => on };
+                var job = ms.Find(null, new[] { extra });
+                Ok(job.Kind == "moves" && job.State == "queued", "Find queues a moves job");
+                q.Drain();
+                var j = q.Get(job.Id);
+                var r = ms.Last();
+                Ok(j.State == "done" && j.Outcome == "found" && r != null && r.State == "done", "search done (" + j.Message + ")");
+                MoveMatch M(long id) => r.Matches.FirstOrDefault(x => x.FileId == id);
+                Ok(M(a)?.Match == "hash+name" && M(a).Confidence == "high" && M(a).Verified && M(a).NewStatus == FileStatus.Pending, "same name + MD5 -> exact, high");
+                Ok(M(b)?.Match == "hash" && M(b).Confidence == "medium" && M(b).NewPath.EndsWith("B renamed.mkv"), "renamed + MD5 -> exact, medium");
+                Ok(M(c) == null && M(dd) == null, "no match for deleted file; same name + size with other content is not listed");
+                Ok(M(ee) == null, "an old copy with its own history is not a move");
+                Ok(M(f)?.NewStatus == "untracked" && M(f).NewFileId == null && M(f).Match == "hash+name", "untracked file in an extra folder found");
+                Ok(M(g)?.Match == "hash" && M(g).NewPath.EndsWith("g-moved.mkv"), "same-size renamed candidates hashed; only the identical one matches");
+                Ok(r.Exact == 4 && r.Likely == 0 && r.NoMatch == 3 && r.MissingSearched == 7, "counts: 4 exact, 3 not found (" + r.Exact + "/" + r.Likely + "/" + r.NoMatch + ")");
+                Ok(r.Hashed >= 5 && j.Done == r.Hashed && j.Total == r.Hashed && j.BytesDone == r.BytesHashed, "progress: every candidate hashed shows as a file of the job (" + j.Done + "/" + j.Total + ")");
+                Ok(s.MissingFiles().Count == 7, "search is read-only");
+                // persisted
+                var ms2 = new MoveService(s, q, () => null);
+                Ok(ms2.Last()?.Matches.Count == 4, "last result survives a restart");
+                // ignore
+                ms.Ignore(g, M(g).NewPath);
+                Ok(ms.Last().Matches.First(x => x.FileId == g).State == "ignored", "Ignore marks the row");
+                // stale: new file changed after the search
+                File.AppendAllText(Path.Combine(extra, "f.mkv"), "x");
+                var dupId = s.GetFile(P("Movies", "A (2001) [new]", "A (2001).mkv")).Id;
+                Ok(s.Scans(5).Count(x => x.Kind == "moves") == 0, "(no activity entry without the host)");
+                var mr = ms.Migrate(new[] { a });
+                Ok(mr.Done == 1 && mr.LogId.HasValue, "Migrate one row");
+                var fa = s.GetFile(a);
+                Ok(fa.Path == P("Movies", "A (2001) [new]", "A (2001).mkv") && fa.Status == FileStatus.Ok && fa.LastResult == CheckResult.Moved && fa.MoveHint == null, "record moved to the new path, status ok");
+                Ok(s.History(a).Count == histA + 2 && s.History(a)[0].Result == CheckResult.Moved && s.History(a)[0].Note.Contains("moved from") && s.History(a)[0].ScanId == mr.LogId, "history kept, move recorded with the activity id");
+                Ok(s.GetFile(dupId) == null, "duplicate pending row removed");
+                var log = s.GetScan(mr.LogId.Value);
+                Ok(log.Kind == "move" && log.State == "completed" && log.Done == 1 && log.Label.StartsWith("Moved: "), "Activity entry: " + log.Label);
+                Ok(s.ScanFindings(log.Id).Any(x => x.Id == a), "Activity detail lists the moved file");
+                var all = ms.Migrate(null);
+                Ok(all.Done == 1 && all.Skipped == 1 && all.Errors.Any(x => x.Contains("changed size")), "Migrate all: stale match skipped (" + string.Join("; ", all.Errors) + ")");
+                Ok(s.GetFile(b).Path.EndsWith("B renamed.mkv") && s.GetFile(b).Name == "B renamed.mkv" && s.GetFile(f).Status == FileStatus.Missing, "renamed migrated, stale one still missing");
+                Ok(ms.Last().Matches.Count(x => x.State == "migrated") == 2, "result rows marked migrated");
+                // re-search: ignored pair stays out
+                q.Get(ms.Find(new[] { g }, new[] { extra }).Id); q.Drain();
+                Ok(ms.Last().Matches.Count == 0 && ms.Last().MissingSearched == 1, "ignored pair not suggested again");
+                // relink: mismatch, then force (cached hash), then a matching one
+                var rj = ms.Relink(g, Path.Combine(extra, "g-other.mkv"), false); q.Drain(); rj = q.Get(rj.Id);
+                Ok(rj.Kind == "relink" && rj.Outcome == "mismatch" && s.GetFile(g).Status == FileStatus.Missing && rj.BytesDone == 360_000, "relink: hash differs -> not relinked");
+                var fj = ms.Relink(g, Path.Combine(extra, "g-other.mkv"), true); q.Drain(); fj = q.Get(fj.Id);
+                var fg = s.GetFile(g);
+                Ok(fj.Outcome == "migrated" && fj.BytesDone == 0 && fg.LastResult == CheckResult.MovedForced && fg.BaselineMd5 == fj.Hash && fg.Status == FileStatus.Ok, "relink anyway: no second hash, new hash becomes the baseline");
+                var hj = ms.Relink(f, Path.Combine(extra, "f.mkv"), false); q.Drain(); hj = q.Get(hj.Id);
+                Ok(hj.Outcome == "mismatch", "relink of the changed file: mismatch");
+                File.WriteAllBytes(Path.Combine(extra, "f.mkv"), File.ReadAllBytes(Path.Combine(extra, "f.mkv")).Take(350_000).ToArray());
+                hj = ms.Relink(f, Path.Combine(extra, "f.mkv"), false); q.Drain(); hj = q.Get(hj.Id);
+                Ok(hj.Outcome == "migrated" && s.GetFile(f).LastResult == CheckResult.Moved, "relink with matching hash: moved");
+                try { ms.Relink(c, Path.Combine(d, "nope.mkv"), false); Ok(false, "relink to a missing path refused"); } catch (ArgumentException) { Ok(true, "relink to a missing path refused"); }
+                try { ms.Relink(dd, P("Copies", "e-copy.mkv"), false); Ok(false, "relink onto a tracked copy refused"); } catch (ArgumentException ex) { Ok(ex.Message.Contains("copy"), "relink onto a file with its own history refused"); }
+                try { s.MoveRecord(a, P("Other", "d.mkv"), "00", false, "t", null, DateTime.UtcNow); Ok(false, "MoveRecord only for missing"); } catch (ArgumentException) { Ok(true, "MoveRecord only for missing rows"); }
+                // master switch
+                on = false;
+                try { ms.Find(null, null); Ok(false, "off: Find refused"); } catch (ArgumentException ex) { Ok(ex.Message == ManualCheckQueue.OffMessage, "switched off: Find refused"); }
+                try { ms.Relink(c, P("Other", "d.mkv"), false); Ok(false, "off: Relink refused"); } catch (ArgumentException) { Ok(true, "switched off: Relink refused"); }
+                try { ms.Migrate(null); Ok(false, "off: Migrate refused"); } catch (ArgumentException) { Ok(true, "switched off: Migrate refused"); }
+                on = true;
+                // checks still append to a check job, never to a custom job
+                var cj = q.EnqueueWork("w", "moves", "moves", ctx => { }); var k1 = q.Enqueue("k", new[] { P("Other", "d.mkv") });
+                Ok(k1.Id != cj.Id && k1.Kind == "check", "a check is never merged into a moves job"); q.Drain();
+            }
+        }
+        Directory.Delete(d, true);
+    }
+
+    /// <summary>Read-only dry run against a copy of the real plugin database: how many missing rows have likely matches.
+    /// No hashing, nothing written to the real database (the copy is opened; hints are computed on the copy).</summary>
+    static void RealMovesDryRun(string copy)
+    {
+        Console.WriteLine("Real DB dry run (copy): " + copy);
+        using (var s = new IntegrityStore(copy))
+        {
+            var missing = s.MissingFiles();
+            var allMissing = s.Db.ScalarLong("SELECT COUNT(*) FROM files WHERE status='missing'");
+            Console.WriteLine($"  missing rows: {allMissing} ({missing.Count} not ignored), pending {s.Db.ScalarLong("SELECT COUNT(*) FROM files WHERE status='pending'")}, total rows {s.FileCount}");
+            var sw = Stopwatch.StartNew(); var hints = s.RefreshMoveHints(); sw.Stop();
+            Console.WriteLine($"  scan hint (same name + size, new-ish row): {hints} of {missing.Count} missing ({sw.ElapsedMilliseconds} ms)");
+            var sizes = missing.Where(m => (MoveFinder.RefSize(m) ?? 0) > 0).Select(m => MoveFinder.RefSize(m).Value).ToList();
+            var cands = s.WithSizes(sizes).Where(r => !r.Ignored).ToList();
+            var bySize = cands.GroupBy(r => r.Size.Value).ToDictionary(g => g.Key, g => g.ToList());
+            int withSize = 0, sameName = 0, exactKnown = 0, needHash = 0, renamedOnly = 0, noBaseline = 0; long needBytes = 0;
+            var hashSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var m in missing)
+            {
+                var sz = MoveFinder.RefSize(m) ?? 0; if (sz <= 0) continue;
+                if (!bySize.TryGetValue(sz, out var l)) continue;
+                var el = l.Where(c => c.Id != m.Id && s.IsNewish(c, m)).ToList();
+                if (el.Count == 0) continue;
+                withSize++;
+                var want = IntegrityStore.NormHash(m.BaselineMd5);
+                if (want == null) noBaseline++;
+                var sn = el.Where(c => MoveFinder.SameName(c.Path, m.Path)).ToList();
+                if (sn.Count > 0) sameName++; else renamedOnly++;
+                if (want != null && el.Any(c => MoveFinder.KnownHash(c) == want)) { exactKnown++; continue; }
+                foreach (var c in (sn.Count > 0 ? sn : el.Take(MoveFinder.MaxRenamedPerFile))) if (MoveFinder.KnownHash(c) == null && hashSet.Add(c.Path)) { needHash++; needBytes += c.Size ?? 0; }
+            }
+            Console.WriteLine($"  missing with a same-size new-ish candidate: {withSize}; same name too: {sameName}; renamed only: {renamedOnly}; no baseline hash: {noBaseline}");
+            Console.WriteLine($"  already confirmed by a known hash (no hashing needed): {exactKnown}");
+            Console.WriteLine($"  candidates a search would hash: {needHash} files, {needBytes / 1073741824.0:0.00} GB");
+            foreach (var m in missing.Where(x => x.MoveHint != null).Take(8)) Console.WriteLine("    hint: " + m.Path + "  ->  " + m.MoveHint);
+            // the real search, with hashing disabled (no file is read): matches confirmed by hashes already in the database
+            int asked = 0; long askedBytes = 0;
+            sw.Restart();
+            var res = MoveFinder.Find(s, null, null, null, (p, size) => { asked++; askedBytes += size; return new HashOutcome { Error = "dry run: not hashed" }; });
+            sw.Stop();
+            Console.WriteLine($"  Find (no hashing): {res.MissingSearched} searched, {res.Candidates} candidates, exact {res.Exact}, likely {res.Likely}, not found {res.NoMatch}; would hash {asked} files ({askedBytes / 1073741824.0:0.00} GB); {sw.ElapsedMilliseconds} ms");
+            foreach (var g in res.Matches.GroupBy(x => x.Match + "/" + x.Confidence)) Console.WriteLine($"    {g.Key}: {g.Count()}");
+            foreach (var x in res.Matches.Take(14)) Console.WriteLine($"    {x.Match,-9} {x.OldPath}  ->  {x.NewPath}  [{x.NewStatus}]");
+            Ok(true, "real DB dry run done (copy only)");
+        }
     }
 }

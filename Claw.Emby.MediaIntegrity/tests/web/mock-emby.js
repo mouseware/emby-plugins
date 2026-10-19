@@ -86,7 +86,7 @@
       act.Batches++; act.LastBatchAdded = added; act.Label = act._first + " + " + (act.Batches - 1) + " more batch" + (act.Batches === 2 ? "" : "es");
       return act;
     }
-    var j = { Batches: 1, LastBatchAdded: list.length, _first: label, Id: ++S.jobSeq, Label: label, Source: "manual", State: "queued", Created: new Date().toISOString(), Total: list.length, Done: 0, BytesTotal: list.reduce(function (a, f) { return a + (f.Status === "missing" ? 0 : f.Size || 0); }, 0), BytesDone: 0,
+    var j = { Kind: "check", Batches: 1, LastBatchAdded: list.length, _first: label, Id: ++S.jobSeq, Label: label, Source: "manual", State: "queued", Created: new Date().toISOString(), Total: list.length, Done: 0, BytesTotal: list.reduce(function (a, f) { return a + (f.Status === "missing" ? 0 : f.Size || 0); }, 0), BytesDone: 0,
       CurrentFile: null, CurrentSize: 0, CurrentDone: 0, Ok: 0, New: 0, Changed: 0, Modified: 0, Missing: 0, Unreadable: 0, Absent: 0, Findings: [], Results: [], BytesPerSecond: 0, _files: list };
     if (!list.length) { j.State = "done"; j.Ended = j.Created; }
     S.jobs.push(j); return j;
@@ -97,9 +97,15 @@
     if (!j) return;
     if (j.State === "queued") { j.State = "running"; j.Started = new Date().toISOString(); }
     var f = j._files[j.Done];
+    if (j._work && !f) { j._work(j); j.State = "done"; j.Ended = new Date().toISOString(); return; }
     if (!j.CurrentFile) { j.CurrentFile = f.Path; j.CurrentSize = f.Status === "missing" ? 0 : f.Size; j.CurrentDone = 0; }
     var inc = Math.max(1, Math.ceil(j.CurrentSize * S.step));
     j.CurrentDone = Math.min(j.CurrentSize, j.CurrentDone + inc); j.BytesDone += inc; j.BytesPerSecond = 187.4e6;
+    if (j.CurrentDone >= j.CurrentSize && j._work) {
+      j.Done++; j.CurrentFile = null;
+      if (j.Done >= j.Total) { j._work(j); j.State = "done"; j.Ended = new Date().toISOString(); }
+      return;
+    }
     if (j.CurrentDone >= j.CurrentSize) {
       var res = S.outcome[f.Path] || (f.Status === "missing" ? "missing" : f.Status === "changed" ? "changed" : f.Status === "unreadable" ? "unreadable" : (f.Status === "pending" || f.Status === "never_hashed") ? "new" : "match");
       f.LastChecked = new Date().toISOString(); f.LastResult = res;
@@ -113,11 +119,49 @@
       if (j.Done >= j.Total) { j.State = "done"; j.Ended = new Date().toISOString(); }
     }
   }
-  function pub(j) { var c = JSON.parse(JSON.stringify(j)); delete c._files; delete c._first; return c; }
+  function pub(j) { var w = j._work; delete j._work; var c = JSON.parse(JSON.stringify(j)); if (w) j._work = w; delete c._files; delete c._first; return c; }
+  // ---- moved files (1.0.7): scenario added by the test (S.addMoves) ----
+  S.moves = null; S.moveSeq = 0;
+  function byId(i) { return files.filter(function (x) { return x.Id === +i; })[0]; }
+  function setPath(f, p) { var parts = p.split("\\"); f.Path = p; f.Name = parts.pop(); f.Folder = parts.join("\\"); f.Ext = f.Name.indexOf(".") < 0 ? "" : f.Name.split(".").pop().toLowerCase(); }
+  S.addMoves = function () {
+    var G = 1073741824, M = 1048576, now2 = iso(2 * H);
+    function miss(p, size, o) { return add(p, size, "missing", Object.assign({ LastChecked: now2, LastResult: "missing" }, o || {})); }
+    function cand(p, size) { return add(p, size, "pending", { Hash: null, LastHash: null, LastChecked: null, LastResult: null, BaselineDate: null }); }
+    var a = miss("D:\\Media\\Movies\\Night Ride (2020)\\Night Ride (2020) [WEB-1080p].mkv", Math.round(4.37 * G));
+    var a2 = cand("E:\\Archive\\Movies\\Night Ride (2020)\\Night Ride (2020) [WEB-1080p].mkv", a.Size); a.MoveHint = a2.Path;
+    var b = miss("D:\\Media\\TV\\Example Show\\Season 04\\Example Show - S04E01 - Pilot.mkv", 1187 * M);
+    var b2 = cand("D:\\Media\\TV\\Example Show\\Season 4\\Example Show - S04E01 - Pilot.mkv", b.Size); b.MoveHint = b2.Path;
+    var c = miss("D:\\Media\\TV\\Example Show\\Season 04\\Example Show - S04E02 - Second.mkv", 1203 * M);
+    var c2 = cand("D:\\Media\\TV\\Example Show\\Season 4\\Example Show - S04E02 - Second.mkv", c.Size); c.MoveHint = c2.Path;
+    var d = miss("E:\\Family\\Videos\\2023\\Beach.mov", 2988 * M);
+    var d2 = cand("E:\\Family\\Videos\\2023\\Summer\\Beach day 1.mov", d.Size);
+    var e = miss("F:\\Books\\Jane Example\\Old Title\\Old Title.m4b", 402 * M, { Hash: null, LastHash: null });
+    var e2 = cand("F:\\Books\\Jane Example\\Old Title (Unabridged)\\Old Title.m4b", e.Size); e.MoveHint = e2.Path;
+    miss("D:\\Media\\Movies\\Lost Film (1999)\\Lost Film (1999).avi", 1402 * M);
+    var v = miss("E:\\Family\\Videos\\2023\\Party.mov", 1650 * M); // relinked by hand in the test
+    S.mv = { exact: [[a, a2, "hash+name", "high"], [b, b2, "hash+name", "high"], [c, c2, "hash+name", "high"], [d, d2, "hash", "medium", "renamed: Beach.mov → Beach day 1.mov"]], likely: [[e, e2, "name+size", "low", "no baseline hash to confirm"]], relink: v };
+    S.relinkOk = { "E:\\Family\\Videos\\2023\\Summer\\Party.mov": v.Id };
+    add("E:\\Family\\Videos\\2023\\Summer\\Party.mov", v.Size, "pending", { Hash: null, LastHash: null, LastChecked: null });
+    add("E:\\Family\\Videos\\2023\\Summer\\Party (edit).mov", v.Size + 4096, "pending", { Hash: null, LastHash: null, LastChecked: null });
+  };
+  function mm(x, verified) { return { FileId: x[0].Id, OldPath: x[0].Path, NewPath: x[1].Path, Size: x[0].Size, NewFileId: x[1].Id, NewStatus: x[1].Status, Match: x[2], Confidence: x[3], Verified: verified, Md5: verified ? x[0].Hash : null, OtherCopies: 0, Note: x[4] || null, State: "pending" }; }
+  function moveFile(f, np, force) {
+    var dup = files.filter(function (x) { return x !== f && x.Path.toLowerCase() === np.toLowerCase(); })[0];
+    if (dup) files.splice(files.indexOf(dup), 1);
+    setPath(f, np); f.Status = "ok"; f.LastResult = force ? "moved-forced" : "moved"; f.LastChecked = new Date().toISOString(); f.MoveHint = null; if (!f.Hash) f.Hash = md5(f.Id + 77); f.LastHash = f.Hash;
+  }
+  function logMove(label, n, kind) { var id = 900 + (++S.moveSeq); S.scans.unshift({ Id: id, Kind: kind || "move", Trigger: "migrate", Label: label, State: "completed", Started: new Date().toISOString(), Ended: new Date().toISOString(), Total: n, Done: n, BytesTotal: 0, Matched: n, New: 0, Changed: 0, Modified: 0, Missing: 0, Unreadable: 0, Note: n + " record" + (n === 1 ? "" : "s") + " moved with their history" }); }
   function manualStatus() {
     var cur = S.jobs.filter(function (x) { return x.State === "running"; })[0] || null, queued = S.jobs.filter(function (x) { return x.State === "queued"; });
     var fin = S.jobs.filter(function (x) { return x.State === "done" || x.State === "cancelled"; }).slice(-1)[0] || null;
     return { Active: !!cur || queued.length > 0, Job: cur && pub(cur), QueuedJobs: queued.length, PendingFiles: 0, BytesPerSecond: cur ? 187.4e6 : 0, SecondsLeft: cur ? (cur.BytesTotal - cur.BytesDone) / 187.4e6 : null, LastFinished: fin && pub(fin) };
+  }
+  function newJobWork(label, kind, list, work) {
+    var j = { Kind: kind, Batches: 1, LastBatchAdded: list.length, _first: label, Id: ++S.jobSeq, Label: label, Source: kind, State: "queued", Created: new Date().toISOString(), Total: list.length, Done: 0,
+      BytesTotal: list.reduce(function (a, f) { return a + (f.Size || 0); }, 0), BytesDone: 0, CurrentFile: null, CurrentSize: 0, CurrentDone: 0, Ok: 0, New: 0, Changed: 0, Modified: 0, Missing: 0, Unreadable: 0, Absent: 0,
+      Findings: [], Results: [], BytesPerSecond: 0, _files: list, _work: work };
+    S.jobs.push(j); return j;
   }
   S.newJob = newJob; S.advance = advance;
   function parse(u) { var p = u.split("?"), q = {}; (p[1] || "").split("&").forEach(function (kv) { if (!kv) return; var a = kv.split("="); q[decodeURIComponent(a[0])] = decodeURIComponent(a[1] || ""); }); return { path: p[0], q: q }; }
@@ -154,7 +198,55 @@
       if (f.Status === "missing") checks[0].Md5 = null;
       return { File: f, Checks: f.Status === "never_hashed" ? [] : checks };
     }
+    if (method === "POST" && (m = /^Files\/(\d+)\/Relink$/.exec(path))) {
+      var rf = byId(m[1]), rp = q.Path, force = q.Force === "true";
+      if (!rf || rf.Status !== "missing") throw new Error("not missing");
+      var target = files.filter(function (x) { return x.Path.toLowerCase() === (rp || "").toLowerCase(); })[0];
+      if (!target) throw new Error("file not found: " + rp);
+      var rj = newJobWork("Relink " + rf.Name, "relink", [target], function (j) {
+        var same = S.relinkOk && S.relinkOk[target.Path] === rf.Id;
+        j.Hash = same ? rf.Hash : md5(target.Id + 5);
+        if (!same && !force) { j.Outcome = "mismatch"; j.Changed = 1; j.Message = "The hash of " + target.Name + " (" + j.Hash + ") differs from the baseline of " + rf.Name + " (" + rf.Hash + "). Not relinked."; return; }
+        moveFile(rf, target.Path, !same); j.Outcome = "migrated"; j.Ok = 1; j.Message = same ? "Relinked: hash matches the baseline." : "Relinked anyway: the new hash is now the baseline.";
+        logMove("Relink " + rf.Name, 1, "relink");
+      });
+      return pub(rj);
+    }
     switch (method + " " + path) {
+      case "GET Moves": return S.moves || { State: "none" };
+      case "POST Moves/Clear": S.moves = null; return { Ok: true };
+      case "POST Moves/Find": {
+        if (S.cfg.Enabled === false) throw new Error("Media Integrity is switched off (General tab).");
+        var ids = (q.Ids || "").split(",").filter(Boolean).map(Number), mv = S.mv || { exact: [], likely: [] };
+        var pick = function (x) { return !ids.length || ids.indexOf(x[0].Id) >= 0; };
+        var ex = mv.exact.filter(pick), lk = mv.likely.filter(pick);
+        var nMiss = files.filter(function (f) { return f.Status === "missing" && !f.Ignored && (!ids.length || ids.indexOf(f.Id) >= 0); }).length;
+        S.lastFind = q;
+        var fj = newJobWork("Find moved files (" + nMiss + " missing files)", "moves", ex.map(function (x) { return x[1]; }), function (j) {
+          var bytes = ex.reduce(function (a2, x) { return a2 + x[1].Size; }, 0);
+          S.moves = { JobId: j.Id, Started: j.Started, Ended: new Date().toISOString(), State: "done", MissingSearched: nMiss, Candidates: ex.length + lk.length + 1, Hashed: ex.length, BytesHashed: bytes,
+            Exact: ex.length, Likely: lk.length, NoMatch: nMiss - ex.length - lk.length, Folders: (q.Folders || "").split("\n").filter(Boolean), Errors: [],
+            Matches: ex.map(function (x) { return mm(x, true); }).concat(lk.map(function (x) { return mm(x, false); })) };
+          j.Ok = ex.length; j.New = lk.length; j.Absent = S.moves.NoMatch; j.Outcome = "found";
+          j.Message = ex.length + " exact, " + lk.length + " likely, " + S.moves.NoMatch + " not found (" + ex.length + " candidates hashed)";
+        });
+        return pub(fj);
+      }
+      case "POST Moves/Migrate": {
+        var mids = (q.Ids || "").split(",").filter(Boolean).map(Number), done = 0, lastName = "";
+        (S.moves ? S.moves.Matches : []).forEach(function (x) {
+          if (x.State !== "pending" || !x.Verified || (mids.length && mids.indexOf(x.FileId) < 0)) return;
+          moveFile(byId(x.FileId), x.NewPath, false); x.State = "migrated"; done++; lastName = byId(x.FileId).Name;
+        });
+        if (done) logMove(done === 1 ? "Moved: " + lastName : "Migrated " + done + " moved files", done);
+        return { Done: done, Skipped: 0, Errors: [], LogId: done ? 900 + S.moveSeq : null };
+      }
+      case "POST Moves/Ignore": {
+        (S.moves ? S.moves.Matches : []).forEach(function (x) { if (x.FileId === +q.Id && x.NewPath === q.Path) x.State = "ignored"; });
+        var igf = byId(q.Id); if (igf && igf.MoveHint === q.Path) igf.MoveHint = null;
+        (S.ignoredMoves = S.ignoredMoves || []).push(q.Id + "|" + q.Path);
+        return { Ok: true };
+      }
       case "POST Check/Files": { var fl = q.Ids.split(",").map(Number).map(function (i) { return files.filter(function (x) { return x.Id === i; })[0]; }).filter(Boolean); return pub(newJob(fl.length === 1 ? fl[0].Name : fl.length + " selected files", fl)); }
       case "POST Check/Items": return pub(newJob("Sintel (2010)", files.filter(function (f) { return /Sintel/.test(f.Path); })));
       case "POST Check/Matching": {
@@ -216,7 +308,7 @@
         });
         return out;
       }
-      case "GET Info": return { Enabled: S.cfg.Enabled !== false, Version: "1.0.6.0" };
+      case "GET Info": return { Enabled: S.cfg.Enabled !== false, Version: "1.0.7.0" };
       case "GET Files/Types": {
         var tg = groups(q.GroupBy).filter(function (x) { return x.Key === q.Group; })[0];
         var tl = q.Group === "all" ? files.slice() : files.filter(function (f) { return tg && under(f, tg.Paths); });
@@ -254,7 +346,7 @@
     getUrl: function (p, q) { var s = Object.keys(q || {}).filter(function (k) { return q[k] !== undefined && q[k] !== null; }).map(function (k) { return encodeURIComponent(k) + "=" + encodeURIComponent(q[k]); }).join("&"); return p + (s ? "?" + s : ""); },
     getJSON: function (u) { try { return Promise.resolve(clone(api("GET", u))); } catch (e) { return Promise.reject(e); } },
     ajax: function (o) { try { return Promise.resolve(clone(api(o.type, o.url))); } catch (e) { return Promise.reject(e); } },
-    getPluginConfiguration: function () { return Promise.resolve(clone(S.cfg)); }, getInstalledPlugins: function () { return Promise.resolve([{ Id: "5b0c7f3e-2d4a-4e61-9a8b-6c1f0e7d3a52", Name: "Media Integrity", Version: "1.0.6.0" }]); },
+    getPluginConfiguration: function () { return Promise.resolve(clone(S.cfg)); }, getInstalledPlugins: function () { return Promise.resolve([{ Id: "5b0c7f3e-2d4a-4e61-9a8b-6c1f0e7d3a52", Name: "Media Integrity", Version: "1.0.7.0" }]); },
     updatePluginConfiguration: function (pid, c) { S.cfg = clone(c); S.saved.push(clone(c)); return Promise.resolve({}); }
   };
   window.Dashboard = { showLoadingMsg: function () {}, hideLoadingMsg: function () {}, processPluginConfigurationUpdateResult: function () { window.__savedToast = true; } };
