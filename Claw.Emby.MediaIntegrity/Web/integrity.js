@@ -867,14 +867,72 @@ define([], function () {
 
     var ACT_TYPES = { scheduled: "Scheduled", fullmanual: "Full scan (you)", manual: "Manual", item: "Item menu", newmedia: "New media", moves: "Moved files" };
     function actType(s) { return s.Kind === "full" ? (s.Trigger === "manual" ? "fullmanual" : "scheduled") : s.Kind === "item" ? "item" : s.Kind === "newmedia" ? "newmedia" : s.Kind === "moves" || s.Kind === "move" || s.Kind === "relink" ? "moves" : "manual"; }
+    function bucketPill(b, raw) {
+      var cls = b === "OK" ? "mi-p-ok" : b === "Changed" ? "mi-p-changed" : b === "Missing" ? "mi-p-missing" : "mi-p-unreadable";
+      return '<span class="mi-pill ' + cls + '" title="' + esc(raw || b) + '">' + esc(b || "OK") + "</span>";
+    }
     function loadActDetail(id) {
       return getJSON("Scans/" + id).then(function (d) {
         var td = q('.mi-act-detail[data-for="' + id + '"] td'); if (!td) return;
-        var sc = d.Scan || {}, fs = d.Findings || [];
-        td.innerHTML = "<div><b>" + esc(sc.Label || "Full integrity scan") + "</b> · " + fmtNum(d.Checks) + " file check" + (d.Checks === 1 ? "" : "s") + " recorded" + (sc.Roots && sc.Kind === "full" ? ' · <span class="mi-dim">' + esc(sc.Roots) + "</span>" : "") + "</div>" +
-          (fs.length ? '<table class="mi-t mi-act-find"><thead><tr><th>Status</th><th>File</th><th class="mi-num">Size</th><th>Last checked</th></tr></thead><tbody class="mi-click">' +
-            fs.map(function (f) { return '<tr data-id="' + f.Id + '"><td>' + pill(f.Status, f.Ignored) + '</td><td class="mi-ell" title="' + esc(f.Path) + '">' + esc(f.Path) + '</td><td class="mi-num">' + fmtBytes(f.Size) + "</td><td>" + fmtTime(f.LastChecked) + "</td></tr>"; }).join("") + "</tbody></table>"
-            : '<div class="mi-dim" style="margin-top:.4em">No problems found by this run.</div>');
+        var sc = d.Scan || {};
+        var head = "<div><b>" + esc(sc.Label || "Full integrity scan") + "</b> · " + fmtNum(d.Checks) + " file check" + (d.Checks === 1 ? "" : "s") + " recorded" +
+          (d.DetailsRecorded ? " · " + fmtNum(d.DetailsCount) + " in this file list" : "") +
+          (sc.Roots && sc.Kind === "full" ? ' · <span class="mi-dim">' + esc(sc.Roots) + "</span>" : "") + "</div>";
+        if (!d.DetailsRecorded) {
+          td.innerHTML = head + '<div class="mi-dim mi-act-none" style="margin-top:.6em">Details were not recorded for this run. File lists are kept for new activity going forward (see Settings).</div>';
+          return;
+        }
+        var st = (S.actFile && S.actFile.id === id) ? S.actFile : { id: id, search: "", problems: false, sort: "path", desc: false, start: 0 };
+        st.id = id; S.actFile = st;
+        td.innerHTML = head +
+          '<div class="mi-bar2 mi-act-files-bar">' +
+            '<label><input type="checkbox" class="mi-act-prob"' + (st.problems ? " checked" : "") + " /> Problems only</label>" +
+            '<input type="text" class="mi-act-search" placeholder="Search paths" value="' + esc(st.search) + '" />' +
+            '<span class="mi-dim mi-act-fcnt"></span>' +
+            '<button type="button" class="mi-btn mi-mini mi-act-csv" style="margin-left:auto"><i class="md-icon">download</i>Export CSV</button>' +
+          "</div>" +
+          '<table class="mi-t mi-act-find"><thead><tr><th data-sort="result">Result</th><th data-sort="path">Path</th><th data-sort="time">Time</th><th data-sort="size" class="mi-num">Size</th></tr></thead><tbody class="mi-click"></tbody></table>' +
+          '<div class="mi-pager"><button type="button" class="mi-btn mi-mini mi-act-prev">‹ Previous</button><span class="mi-act-page"></span><button type="button" class="mi-btn mi-mini mi-act-next">Next ›</button></div>';
+        ClawColResize.attach(td.querySelector("table"), "claw.mediaintegrity.cols.activityfiles");
+        var timer = null;
+        td.querySelector(".mi-act-prob").addEventListener("change", function (e) { st.problems = e.target.checked; st.start = 0; loadActFiles(); });
+        td.querySelector(".mi-act-search").addEventListener("input", function (e) { clearTimeout(timer); timer = setTimeout(function () { st.search = e.target.value; st.start = 0; loadActFiles(); }, 250); });
+        td.querySelector(".mi-act-prev").addEventListener("click", function () { st.start = Math.max(0, st.start - PAGE); loadActFiles(); });
+        td.querySelector(".mi-act-next").addEventListener("click", function () { st.start += PAGE; loadActFiles(); });
+        td.querySelector("thead").addEventListener("click", function (e) {
+          var th = e.target.closest("th[data-sort]"); if (!th || e.target.classList.contains("cr-h")) return;
+          var k = th.getAttribute("data-sort"); st.desc = st.sort === k ? !st.desc : (k === "size" || k === "time"); st.sort = k; st.start = 0; loadActFiles();
+        });
+        td.querySelector(".mi-act-csv").addEventListener("click", function () {
+          getJSON("Scans/" + id + "/Files", { Format: "csv", Search: st.search || "", ProblemsOnly: st.problems }).then(function (r) {
+            var blob = new Blob([r.Content || ""], { type: "text/csv;charset=utf-8" });
+            var a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = r.FileName || ("activity-" + id + ".csv");
+            a.click();
+            setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+            toast("CSV downloaded");
+          }, function () { toast("CSV export failed"); });
+        });
+        function loadActFiles() {
+          return getJSON("Scans/" + id + "/Files", { Search: st.search || "", ProblemsOnly: st.problems, Sort: st.sort, Desc: st.desc, StartIndex: st.start, Limit: PAGE }).then(function (r) {
+            var items = r.Items || [];
+            td.querySelectorAll(".mi-act-find th[data-sort]").forEach(function (th) {
+              var k = th.getAttribute("data-sort"); th.innerHTML = th.getAttribute("data-label") || th.textContent.replace(/ [▲▼]$/, "");
+              if (!th.getAttribute("data-label")) th.setAttribute("data-label", th.innerHTML);
+              th.innerHTML = th.getAttribute("data-label") + (k === st.sort ? (st.desc ? " ▼" : " ▲") : "");
+            });
+            td.querySelector("tbody").innerHTML = items.map(function (f) {
+              return '<tr data-id="' + (f.FileId || "") + '"><td>' + bucketPill(f.Bucket, f.Result) + '</td><td class="mi-ell" title="' + esc(f.Path) + '">' + esc(f.Path) + '</td><td class="mi-nowrap">' + fmtTime(f.Time) + '</td><td class="mi-num">' + (f.Size != null ? fmtBytes(f.Size) : "") + "</td></tr>";
+            }).join("") || '<tr><td colspan="4" class="mi-empty">' + (st.search || st.problems ? "No files match." : "No files recorded.") + "</td></tr>";
+            var from = r.Total ? r.StartIndex + 1 : 0, to = r.StartIndex + items.length;
+            td.querySelector(".mi-act-fcnt").textContent = fmtNum(r.Total) + " file" + (r.Total === 1 ? "" : "s");
+            td.querySelector(".mi-act-page").textContent = fmtNum(from) + "–" + fmtNum(to) + " of " + fmtNum(r.Total);
+            td.querySelector(".mi-act-prev").disabled = r.StartIndex <= 0;
+            td.querySelector(".mi-act-next").disabled = to >= r.Total;
+          });
+        }
+        loadActFiles();
       });
     }
     q(".mi-act-type").addEventListener("change", renderScans);
@@ -927,6 +985,8 @@ define([], function () {
         q(".mi-s-play").checked = c.PauseDuringPlayback !== false;
         q(".mi-s-nsum").checked = c.NotifyScanSummary !== false;
         q(".mi-s-nprob").checked = c.NotifyProblems !== false;
+        q(".mi-s-actruns").value = c.ActivityDetailsMaxRuns != null ? c.ActivityDetailsMaxRuns : 30;
+        q(".mi-s-actdays").value = c.ActivityDetailsMaxDays != null ? c.ActivityDetailsMaxDays : 180;
         q(".mi-s-legacy").value = c.LegacyDbPath || "";
         renderImport(S.status && S.status.Import);
       });
@@ -962,6 +1022,8 @@ define([], function () {
         c.PauseDuringPlayback = q(".mi-s-play").checked;
         c.NotifyScanSummary = q(".mi-s-nsum").checked;
         c.NotifyProblems = q(".mi-s-nprob").checked;
+        c.ActivityDetailsMaxRuns = Math.max(0, parseInt(q(".mi-s-actruns").value, 10) || 0);
+        c.ActivityDetailsMaxDays = Math.max(0, parseInt(q(".mi-s-actdays").value, 10) || 0);
         c.LegacyDbPath = q(".mi-s-legacy").value.trim();
         var save = function () {
           return ApiClient.updatePluginConfiguration(PLUGIN_ID, c).then(function (r) {

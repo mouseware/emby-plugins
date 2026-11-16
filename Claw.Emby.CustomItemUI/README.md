@@ -5,6 +5,7 @@ Emby Server plugin for item-page web UI tweaks without browser extensions:
 - Move the **Links** section up on the item detail page
 - Wrap media **file paths** in VLC (cvlc:///...) links
 - Style external links as **raised buttons**
+- Optionally **replace trailers of movies you own** with the library movie (v1.3)
 - Rearrange the admin **Dashboard** home page into rows (v1.1)
 
 Settings live in the Emby dashboard (**Settings → Custom Item UI**). The plugin re-injects a small JS file into `dashboard-ui` on every Emby startup so core updates do not permanently wipe the behavior.
@@ -52,7 +53,8 @@ On startup the plugin writes:
 | Move Links / insert after / order / hide heading | Links placement |
 | VLC path links / URL template / icon | Path → VLC |
 | Raised buttons / border radius | External link look |
-| Apply mode + allowlists | all / admins / allowlist (item-page tweaks only) |
+| Apply mode + allowlists | all / admins / allowlist (item-page tweaks and trailer replacement) |
+| Replace trailers of movies I own (v1.3) | Off by default. When on, a trailer in the web UI whose movie or series is in this library is shown as that library item (image, title, click/play). IMDb/TMDb first, then title+year. Unowned titles and local trailer extras stay as they are. |
 | Dashboard layout (v1.1) | see below |
 
 URL template default: `cvlc:///file:///{path}` (`{path}` is URI-encoded).
@@ -83,6 +85,7 @@ Default layout:
 
 ## Changelog
 
+- **1.3.0.0**: Optional **Replace trailers of movies I own** toggle (Item pages tab, off by default). When it's on, a trailer in the web UI — home rows, the Trailers channel, suggestions — whose movie or series is in this library is shown as that library item: the card image, title and click/play open the owned movie. Matching uses IMDb or TMDb first, then title and year. Trailers of titles you don't own, and trailer extras already attached to a library item, stay as they are. The web client asks a server lookup (cached) rather than querying each card. The built-in Trailers plugin is not modified.
 - **1.2.3.0**: The settings page is split into tabs like Guard's: **Item pages** (Links, VLC path links, external link buttons, who it applies to), **Dashboard** (layout editor, Activity/Alerts table options) and **General** (master switch, version, about). The last tab you used is remembered in this browser (localStorage `claw.customitemui.settingsTab`). One **Save** button saves every tab, and the settings themselves haven't changed. If a dashboard row is over 12 columns when you save, the page switches to the Dashboard tab and shows the error.
 - **1.2.2.0**: Dashboard Activity and Alerts tables have resizable columns. Drag the right edge of any column header to resize it. Widths are saved per table in this browser (localStorage `claw.customitemui.cols.activity / .alerts`). Double-click an edge to reset the table to automatic widths.
 
@@ -107,3 +110,4 @@ All images are in [docs/screenshots/custom-item-ui/](../docs/screenshots/custom-
 | | |
 |---|---|
 | ![Dashboard Activity/Alerts tables](../docs/screenshots/custom-item-ui/dashboard-tables.png)<br/>Dashboard Activity/Alerts tables | ![Settings (tabs)](../docs/screenshots/custom-item-ui/settings.png)<br/>Settings (tabs) |
+| ![Trailers of movies you own](../docs/screenshots/custom-item-ui/trailers-replaced.png)<br/>Trailer cards replaced with the owned movie | ![Trailer toggle](../docs/screenshots/custom-item-ui/settings-trailers.png)<br/>Replace trailers of movies I own (off by default) |

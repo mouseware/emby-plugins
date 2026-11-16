@@ -22,7 +22,7 @@ static class Program
         var keep = new List<string>();
         try
         {
-            SqliteBasics(); Hashing(); Import(); Checks(); FullScan(); Browse(); Manual(); Discovery(); Skip(); FileTypes(); MasterSwitch(); ManualTask(); Patcher(); Moves();
+            SqliteBasics(); Hashing(); Import(); Checks(); FullScan(); Browse(); Manual(); Discovery(); Skip(); FileTypes(); MasterSwitch(); ManualTask(); Patcher(); Moves(); ActivityDetails();
             var legacy = Environment.GetEnvironmentVariable("LEGACY_DB");
             if (!string.IsNullOrEmpty(legacy)) RealDb(legacy, Environment.GetEnvironmentVariable("VERIFY_DIR"));
             var realMi = Environment.GetEnvironmentVariable("MI_DB_COPY");
@@ -222,7 +222,7 @@ static class Program
             bool threw = false; try { s.InsertFile(new FileRecord { Path = p.ToLowerInvariant(), Status = FileStatus.Pending }); } catch (SqliteException) { threw = true; }
             Ok(threw, "unique path constraint (case-insensitive)");
             var idx = s.Db.Query("SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'ix_%'").Select(r => r.Str("name")).ToList();
-            Ok(idx.Count == 6 && idx.Contains("ix_files_size"), "indexes created (1.0.7: + size): " + string.Join(",", idx));
+            Ok(idx.Count == 7 && idx.Contains("ix_files_size") && idx.Contains("ix_run_files_scan"), "indexes created (1.0.8: + run_files): " + string.Join(",", idx));
             s.Db.Transaction(() => s.SetMeta("k", "v")); Ok(s.GetMeta("k") == "v", "meta + transaction");
             try { s.Db.Transaction(() => { s.SetMeta("k", "w"); throw new InvalidOperationException("x"); }); } catch (InvalidOperationException) { }
             Ok(s.GetMeta("k") == "v", "transaction rolls back on error");
@@ -652,6 +652,66 @@ static class Program
                 var cj = q.EnqueueWork("w", "moves", "moves", ctx => { }); var k1 = q.Enqueue("k", new[] { P("Other", "d.mkv") });
                 Ok(k1.Id != cj.Id && k1.Kind == "check", "a check is never merged into a moves job"); q.Drain();
             }
+        }
+        Directory.Delete(d, true);
+    }
+
+
+    static void ActivityDetails()
+    {
+        var d = Tmp();
+        var dbp = Path.Combine(d, "integrity.db");
+        using (var s = new IntegrityStore(dbp))
+        {
+            var now = DateTime.UtcNow;
+            var f1 = s.InsertFile(new FileRecord { Path = @"D:\Media\Movies\Sintel (2010)\Sintel (2010).mkv", Status = FileStatus.Ok, Size = 1000 });
+            var f2 = s.InsertFile(new FileRecord { Path = @"D:\Media\Movies\Sintel (2010)\poster.jpg", Status = FileStatus.Ok, Size = 200 });
+            var f3 = s.InsertFile(new FileRecord { Path = @"D:\Media\TV\Example Show\Season 01\Example Show - S01E01.mkv", Status = FileStatus.Changed, Size = 3000 });
+            var missing = s.InsertFile(new FileRecord { Path = @"D:\Media\TV\Gone.mkv", Status = FileStatus.Missing, Size = 4000 });
+            var err = s.InsertFile(new FileRecord { Path = @"E:\Bad\unreadable.mov", Status = FileStatus.Unreadable, Size = 50 });
+
+            var old = s.NewScan("full", now.AddDays(-400), @"D:\Media", "Old scan", "scheduled");
+            old.State = "completed"; old.Ended = now.AddDays(-399); s.SaveScan(old);
+            Ok(!s.HasRunFiles(old.Id) && s.RunFileCount(old.Id) == 0, "older run has no recorded details");
+
+            var recent = s.NewScan("full", now.AddHours(-2), @"D:\Media", "Full integrity scan", "manual");
+            s.AddCheck(new CheckRecord { FileId = f1, Time = now.AddHours(-1), Result = CheckResult.Match, Source = "scan", ScanId = recent.Id, Size = 1000 }, @"D:\Media\Movies\Sintel (2010)\Sintel (2010).mkv");
+            s.AddCheck(new CheckRecord { FileId = f2, Time = now.AddHours(-1), Result = CheckResult.ModifiedAccepted, Source = "scan", ScanId = recent.Id, Size = 200 }, @"D:\Media\Movies\Sintel (2010)\poster.jpg");
+            s.AddCheck(new CheckRecord { FileId = f3, Time = now.AddHours(-1), Result = CheckResult.Changed, Source = "scan", ScanId = recent.Id, Size = 3000 }, @"D:\Media\TV\Example Show\Season 01\Example Show - S01E01.mkv");
+            s.AddCheck(new CheckRecord { FileId = missing, Time = now.AddHours(-1), Result = CheckResult.Missing, Source = "scan", ScanId = recent.Id, Size = 4000 }, @"D:\Media\TV\Gone.mkv");
+            s.AddCheck(new CheckRecord { FileId = err, Time = now.AddHours(-1), Result = CheckResult.Unreadable, Source = "scan", ScanId = recent.Id, Size = 50 }, @"E:\Bad\unreadable.mov");
+            Ok(s.HasRunFiles(recent.Id) && s.RunFileCount(recent.Id) == 5, "new run stores every file result");
+
+            // AcceptCurrent has no ScanId: must not appear as a run file
+            s.UpdateFile(new FileRecord { Id = f3, Path = @"D:\Media\TV\Example Show\Season 01\Example Show - S01E01.mkv", Status = FileStatus.Changed, LastMd5 = "AA", Size = 3000, LastResult = CheckResult.Changed });
+            // skip Accept if status wrong; just assert count unchanged after a no-scan check
+            s.AddCheck(new CheckRecord { FileId = f3, Time = now, Result = CheckResult.Accepted, Source = "user", Size = 3000 });
+            Ok(s.RunFileCount(recent.Id) == 5, "a check without a scan id is not added to a run list");
+
+            var all = s.RunFiles(recent.Id, null, false, "path", false, 0, 100);
+            Ok(all.Total == 5 && all.Items.Count == 5, "list all files of the run");
+            Ok(all.Items.Count(x => x.Bucket == "OK") == 2 && all.Items.Any(x => x.Bucket == "Changed") && all.Items.Any(x => x.Bucket == "Missing") && all.Items.Any(x => x.Bucket == "Error"),
+                "buckets: OK / Changed / Missing / Error");
+            var probs = s.RunFiles(recent.Id, null, true, "path", false, 0, 100);
+            Ok(probs.Total == 3 && probs.Items.All(x => x.Bucket != "OK"), "problems-only hides OK rows");
+            var search = s.RunFiles(recent.Id, "Sintel", false, "path", false, 0, 100);
+            Ok(search.Total == 2 && search.Items.All(x => x.Path.Contains("Sintel")), "search filters by path");
+            var page = s.RunFiles(recent.Id, null, false, "path", false, 0, 2);
+            var page2 = s.RunFiles(recent.Id, null, false, "path", false, 2, 2);
+            Ok(page.Total == 5 && page.Items.Count == 2 && page2.Items.Count == 2 && page.Items[0].Path != page2.Items[0].Path, "paging");
+            var csv = s.RunFilesCsv(recent.Id, null, true);
+            Ok(csv.StartsWith("Path,Result,Bucket,Time,Size") && csv.Contains("Changed") && csv.Contains("Gone.mkv") && !csv.Contains("poster.jpg"), "CSV export of problems");
+
+            // retention: last 1 run OR last 10 days. The 400-day-old scan has no details. Add a 20-day-old detailed run and a newer one; maxRuns=1, maxDays=0 keeps only newest.
+            var mid = s.NewScan("manual", now.AddDays(-20), null, "Mid", "manual");
+            s.AddCheck(new CheckRecord { FileId = f1, Time = now.AddDays(-20), Result = CheckResult.Match, Source = "manual", ScanId = mid.Id, Size = 1000 }, @"D:\Media\Movies\Sintel (2010)\Sintel (2010).mkv");
+            Ok(s.HasRunFiles(mid.Id) && s.HasRunFiles(recent.Id), "two runs have details before prune");
+            var n = s.PruneRunFiles(1, 0);
+            Ok(n > 0 && !s.HasRunFiles(mid.Id) && s.HasRunFiles(recent.Id), "maxRuns=1 (no day cap) keeps only the latest run");
+            // restore mid and use day cap: mid is 20 days old, recent is new; maxRuns=1 maxDays=30 keeps both
+            s.AddCheck(new CheckRecord { FileId = f1, Time = now.AddDays(-20), Result = CheckResult.Match, Source = "manual", ScanId = mid.Id, Size = 1000 }, @"D:\Media\Movies\Sintel (2010)\Sintel (2010).mkv");
+            Ok(s.PruneRunFiles(1, 30) == 0 && s.HasRunFiles(mid.Id) && s.HasRunFiles(recent.Id), "kept by days even if not in the last N runs");
+            Ok(s.PruneRunFiles(0, 0) == 0 && s.HasRunFiles(mid.Id), "both caps 0: keep everything");
         }
         Directory.Delete(d, true);
     }

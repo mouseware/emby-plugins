@@ -168,6 +168,7 @@ namespace Claw.Emby.MediaIntegrity.Server
             };
             Moves = new MoveService(Store, Manual, ExcludeRegex) { IsEnabled = () => IsOn, Log = m => _log.Info("Media Integrity: " + m) };
             Manual.Start();
+            PruneActivityDetails();
             _log.Info("Media Integrity started: {0} files, {1} checks, {2} queued", Store.FileCount, Store.CheckCount, Store.QueueLength);
         }
 
@@ -190,6 +191,18 @@ namespace Claw.Emby.MediaIntegrity.Server
                 if (_discoverTimer != null) RequestDiscovery("settings changed", 5000);
             }
             if (Engine != null) Engine.Options = new ScanOptions { Exclude = c.Exclude ?? new string[0], AutoAcceptModifiedExtensions = c.AutoAcceptModifiedExtensions ?? new string[0] };
+            PruneActivityDetails();
+        }
+
+        public void PruneActivityDetails()
+        {
+            try
+            {
+                if (Store == null) return;
+                var c = Cfg;
+                Store.PruneRunFiles(c.ActivityDetailsMaxRuns, c.ActivityDetailsMaxDays);
+            }
+            catch (Exception ex) { _log.ErrorException("Media Integrity: prune activity file lists", ex); }
         }
 
         public ImportResult RunImport()
@@ -316,6 +329,7 @@ namespace Claw.Emby.MediaIntegrity.Server
                 }
                 if (error != null) { _log.ErrorException("Media Integrity: scan failed", error); throw error; }
                 if (res?.Completed == true) Notify(res.Scan);
+                PruneActivityDetails();
             }
             finally
             {
@@ -396,6 +410,7 @@ namespace Claw.Emby.MediaIntegrity.Server
                     s.Note = j.Message ?? "";
                 }
                 Store.SaveScan(s);
+                PruneActivityDetails();
             }
             catch (Exception ex) { _log.ErrorException("Media Integrity: activity entry", ex); }
         }

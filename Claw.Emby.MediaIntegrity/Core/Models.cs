@@ -145,4 +145,46 @@ namespace Claw.Emby.MediaIntegrity.Core
         public int Offset { get; set; }
         public List<FileRecord> Items { get; set; }
     }
+
+    public class PagedRunFiles
+    {
+        public long Total { get; set; }
+        public int StartIndex { get; set; }
+        public List<RunFileRecord> Items { get; set; }
+    }
+
+    public class RunFileRecord
+    {
+        public long Id { get; set; }
+        public long ScanId { get; set; }
+        public long FileId { get; set; }
+        public string Path { get; set; }
+        public string Result { get; set; }
+        /// <summary>OK, Changed, Missing or Error — the four buckets shown in Activity details.</summary>
+        public string Bucket { get; set; }
+        public DateTime? Time { get; set; }
+        public long? Size { get; set; }
+    }
+
+    public static class RunFileBucket
+    {
+        public const string Ok = "OK", Changed = "Changed", Missing = "Missing", Error = "Error";
+        public static string Of(string result)
+        {
+            switch (result)
+            {
+                case CheckResult.Changed:
+                case CheckResult.Modified:
+                case CheckResult.LegacyDiffers:
+                    return Changed;
+                case CheckResult.Missing:
+                    return Missing;
+                case CheckResult.Unreadable:
+                    return Error;
+                default:
+                    return Ok;
+            }
+        }
+        public static bool IsProblem(string result) => Of(result) != Ok;
+    }
 }

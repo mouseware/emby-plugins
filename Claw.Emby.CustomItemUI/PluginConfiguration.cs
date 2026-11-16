@@ -30,6 +30,12 @@ namespace Claw.Emby.CustomItemUI
 
         // ---- Dashboard layout (v1.1) ----
         /// <summary>Rearrange the admin Dashboard home page. Off = Emby's stock layout, untouched.</summary>
+        /// <summary>
+        /// v1.3: in the web UI, replace a trailer card (home rows, Trailers channel, suggestions) with the
+        /// library movie or series it belongs to when the user owns it. Off by default. Matching is IMDb/TMDb, then title+year.
+        /// </summary>
+        public bool ReplaceOwnedTrailers { get; set; } = false;
+
         public bool EnableDashboardLayout { get; set; } = true;
 
         /// <summary>

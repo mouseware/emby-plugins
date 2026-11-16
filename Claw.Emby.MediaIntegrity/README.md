@@ -22,6 +22,7 @@ Finds silent corruption (bit rot), missing and unreadable files in your Emby lib
   - They are separate from the full scan, so they also run while the scan is paused or stopped.
   - Only the speed limit applies to them; they don't pause for playback, because you asked for them.
   - Progress shows in the same panel as the scan: file x of y, current file, speed, time left, result counts, and a Cancel button.
+- **Activity file lists (1.0.8):** expand an Activity entry to see every file that run checked (path, OK / Changed / Missing / Error, time), with a Problems-only filter, search, paging and CSV export. Older runs show “details not recorded”. Retention is configurable (last N runs or days).
 - **Moved files (1.0.7):** when files are moved or renamed outside Emby, their old rows show as *missing* and the new paths as new files. Media Integrity can match them up and keep the history.
   - **Likely moved hint:** after every full scan and file-list refresh, a missing row shows *likely moved: <path>* when a new file (not yet hashed, only just hashed, or first seen after the old one was last seen) has the same file name and size. It is a hint only; nothing is changed.
   - **Find moved files** (Problems toolbar, for the selected missing files or all of them): candidates are new files with the same size on every library and extra folder, plus untracked files in optional extra folders (any drive). Same file name first; renamed candidates (a few per file) only for files still unresolved. Candidates are hashed in the manual-check queue, with progress in the usual panel; a candidate whose hash is already known is compared without reading it. Only an identical MD5 counts. Read-only until you migrate.
@@ -46,6 +47,10 @@ Tests:
 - `tests/web`: `node build-page.js && node test-integrity.js [shotDir]` for the page and `node test-inject.js [shotDir]` for the item menu. Both use fake data only.
 
 ## Changes
+
+- **1.0.8.0**
+  - Activity entries expand to the files that run checked: path, result (OK / Changed / Missing / Error) and time. Problems-only filter, path search, paging and CSV export. Columns stay resizable.
+  - Per-run file lists are stored going forward, with a configurable cap (keep the last N activity entries and/or entries from the last N days; defaults 30 and 180). Check history of each file is not pruned. Runs from before this version show “details not recorded”.
 
 - **1.0.7.0**
   - **Find moved files**, **Migrate**, **Ignore** and **Relink** for missing files, plus a *likely moved* hint from normal scans (see *Moved files* above). API: `POST /ClawMediaIntegrity/Moves/Find` (`Ids`, `Folders`), `GET /ClawMediaIntegrity/Moves`, `POST .../Moves/Migrate` (`Ids`, empty = all confirmed), `POST .../Moves/Ignore` (`Id`, `Path`), `POST .../Moves/Clear`, `POST .../Files/{Id}/Relink` (`Path`, `Force`). Searches and relinks are jobs of the manual-check queue (`Kind` = `moves` / `relink`; `Outcome` and `Message` carry the result).
@@ -118,5 +123,7 @@ All images are in [docs/screenshots/media-integrity/](../docs/screenshots/media-
 | ![Per-file history](../docs/screenshots/media-integrity/history.png)<br/>Per-file history | !["Verify integrity" in the item menu](../docs/screenshots/media-integrity/item-menu.png)<br/>"Verify integrity" in the item menu |
 | ![Result toast (OK)](../docs/screenshots/media-integrity/item-toast-ok.png)<br/>Result toast (OK) | ![Result toast (changed file) with a link](../docs/screenshots/media-integrity/item-toast-changed.png)<br/>Result toast (changed file) with a link |
 | ![Past scans and import](../docs/screenshots/media-integrity/activity.png)<br/>Past scans and import | ![Manual checks in Activity](../docs/screenshots/media-integrity/activity-manual.png)<br/>Manual checks in Activity |
+| ![Activity file list](../docs/screenshots/media-integrity/activity-files.png)<br/>Files a run checked | ![Problems only](../docs/screenshots/media-integrity/activity-files-problems.png)<br/>Problems-only filter |
 | ![Moves and relinks in Activity](../docs/screenshots/media-integrity/activity-moves.png)<br/>Moves and relinks in Activity | ![Settings (skip list, schedule)](../docs/screenshots/media-integrity/settings.png)<br/>Settings (skip list, schedule) |
+| ![Activity file-list retention](../docs/screenshots/media-integrity/settings-activity-details.png)<br/>Activity file-list retention |
 | ![General tab: Enable switch and About](../docs/screenshots/media-integrity/general.png)<br/>General tab: Enable switch and About | ![Switched off: banner](../docs/screenshots/media-integrity/off-banner.png)<br/>Switched off: banner |

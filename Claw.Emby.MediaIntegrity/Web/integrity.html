@@ -10,6 +10,9 @@
 #clawMediaIntegrityPage .mi-type{display:inline-block;padding:.05em .5em;border-radius:1em;font-size:.82em;background:rgba(128,128,128,.22);white-space:nowrap}
 #clawMediaIntegrityPage .mi-type-scheduled,#clawMediaIntegrityPage .mi-type-fullmanual{background:rgba(82,181,75,.25)}#clawMediaIntegrityPage .mi-type-item{background:rgba(66,133,244,.25)}#clawMediaIntegrityPage .mi-type-newmedia{background:rgba(255,193,7,.22)}
 #clawMediaIntegrityPage tr.mi-act-detail td{background:rgba(128,128,128,.07);padding:.6em 1em}
+#clawMediaIntegrityPage .mi-act-files-bar{margin:.5em 0 .4em;align-items:center}
+#clawMediaIntegrityPage .mi-act-search{min-width:16em}
+#clawMediaIntegrityPage .mi-act-find{margin-top:.2em}
 #clawMediaIntegrityPage .mi-pend-note{display:flex;align-items:center;gap:.7em;margin:.2em 0 .8em;padding:.55em .8em;border-radius:.3em;background:rgba(128,128,128,.12)}
 #clawMediaIntegrityPage .mi-fl-info{font-size:.88em;white-space:nowrap}
 #clawMediaIntegrityPage .mi-filebar{margin:.45em 0 .2em 1.2em;padding-left:.7em;border-left:2px solid rgba(128,128,128,.35)}
@@ -265,6 +268,15 @@
           <div class="checkboxContainer"><label><input is="emby-checkbox" type="checkbox" class="mi-s-nsum" /><span>Scan summary when a full scan finishes</span></label></div>
           <div class="checkboxContainer"><label><input is="emby-checkbox" type="checkbox" class="mi-s-nprob" /><span>Changed, missing or unreadable files (one message per scan)</span></label></div>
           <div class="fieldDescription">Choose where they go under Settings → Notifications (category <i>Media Integrity</i>).</div>
+
+          <h3 class="mi-h">Activity file lists</h3>
+          <p class="fieldDescription">Each new Activity run stores the files it checked (path, result, time) so you can expand a row, filter, search, page and export a CSV. Older runs that finished before this was added show “details not recorded”. Check history of each file is kept separately and is not pruned.</p>
+          <div class="mi-grid">
+            <div class="inputContainer"><label class="inputLabel">Keep the last N activity entries</label><input is="emby-input" type="number" min="0" max="10000" class="mi-s-actruns" />
+              <div class="fieldDescription">0 = no cap on count.</div></div>
+            <div class="inputContainer"><label class="inputLabel">and entries from the last N days</label><input is="emby-input" type="number" min="0" max="3650" class="mi-s-actdays" />
+              <div class="fieldDescription">0 = no cap on age. A list is kept if it meets either rule.</div></div>
+          </div>
 
           <h3 class="mi-h">Old hash database</h3>
           <div class="inputContainer"><label class="inputLabel">get-all-hashes.ps1 database</label><input is="emby-input" type="text" class="mi-s-legacy" />

@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Collections.Generic;
 using System.Linq;
 using Claw.Emby.MediaIntegrity.Core;
@@ -66,10 +67,32 @@ namespace Claw.Emby.MediaIntegrity.Api
     [Authenticated(Roles = "Admin")]
     public class GetScans : IReturn<List<ScanRecord>> { public int Limit { get; set; } = 100; }
 
-    [Route("/ClawMediaIntegrity/Scans/{Id}", "GET", Summary = "Media Integrity: one Activity entry with the files it found problems in")]
+    [Route("/ClawMediaIntegrity/Scans/{Id}", "GET", Summary = "Media Integrity: one Activity entry (whether a per-run file list was recorded)")]
     [Authenticated(Roles = "Admin")]
     public class GetScan : IReturn<ScanDetail> { public long Id { get; set; } }
-    public class ScanDetail { public ScanRecord Scan { get; set; } public List<FileDto> Findings { get; set; } public long Checks { get; set; } }
+    public class ScanDetail
+    {
+        public ScanRecord Scan { get; set; }
+        public List<FileDto> Findings { get; set; }
+        public long Checks { get; set; }
+        public bool DetailsRecorded { get; set; }
+        public long DetailsCount { get; set; }
+    }
+
+    [Route("/ClawMediaIntegrity/Scans/{Id}/Files", "GET", Summary = "Media Integrity: files this Activity run checked (paged; Format=csv for a download)")]
+    [Authenticated(Roles = "Admin")]
+    public class GetScanFiles : IReturn<PagedRunFiles>
+    {
+        public long Id { get; set; }
+        public string Search { get; set; }
+        public bool ProblemsOnly { get; set; }
+        public string Sort { get; set; }
+        public bool Desc { get; set; }
+        public int StartIndex { get; set; }
+        public int Limit { get; set; } = 100;
+        public string Format { get; set; }
+    }
+    public class CsvDto { public string FileName { get; set; } public string Content { get; set; } }
 
     [Route("/ClawMediaIntegrity/Libraries", "GET", Summary = "Media Integrity: Emby libraries and whether they are scanned")]
     [Authenticated(Roles = "Admin")]
@@ -443,8 +466,31 @@ namespace Claw.Emby.MediaIntegrity.Api
         public object Get(GetScan r)
         {
             var h = H; var sc = h.Store.GetScan(r.Id);
-            if (sc == null) return new ScanDetail { Findings = new List<FileDto>() };
-            return new ScanDetail { Scan = sc, Findings = h.Store.ScanFindings(r.Id, 200).Select(FileDto.From).ToList(), Checks = h.Store.Db.ScalarLong("SELECT COUNT(*) FROM checks WHERE scan_id=@s", ("s", r.Id)) };
+            if (sc == null) return new ScanDetail();
+            long details = h.Store.RunFileCount(r.Id);
+            return new ScanDetail
+            {
+                Scan = sc,
+                Findings = h.Store.ScanFindings(r.Id, 200).Select(FileDto.From).ToList(),
+                Checks = h.Store.Db.ScalarLong("SELECT COUNT(*) FROM checks WHERE scan_id=@s", ("s", r.Id)),
+                DetailsRecorded = details > 0,
+                DetailsCount = details
+            };
+        }
+
+        public object Get(GetScanFiles r)
+        {
+            var h = H;
+            if (!string.IsNullOrEmpty(r.Format) && r.Format.Equals("csv", StringComparison.OrdinalIgnoreCase))
+            {
+                var csv = h.Store.RunFilesCsv(r.Id, r.Search, r.ProblemsOnly);
+                var sc = h.Store.GetScan(r.Id);
+                var name = "activity-" + r.Id + ((sc != null && !string.IsNullOrEmpty(sc.Label)) ? "-" + sc.Label : "") + ".csv";
+                foreach (var c in Path.GetInvalidFileNameChars()) name = name.Replace(c, '-');
+                return new CsvDto { FileName = name, Content = csv };
+            }
+            int lim = r.Limit > 0 ? r.Limit : 100;
+            return h.Store.RunFiles(r.Id, r.Search, r.ProblemsOnly, r.Sort, r.Desc, r.StartIndex, lim);
         }
         public object Get(GetLibraries r) => H.Libraries();
         public object Post(PostImport r) => H.RunImport();

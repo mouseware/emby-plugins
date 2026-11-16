@@ -84,7 +84,7 @@ namespace Claw.Emby.MediaIntegrity.Core
                 if (rec.Status != FileStatus.Missing)
                 {
                     rec.Status = FileStatus.Missing; rec.LastResult = CheckResult.Missing; rec.LastChecked = now; rec.LastScanId = scanId ?? rec.LastScanId;
-                    _store.Db.Transaction(() => { _store.UpdateFile(rec); _store.AddCheck(new CheckRecord { FileId = rec.Id, Time = now, Result = CheckResult.Missing, Source = source, ScanId = scanId ?? logId }); });
+                    _store.Db.Transaction(() => { _store.UpdateFile(rec); _store.AddCheck(new CheckRecord { FileId = rec.Id, Time = now, Result = CheckResult.Missing, Source = source, ScanId = scanId ?? logId }, rec.Path); });
                 }
                 return new Outcome { Result = CheckResult.Missing, File = rec };
             }
@@ -130,7 +130,7 @@ namespace Claw.Emby.MediaIntegrity.Core
             _store.Db.Transaction(() =>
             {
                 if (isNew) _store.InsertFile(rec); else _store.UpdateFile(rec);
-                _store.AddCheck(new CheckRecord { FileId = rec.Id, Time = now, Md5 = h.Md5, Size = fi.Length, Seconds = Math.Round(h.Seconds, 3), Result = result, Source = source, ScanId = scanId ?? logId, Note = h.Error });
+                _store.AddCheck(new CheckRecord { FileId = rec.Id, Time = now, Md5 = h.Md5, Size = fi.Length, Seconds = Math.Round(h.Seconds, 3), Result = result, Source = source, ScanId = scanId ?? logId, Note = h.Error }, rec.Path);
             });
             return new Outcome { Result = firstHash && result == CheckResult.Baseline ? "new" : result, File = rec, Hash = h };
         }

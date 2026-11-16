@@ -37,11 +37,32 @@
   files[70].Status = "never_hashed"; files[70].LastHash = null; files[70].LastChecked = null;
   var problemsSt = ["changed", "modified", "missing", "unreadable"];
 
+
+  function bucket(res) {
+    if (res === "changed" || res === "modified" || res === "legacy-differs") return "Changed";
+    if (res === "missing") return "Missing";
+    if (res === "unreadable" || res === "error") return "Error";
+    return "OK";
+  }
+  function runRow(f, res, time) {
+    return { FileId: f.Id, Path: f.Path, Result: res, Bucket: bucket(res), Time: time || f.LastChecked, Size: f.Size };
+  }
+  // scan 4 (running full): first 125 files, with the known problem rows using their status
+  var run4 = files.slice(0, 125).map(function (f) {
+    var res = f.Status === "changed" ? "changed" : f.Status === "modified" ? "modified" : f.Status === "missing" ? "missing" : f.Status === "unreadable" ? "unreadable" : "match";
+    return runRow(f, res);
+  });
+  var sintelFiles = files.filter(function (f) { return /Sintel/.test(f.Path); });
+  var run5 = sintelFiles.map(function (f, i) { return runRow(f, i === 0 ? "changed" : "match"); });
+  if (run5.length < 4) run5.push(runRow({ Id: 9001, Path: "D:\\Media\\Movies\\Sintel (2010)\\Sintel (2010) - trailer.mkv", Size: 81000000, LastChecked: sintelFiles[0] && sintelFiles[0].LastChecked }, "match"));
+  var run6 = files.slice(0, 7).map(function (f) { return runRow(f, "baseline"); });
+  var runFiles = { 4: run4, 5: run5, 6: run6 }; // 1, 2, 3: details not recorded
+
   window.__srv = {
     cfg: { HashNewItems: true, ExcludedLibraryIds: [], ExtraFolders: ["E:\\Archive"], Exclude: ["*.nfo", "*.nfo-orig", "*.xml", "*.bif", "*.metathumb", "*.jpg", "*.jpeg", "*.png", "*.webp", "*.tbn", "*.gif", "*.old*", "Thumbs.db", "desktop.ini", ".DS_Store", "*.tmp", "*.part", "*.partial", "*.crdownload", "*.!qB"],
       AutoAcceptModifiedExtensions: [".nfo", ".xml", ".jpg", ".jpeg", ".png", ".webp", ".tbn", ".bif"], ThrottleMBps: 0, PauseDuringPlayback: true, MinDaysBetweenScheduledScans: 150,
-      NotifyScanSummary: true, NotifyProblems: true, LegacyDbPath: "D:\\Tools\\filehashes.db" },
-    files: files, calls: [], saved: [], queue: 0,
+      NotifyScanSummary: true, NotifyProblems: true, ActivityDetailsMaxRuns: 30, ActivityDetailsMaxDays: 180, LegacyDbPath: "D:\\Tools\\filehashes.db" },
+    files: files, runFiles: runFiles, calls: [], saved: [], queue: 0, lastCsv: null,
     scan: { State: "hashing", UserPaused: false, PauseReason: null, FileIndex: 6182, FileCount: 14612, BytesTotal: 25.9e12, BytesDone: 11.02e12, BytesPerSecond: 182e6,
       CurrentFile: "D:\\Media\\Movies\\Tears of Steel (2012)\\Tears of Steel (2012) [Bluray-1080p].mkv", CurrentSize: 6.4e9, CurrentDone: 2.9e9, Matched: 6150, Changed: 1, Modified: 1, New: 28, Missing: 1, Unreadable: 1 },
     running: true,
@@ -186,7 +207,27 @@
       var sid = +m[1], sc = S.scans.filter(function (x) { return x.Id === sid; })[0], jb = S.jobs.filter(function (x) { return 1000 + x.Id === sid; })[0];
       var finds = jb ? (jb.Findings || []).map(function (fd) { return files.filter(function (x) { return x.Id === fd.FileId; })[0]; }).filter(Boolean)
         : files.filter(function (f) { return problemsSt.indexOf(f.Status) >= 0; }).slice(0, sid === 5 ? 1 : 4);
-      return { Scan: sc || { Id: sid, Kind: "manual", Label: jb && jb.Label }, Findings: finds, Checks: sc ? sc.Done : jb ? jb.Done : 0 };
+      var rf = (S.runFiles && S.runFiles[sid]) || (jb && jb.RunFiles) || [];
+      return { Scan: sc || { Id: sid, Kind: "manual", Label: jb && jb.Label }, Findings: finds, Checks: sc ? sc.Done : jb ? jb.Done : 0, DetailsRecorded: rf.length > 0, DetailsCount: rf.length };
+    }
+
+    if (method === "GET" && (m = /^Scans\/(\d+)\/Files$/.exec(path))) {
+      var sid = +m[1], list = ((S.runFiles && S.runFiles[sid]) || []).slice();
+      var jb = S.jobs.filter(function (x) { return 1000 + x.Id === sid; })[0];
+      if (jb && jb.RunFiles) list = jb.RunFiles.slice();
+      if (q.ProblemsOnly === "true" || q.ProblemsOnly === true) list = list.filter(function (x) { return x.Bucket && x.Bucket !== "OK"; });
+      var qsearch = (q.Search || "").toLowerCase();
+      if (qsearch) list = list.filter(function (x) { return (x.Path || "").toLowerCase().indexOf(qsearch) >= 0; });
+      var key = { result: "Bucket", path: "Path", time: "Time", size: "Size" }[q.Sort || "path"];
+      var d = q.Desc === "true" || q.Desc === true ? -1 : 1;
+      list.sort(function (a, b) { var x = a[key], y = b[key]; if (typeof x === "string") { x = (x || "").toLowerCase(); y = (y || "").toLowerCase(); } return (x < y ? -1 : x > y ? 1 : 0) * d; });
+      if ((q.Format || "").toLowerCase() === "csv") {
+        var csv = "Path,Result,Bucket,Time,Size\n" + list.map(function (r) { return [r.Path, r.Result, r.Bucket, r.Time || "", r.Size || ""].map(function (v) { v = String(v == null ? "" : v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(","); }).join("\n");
+        S.lastCsv = { FileName: "activity-" + sid + ".csv", Content: csv, Rows: list.length };
+        return { FileName: "activity-" + sid + ".csv", Content: csv };
+      }
+      var st = +q.StartIndex || 0, lim = +q.Limit || 100;
+      return { Total: list.length, StartIndex: st, Items: list.slice(st, st + lim) };
     }
     if (method === "GET" && (m = /^Files\/(\d+)\/History$/.exec(path))) {
       var f = files.filter(function (x) { return x.Id === +m[1]; })[0];
@@ -308,7 +349,7 @@
         });
         return out;
       }
-      case "GET Info": return { Enabled: S.cfg.Enabled !== false, Version: "1.0.7.0" };
+      case "GET Info": return { Enabled: S.cfg.Enabled !== false, Version: "1.0.8.0" };
       case "GET Files/Types": {
         var tg = groups(q.GroupBy).filter(function (x) { return x.Key === q.Group; })[0];
         var tl = q.Group === "all" ? files.slice() : files.filter(function (f) { return tg && under(f, tg.Paths); });
@@ -346,7 +387,7 @@
     getUrl: function (p, q) { var s = Object.keys(q || {}).filter(function (k) { return q[k] !== undefined && q[k] !== null; }).map(function (k) { return encodeURIComponent(k) + "=" + encodeURIComponent(q[k]); }).join("&"); return p + (s ? "?" + s : ""); },
     getJSON: function (u) { try { return Promise.resolve(clone(api("GET", u))); } catch (e) { return Promise.reject(e); } },
     ajax: function (o) { try { return Promise.resolve(clone(api(o.type, o.url))); } catch (e) { return Promise.reject(e); } },
-    getPluginConfiguration: function () { return Promise.resolve(clone(S.cfg)); }, getInstalledPlugins: function () { return Promise.resolve([{ Id: "5b0c7f3e-2d4a-4e61-9a8b-6c1f0e7d3a52", Name: "Media Integrity", Version: "1.0.7.0" }]); },
+    getPluginConfiguration: function () { return Promise.resolve(clone(S.cfg)); }, getInstalledPlugins: function () { return Promise.resolve([{ Id: "5b0c7f3e-2d4a-4e61-9a8b-6c1f0e7d3a52", Name: "Media Integrity", Version: "1.0.8.0" }]); },
     updatePluginConfiguration: function (pid, c) { S.cfg = clone(c); S.saved.push(clone(c)); return Promise.resolve({}); }
   };
   window.Dashboard = { showLoadingMsg: function () {}, hideLoadingMsg: function () {}, processPluginConfigurationUpdateResult: function () { window.__savedToast = true; } };

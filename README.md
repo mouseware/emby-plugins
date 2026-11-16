@@ -5,7 +5,7 @@ Five plugins for Emby Server, one per subfolder:
 - **Claw Guard**: bans IP addresses after failed sign-ins, nonexistent or instant-ban usernames, or repeated 401/403 API calls. Bans are enforced through Emby's own Remote IP filter. It has a live log, ban management, escalation rules, a whitelist, optional GeoLite2 country lookup, and an import from Emby's existing logs.
 - **Claw IPTV Channel Mapper**: a spreadsheet-style editor for IPTV channels (number, name, group, logo, guide mapping, enabled), with undo, snapshots and bulk actions. 1.4 adds Export/Import of the whole mapping as one .zip (mapper.json plus a logos/ folder), with a preview (Merge or Replace, All channels or Matching only) before anything is applied.
 - **Claw Default Chapters**: generates "Chapter 1, 2 …" interval chapters for movies that have few or no chapters, from the item menu or in bulk (Found movies), with revert.
-- **Claw Custom Item UI**: item-page link tweaks, VLC path links, a rearrangeable admin dashboard, and Activity/Alerts tables on the dashboard.
+- **Claw Custom Item UI**: item-page link tweaks, VLC path links, optional replacement of trailers for movies you already own, a rearrangeable admin dashboard, and Activity/Alerts tables on the dashboard.
 - **Media Integrity**: finds bit rot, missing and unreadable files by comparing each library file's MD5 with a stored baseline. It has a resumable, low-priority full scan (scheduled task), background hashing of new items, "Verify integrity" in the item menu, a live **Check now** on any file, folder or library, search across all files, per-file history, and an import of the old `get-all-hashes.ps1` database. 1.0.5 skips Emby metadata, artwork and `.old` backups by default (subtitles and media stay hashed), and a file-list refresh drops skipped rows from tracking without touching the files on disk. 1.0.6 adds a sortable File type column with a type filter to the file tables. 1.0.7 finds where missing files moved: **Find moved files** confirms candidates by MD5 and **Migrate** moves the record and its history to the new path; **Relink** points one missing file at a path you enter, and scans flag likely moves on missing rows.
 
 All data tables have resizable columns. The widths are saved per table in the browser.
@@ -19,11 +19,11 @@ Every plugin has a **General** tab like Custom Item UI: an **Enable plugin** swi
 
 | Project | Folder | Version | Output DLL |
 |---------|--------|---------|------------|
-| Claw Custom Item UI | `Claw.Emby.CustomItemUI` | 1.2.3.0 | `Claw.Emby.CustomItemUI\bin\Release\Claw.Emby.CustomItemUI.dll` |
+| Claw Custom Item UI | `Claw.Emby.CustomItemUI` | 1.3.0.0 | `Claw.Emby.CustomItemUI\bin\Release\Claw.Emby.CustomItemUI.dll` |
 | Claw IPTV Mapper | `Claw.Emby.IptvMapper` | 1.4.1.0 | `Claw.Emby.IptvMapper\bin\Release\Claw.Emby.IptvMapper.dll` |
 | Claw Guard | `Claw.Emby.Guard` | 1.2.0.0 | `Claw.Emby.Guard\bin\Release\Claw.Emby.Guard.dll` |
 | Claw Default Chapters | `Claw.Emby.DefaultChapters` | 1.2.0.0 | `Claw.Emby.DefaultChapters\bin\Release\Claw.Emby.DefaultChapters.dll` |
-| Media Integrity | `Claw.Emby.MediaIntegrity` | 1.0.7.0 | `Claw.Emby.MediaIntegrity\bin\Release\Claw.Emby.MediaIntegrity.dll` |
+| Media Integrity | `Claw.Emby.MediaIntegrity` | 1.0.8.0 | `Claw.Emby.MediaIntegrity\bin\Release\Claw.Emby.MediaIntegrity.dll` |
 
 Each project builds on its own. Its `refs\` folder holds copies of the Emby SDK DLLs (`MediaBrowser.Common.dll`, `MediaBrowser.Controller.dll`, `MediaBrowser.Model.dll`), and the csproj HintPaths point there through `$(EmbyServerPath)`, which defaults to `refs`.
 

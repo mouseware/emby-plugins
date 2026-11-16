@@ -133,8 +133,14 @@
           <div class="fieldDescription">Plain declarations are applied to the link buttons, for example <code>background:#333; padding:.4em 1em;</code>. Full rules with selectors are used as written, for example <code>.itemLinks a:hover { background:#52b54b; }</code>.</div>
         </div>
 
+        <h3 class="sectionTitle">Trailers</h3>
+        <div class="checkboxContainer checkboxContainer-withDescription">
+          <label><input is="emby-checkbox" type="checkbox" id="chkReplaceOwnedTrailers" /><span>Replace trailers of movies I own</span></label>
+          <div class="fieldDescription">Off by default. When on, a trailer in the web UI (home rows, the Trailers channel, suggestions) whose movie or series is in this library is shown as that library item: the card image, title and click/play open the owned movie. Matching uses IMDb or TMDb ids first, then title and year. Trailers of titles you don't own, and trailer extras already attached to a library item, are left alone. The mapping is looked up on the server and cached. This follows "Who it applies to" below.</div>
+          <div class="fieldDescription" id="clawTrailerStats" style="margin-top:.4em"></div>
+        </div>
         <h3 class="sectionTitle">Who it applies to</h3>
-        <p class="secondaryText">Item-page tweaks only. The dashboard layout applies to every admin (the Dashboard is admin-only).</p>
+        <p class="secondaryText">Item-page tweaks and trailer replacement. The dashboard layout applies to every admin (the Dashboard is admin-only).</p>
         <div class="inputContainer">
           <label class="inputLabel" for="selectApplyMode">Apply mode</label>
           <select is="emby-select" id="selectApplyMode">

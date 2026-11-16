@@ -27,6 +27,10 @@ namespace Claw.Emby.MediaIntegrity
         public int MinDaysBetweenScheduledScans { get; set; } = 182;
         public bool NotifyScanSummary { get; set; } = true;
         public bool NotifyProblems { get; set; } = true;
+        /// <summary>v1.0.8: keep the per-run file list for the last N Activity entries that have one. 0 = no cap on count.</summary>
+        public int ActivityDetailsMaxRuns { get; set; } = 30;
+        /// <summary>v1.0.8: also keep file lists for Activity entries started within this many days. 0 = no cap on age. A list is kept if it meets either rule.</summary>
+        public int ActivityDetailsMaxDays { get; set; } = 180;
         /// <summary>Old get-all-hashes.ps1 database imported once on first start (copied, opened read-only; the original is never changed).</summary>
         public string LegacyDbPath { get; set; } = @"M:\filehashes.db";
     }

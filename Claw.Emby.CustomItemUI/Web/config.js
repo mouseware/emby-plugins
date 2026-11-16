@@ -372,6 +372,7 @@ define([], function () {
     view.querySelector("#txtVlcUrlTemplate").value = config.VlcUrlTemplate || "cvlc:///file:///{path}";
     view.querySelector("#txtShowVlcIcon").checked = config.ShowVlcIcon !== false;
     view.querySelector("#txtEnableRaisedLinkButtons").checked = config.EnableRaisedLinkButtons !== false;
+    view.querySelector("#chkReplaceOwnedTrailers").checked = !!config.ReplaceOwnedTrailers;
     view.querySelector("#txtButtonBorderRadius").value = config.ButtonBorderRadius || "1.5em";
     view.querySelector("#txtButtonTextColor").value = config.ButtonTextColor == null ? "#ffffff" : config.ButtonTextColor;
     view.querySelector("#txtButtonCustomCss").value = config.ButtonCustomCss || "";
@@ -396,6 +397,7 @@ define([], function () {
       VlcUrlTemplate: view.querySelector("#txtVlcUrlTemplate").value,
       ShowVlcIcon: view.querySelector("#txtShowVlcIcon").checked,
       EnableRaisedLinkButtons: view.querySelector("#txtEnableRaisedLinkButtons").checked,
+      ReplaceOwnedTrailers: view.querySelector("#chkReplaceOwnedTrailers").checked,
       ButtonBorderRadius: view.querySelector("#txtButtonBorderRadius").value,
       ButtonTextColor: view.querySelector("#txtButtonTextColor").value.trim(),
       ButtonCustomCss: view.querySelector("#txtButtonCustomCss").value,
@@ -425,6 +427,19 @@ define([], function () {
     var last = null;
     try { last = localStorage.getItem(TAB_KEY); } catch (e) { }
     showTab(view, last || "item");
+  }
+  function loadTrailerStats(view) {
+    var el = view.querySelector("#clawTrailerStats");
+    if (!el || !ApiClient.getJSON) return;
+    var url = ApiClient.getUrl("ClawCustomItemUI/TrailerStats");
+    ApiClient.getJSON(url).then(function (s) {
+      if (!s) return;
+      el.textContent = "On this server, " + (s.Swapped || 0).toLocaleString() + " of " + (s.ChannelTrailers || 0).toLocaleString() +
+        " trailers in the Trailers channel would be replaced with a library movie or show (" +
+        (s.ByImdb || 0).toLocaleString() + " by IMDb, " + (s.ByTmdb || 0).toLocaleString() + " by TMDb, " +
+        (s.ByTitleYear || 0).toLocaleString() + " by title and year). " +
+        (s.LibraryExtras || 0).toLocaleString() + " local trailer extras already attached to a library item are left alone.";
+    }, function () { });
   }
   function showVersion(view) {
     var el = view.querySelector(".ct-version");
@@ -467,6 +482,7 @@ define([], function () {
           loadPage(view, config);
           Dashboard.hideLoadingMsg();
           showVersion(view);
+          loadTrailerStats(view);
         },
         function () {
           loadPage(view, {});

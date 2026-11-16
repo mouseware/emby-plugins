@@ -70,6 +70,16 @@ CREATE TABLE IF NOT EXISTS queue (
             Db.ExecScript(@"CREATE INDEX IF NOT EXISTS ix_files_size ON files(size);
 CREATE TABLE IF NOT EXISTS move_ignores (file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE, new_path TEXT NOT NULL COLLATE NOCASE, added TEXT, PRIMARY KEY(file_id, new_path))");
             if (hintAdded) RefreshMoveHints();
+            // 1.0.8: per-run file list for Activity (independent of check history; pruned by retention)
+            Db.ExecScript(@"CREATE TABLE IF NOT EXISTS run_files (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  scan_id INTEGER NOT NULL,
+  file_id INTEGER,
+  path TEXT NOT NULL,
+  result TEXT NOT NULL,
+  time TEXT NOT NULL,
+  size INTEGER);
+CREATE INDEX IF NOT EXISTS ix_run_files_scan ON run_files(scan_id, result);");
             if (GetMeta("schema") == null) SetMeta("schema", SchemaVersion.ToString());
         }
 
@@ -120,10 +130,21 @@ CREATE TABLE IF NOT EXISTS move_ignores (file_id INTEGER NOT NULL REFERENCES fil
             ("scan", f.LastScanId), ("legacy", f.LegacyId), ("err", f.Error)
         };
 
-        public void AddCheck(CheckRecord c)
+        public void AddCheck(CheckRecord c, string path = null)
         {
             Db.Exec("INSERT INTO checks(file_id,time,md5,size,seconds,result,source,scan_id,note) VALUES(@f,@t,@m,@s,@sec,@r,@src,@scan,@n)",
                 ("f", c.FileId), ("t", c.Time), ("m", c.Md5), ("s", c.Size), ("sec", c.Seconds), ("r", c.Result), ("src", c.Source), ("scan", c.ScanId), ("n", c.Note));
+            if (c.ScanId != null && c.ScanId.Value > 0)
+            {
+                if (string.IsNullOrEmpty(path))
+                {
+                    var f = GetFile(c.FileId);
+                    path = f?.Path;
+                }
+                if (!string.IsNullOrEmpty(path))
+                    Db.Exec("INSERT INTO run_files(scan_id,file_id,path,result,time,size) VALUES(@s,@f,@p,@r,@t,@z)",
+                        ("s", c.ScanId), ("f", c.FileId), ("p", path), ("r", c.Result ?? ""), ("t", c.Time), ("z", c.Size));
+            }
         }
 
         public List<CheckRecord> History(long fileId, int limit = 200) => Db.Query(
@@ -445,7 +466,7 @@ CREATE TABLE IF NOT EXISTS move_ignores (file_id INTEGER NOT NULL REFERENCES fil
                 UpdateFile(f);
                 Db.Exec("DELETE FROM move_ignores WHERE file_id=@id", ("id", f.Id));
                 AddCheck(new CheckRecord { FileId = f.Id, Time = now, Md5 = md5, Size = fi.Length, Result = f.LastResult, Source = source, ScanId = logId,
-                    Note = "moved from " + old + (dup != null ? "; replaced duplicate row " + dup.Id : "") + (same ? "" : "; hash differed, new baseline") });
+                    Note = "moved from " + old + (dup != null ? "; replaced duplicate row " + dup.Id : "") + (same ? "" : "; hash differed, new baseline") }, fi.FullName);
             });
             return f;
         }
@@ -490,6 +511,104 @@ CREATE TABLE IF NOT EXISTS move_ignores (file_id INTEGER NOT NULL REFERENCES fil
             ("n", s.New), ("mi", s.Missing), ("u", s.Unreadable), ("pos", s.Position), ("roots", s.Roots), ("note", s.Note), ("as", s.ActiveSeconds), ("bh", s.BytesHashed), ("lb", s.Label), ("id", s.Id));
         /// <summary>At startup: a scan left 'running'/'paused' by a restart becomes 'interrupted' (it resumes next run).</summary>
         public int MarkInterrupted() => Db.Exec("UPDATE scans SET state='interrupted' WHERE state IN ('running','paused')");
+
+        public bool HasRunFiles(long scanId) => Db.ScalarLong("SELECT COUNT(*) FROM run_files WHERE scan_id=@s", ("s", scanId)) > 0;
+        public long RunFileCount(long scanId) => Db.ScalarLong("SELECT COUNT(*) FROM run_files WHERE scan_id=@s", ("s", scanId));
+
+        public PagedRunFiles RunFiles(long scanId, string search, bool problemsOnly, string sort, bool desc, int start, int limit)
+        {
+            var where = new List<string> { "scan_id=@s" };
+            var args = new List<(string, object)> { ("s", scanId) };
+            if (problemsOnly) where.Add("result IN ('changed','modified','missing','unreadable','legacy-differs')");
+            if (!string.IsNullOrWhiteSpace(search)) { where.Add("path LIKE @q ESCAPE '\\'"); args.Add(("q", "%" + LikeEscape(search.Trim()) + "%")); }
+            var sqlWhere = " WHERE " + string.Join(" AND ", where);
+            var total = Db.ScalarLong("SELECT COUNT(*) FROM run_files" + sqlWhere, args.ToArray());
+            var order = (sort ?? "").ToLowerInvariant() switch
+            {
+                "result" => "result",
+                "time" => "time",
+                "size" => "size",
+                _ => "path"
+            };
+            if (limit < 1) limit = 100;
+            if (limit > 500) limit = 500;
+            if (start < 0) start = 0;
+            args.Add(("l", limit));
+            args.Add(("o", start));
+            var items = Db.Query("SELECT id,scan_id,file_id,path,result,time,size FROM run_files" + sqlWhere +
+                                 " ORDER BY " + order + (desc ? " DESC" : " ASC") + ", id ASC LIMIT @l OFFSET @o", args.ToArray())
+                .Select(ToRunFile).ToList();
+            return new PagedRunFiles { Total = total, StartIndex = start, Items = items };
+        }
+
+        public List<RunFileRecord> RunFilesAll(long scanId, string search, bool problemsOnly, string sort, bool desc)
+        {
+            var all = new List<RunFileRecord>();
+            int start = 0, page = 500;
+            while (true)
+            {
+                var p = RunFiles(scanId, search, problemsOnly, sort, desc, start, page);
+                all.AddRange(p.Items);
+                start += p.Items.Count;
+                if (p.Items.Count < page || start >= p.Total) break;
+            }
+            return all;
+        }
+
+        public string RunFilesCsv(long scanId, string search, bool problemsOnly)
+        {
+            var rows = RunFilesAll(scanId, search, problemsOnly, "path", false);
+            var sb = new StringBuilder();
+            sb.AppendLine("Path,Result,Bucket,Time,Size");
+            foreach (var r in rows)
+            {
+                sb.Append(Csv(r.Path)).Append(',').Append(Csv(r.Result)).Append(',').Append(Csv(r.Bucket)).Append(',')
+                    .Append(Csv(r.Time != null ? Time.ToDb(r.Time.Value) : "")).Append(',').Append(r.Size?.ToString() ?? "").AppendLine();
+            }
+            return sb.ToString();
+        }
+
+        private static string Csv(string s)
+        {
+            s = s ?? "";
+            if (s.IndexOfAny(new[] { ',', '"', '\n', '\r' }) >= 0) return "\"" + s.Replace("\"", "\"\"") + "\"";
+            return s;
+        }
+
+        private static RunFileRecord ToRunFile(Row r) => new RunFileRecord
+        {
+            Id = r.Long("id"), ScanId = r.Long("scan_id"), FileId = r.Long("file_id"),
+            Path = r.Str("path"), Result = r.Str("result"), Bucket = RunFileBucket.Of(r.Str("result")),
+            Time = Time.FromDb(r.Str("time")), Size = r.LongN("size")
+        };
+
+        /// <summary>
+        /// Drop per-run file lists that are neither among the last <paramref name="maxRuns"/> activity
+        /// entries that have details, nor started within <paramref name="maxDays"/> days. 0 means no cap
+        /// on that rule. Both 0 keeps everything. Check history is never touched.
+        /// </summary>
+        public int PruneRunFiles(int maxRuns, int maxDays)
+        {
+            if (maxRuns <= 0 && maxDays <= 0) return 0;
+            string cut = maxDays > 0 ? Time.ToDb(DateTime.UtcNow.AddDays(-maxDays)) : null;
+            var keep = new HashSet<long>();
+            var ids = Db.Query(@"SELECT s.id, s.started FROM scans s WHERE EXISTS (SELECT 1 FROM run_files r WHERE r.scan_id=s.id) ORDER BY s.started DESC, s.id DESC")
+                .Select(r => (Id: r.Long("id"), Started: r.Str("started") ?? "")).ToList();
+            int i = 0;
+            foreach (var row in ids)
+            {
+                bool byRun = maxRuns > 0 && i < maxRuns;
+                bool byDay = cut != null && string.CompareOrdinal(row.Started, cut) >= 0;
+                if (byRun || byDay) keep.Add(row.Id);
+                i++;
+            }
+            if (keep.Count == ids.Count) return 0;
+            if (keep.Count == 0)
+                return Db.Exec("DELETE FROM run_files");
+            var inList = string.Join(",", keep);
+            return Db.Exec("DELETE FROM run_files WHERE scan_id NOT IN (" + inList + ")");
+        }
+
         public List<FileRecord> ScanFindings(long scanId, int limit = 50) => Db.Query("SELECT " + FileCols + @" FROM files WHERE id IN
             (SELECT file_id FROM checks WHERE scan_id=@s AND result IN ('changed','modified','missing','unreadable','moved','moved-forced')) ORDER BY path LIMIT @l", ("s", scanId), ("l", limit)).Select(ToFile).ToList();
 

@@ -22,7 +22,7 @@ namespace Claw.Emby.CustomItemUI
         public override string Name => "Custom Item UI";
 
         public override string Description =>
-            "Item page tweaks (move Links up, VLC path links, raised link buttons) and a rearrangeable admin Dashboard layout. Survives Emby updates via startup inject.";
+            "Item page tweaks (move Links up, VLC path links, raised link buttons), optional replacement of trailers for movies you own, and a rearrangeable admin Dashboard layout. Survives Emby updates via startup inject.";
 
         public override Guid Id => Guid.Parse("b7e4c2a1-9f3d-4e8b-a6c5-1d2e3f4a5b6c");
 

@@ -128,7 +128,8 @@
     DashboardActivityLimit: 10,
     DashboardNowPlayingPerRow: 0,
     DashboardActivityTable: true,
-    DashboardAlertsTable: true
+    DashboardAlertsTable: true,
+    ReplaceOwnedTrailers: false
   };
 
   function mergeCfg(c) {
@@ -1140,6 +1141,129 @@
 
   window.__clawDash = { apply: dashApply, restore: dashRestore, refresh: dashRefresh, normalize: dashNormalize, css: dashCss, preset: DASH_PRESET };
 
+
+
+  // ===================================================================
+  // Replace trailers of movies I own (v1.3). When the setting is on, a
+  // Trailer item in any API list is swapped for the owned movie/series
+  // (image, title, id) so cards, links and Play open the library item.
+  // Mapping is one server call per batch, cached. Library extras and
+  // titles the user doesn't own are left alone.
+  // ===================================================================
+  var trailerMem = {};
+  function trailerOn(user) {
+    var c = cfg || defaults;
+    return !!(c.Enabled && c.ReplaceOwnedTrailers && userAllowed(user));
+  }
+  function isSwapTrailer(it) {
+    if (!it || typeof it !== "object") return false;
+    if ((it.Type || it.type) !== "Trailer") return false;
+    if (it.IsFolder || it.ClawReplacedTrailer) return false;
+    if (it.ChannelId) return true;
+    if (it.ExtraType) return false;
+    return true;
+  }
+  function collectTrailers(node, out, depth, seen) {
+    if (!node || typeof node !== "object" || depth > 8) return;
+    if (seen.has(node)) return;
+    seen.add(node);
+    if (isSwapTrailer(node) && node.Id) out.push(node);
+    if (Array.isArray(node)) {
+      for (var i = 0; i < node.length; i++) collectTrailers(node[i], out, depth + 1, seen);
+      return;
+    }
+    for (var k in node) {
+      if (!Object.prototype.hasOwnProperty.call(node, k)) continue;
+      var v = node[k];
+      if (v && typeof v === "object") collectTrailers(v, out, depth + 1, seen);
+    }
+  }
+  function applyTrailerSwap(it, s) {
+    if (!s || !s.Id) return;
+    it.Id = s.Id;
+    it.Name = s.Name;
+    it.Type = s.Type || "Movie";
+    it.IsFolder = false;
+    it.ChannelId = null;
+    it.ChannelName = null;
+    it.ExtraType = null;
+    if (s.Year != null) it.ProductionYear = s.Year;
+    if (s.ImageTag) {
+      it.ImageTags = it.ImageTags || {};
+      it.ImageTags.Primary = s.ImageTag;
+      it.PrimaryImageTag = s.ImageTag;
+    }
+    if (s.PrimaryImageAspectRatio) it.PrimaryImageAspectRatio = s.PrimaryImageAspectRatio;
+    if (s.ServerId) it.ServerId = s.ServerId;
+    it.ClawReplacedTrailer = true;
+    it.ClawTrailerMatch = s.Match;
+  }
+  function fetchTrailerMap(ids) {
+    var need = [], map = {};
+    ids.forEach(function (id) {
+      if (Object.prototype.hasOwnProperty.call(trailerMem, id)) {
+        if (trailerMem[id]) map[id] = trailerMem[id];
+      } else need.push(id);
+    });
+    if (!need.length) return Promise.resolve(map);
+    if (typeof ApiClient === "undefined" || !ApiClient.getJSON || !ApiClient.getUrl) {
+      return Promise.resolve(map);
+    }
+    var url = ApiClient.getUrl("ClawCustomItemUI/TrailerMap", { Ids: need.join(",") });
+    return ApiClient.getJSON(url).then(function (r) {
+      var got = {};
+      (r && r.Items ? r.Items : []).forEach(function (s) { if (s && s.TrailerId) got[s.TrailerId] = s; });
+      need.forEach(function (id) {
+        var s = got[id] || got[String(id).toLowerCase()] || got[String(id).replace(/-/g, "")] || null;
+        trailerMem[id] = s;
+        if (s) map[id] = s;
+      });
+      return map;
+    }, function () { return map; });
+  }
+  function maybeSwapTrailers(data) {
+    if (!data || typeof data !== "object") return Promise.resolve(data);
+    return loadConfig().then(function () {
+      var userP = (typeof ApiClient !== "undefined" && ApiClient.getCurrentUser)
+        ? ApiClient.getCurrentUser().then(function (u) { return u; }, function () { return null; })
+        : Promise.resolve(null);
+      return userP.then(function (user) {
+        if (!trailerOn(user)) return data;
+        var found = [];
+        collectTrailers(data, found, 0, new Set());
+        if (!found.length) return data;
+        var ids = found.map(function (x) { return x.Id; });
+        return fetchTrailerMap(ids).then(function (map) {
+          found.forEach(function (it) {
+            var s = map[it.Id];
+            if (s) applyTrailerSwap(it, s);
+          });
+          return data;
+        });
+      });
+    });
+  }
+  function wrapTrailerClient() {
+    if (typeof ApiClient === "undefined" || ApiClient.__clawTrailerWrap) return !!ApiClient;
+    ApiClient.__clawTrailerWrap = true;
+    function wrap(fn) {
+      return function () {
+        var arg0 = arguments[0];
+        var url = arg0 && (typeof arg0 === "string" ? arg0 : arg0.url);
+        var p = fn.apply(this, arguments);
+        if (!p || !p.then) return p;
+        if (typeof url === "string" && url.indexOf("ClawCustomItemUI/Trailer") >= 0) return p;
+        return p.then(function (data) { return maybeSwapTrailers(data); });
+      };
+    }
+    if (ApiClient.ajax) ApiClient.ajax = wrap(ApiClient.ajax.bind(ApiClient));
+    if (ApiClient.getJSON) ApiClient.getJSON = wrap(ApiClient.getJSON.bind(ApiClient));
+    return true;
+  }
+  if (!wrapTrailerClient()) {
+    var trailerWait = setInterval(function () { if (wrapTrailerClient()) clearInterval(trailerWait); }, 40);
+    setTimeout(function () { clearInterval(trailerWait); }, 15000);
+  }
 
   var scheduled = false;
   function schedule() {
