@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <RootNamespace>Claw.Emby.SeerrRequests.Tests</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\PluginConfiguration.cs" Link="PluginConfiguration.cs" />
+    <Compile Include="..\..\Core\ApiKeyGuard.cs" Link="ApiKeyGuard.cs" />
+    <Compile Include="..\..\Core\Models.cs" Link="Models.cs" />
+    <Compile Include="..\..\Core\StatusMapper.cs" Link="StatusMapper.cs" />
+    <Compile Include="..\..\Core\Eligibility.cs" Link="Eligibility.cs" />
+    <Compile Include="..\..\Core\UserMatcher.cs" Link="UserMatcher.cs" />
+    <Compile Include="..\..\Core\ActivityStore.cs" Link="ActivityStore.cs" />
+    <Compile Include="..\..\Core\SeerrClient.cs" Link="SeerrClient.cs" />
+    <Compile Include="..\..\Core\IndexHtmlPatcher.cs" Link="IndexHtmlPatcher.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="MediaBrowser.Model">
+      <HintPath>..\..\refs\MediaBrowser.Model.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,137 @@
+<div id="clawSeerrRequestsPage" data-role="page" class="page type-interior pluginConfigurationPage clawSeerrRequestsPage" data-require="emby-button,emby-checkbox,emby-linkbutton,emby-select,emby-input">
+<style>
+#clawSeerrRequestsPage .sr-tabs{display:flex;gap:.3em;border-bottom:1px solid rgba(128,128,128,.3);margin:.4em 0 1em;flex-wrap:wrap}
+#clawSeerrRequestsPage .sr-tab{font:inherit;color:inherit;background:none;border:0;border-bottom:2px solid transparent;padding:.6em 1.1em;cursor:pointer;opacity:.7}
+#clawSeerrRequestsPage .sr-tab.sr-on{opacity:1;border-bottom-color:#52b54b}
+#clawSeerrRequestsPage .sr-panel{display:none}#clawSeerrRequestsPage .sr-panel.sr-on{display:block}
+#clawSeerrRequestsPage .sr-h{margin:1.2em 0 .4em;font-weight:500}
+#clawSeerrRequestsPage .sr-note{background:rgba(82,181,75,.08);border:1px solid rgba(82,181,75,.35);border-radius:.35em;padding:.6em .9em;margin:.6em 0 1em;font-size:.92em}
+#clawSeerrRequestsPage .sr-warn{background:rgba(224,160,48,.1);border-color:rgba(224,160,48,.5)}
+#clawSeerrRequestsPage .sr-msg{margin:.5em 0;display:none}#clawSeerrRequestsPage .sr-msg.sr-on{display:block}
+#clawSeerrRequestsPage .sr-msg.ok{color:#52b54b}#clawSeerrRequestsPage .sr-msg.err{color:#e05050}
+#clawSeerrRequestsPage .sr-row{margin:.7em 0}
+#clawSeerrRequestsPage .sr-row label.sr-lab{display:block;margin-bottom:.25em}
+#clawSeerrRequestsPage .sr-in,#clawSeerrRequestsPage select.sr-in{font:inherit;color:inherit;background:rgba(0,0,0,.3);border:1px solid rgba(128,128,128,.4);border-radius:.25em;padding:.4em .55em;width:100%;max-width:36em;box-sizing:border-box}
+#clawSeerrRequestsPage .sr-key-wrap{display:flex;gap:.5em;align-items:center;max-width:36em}
+#clawSeerrRequestsPage .sr-key-wrap .sr-in{flex:1}
+#clawSeerrRequestsPage .sr-btn{font:inherit;color:inherit;cursor:pointer;background:rgba(128,128,128,.2);border:1px solid rgba(128,128,128,.4);border-radius:.3em;padding:.4em .9em}
+#clawSeerrRequestsPage .sr-btn.sr-pri{background:#52b54b;border-color:#52b54b;color:#fff}
+#clawSeerrRequestsPage table.sr-t{width:100%;border-collapse:collapse;font-size:.92em}
+#clawSeerrRequestsPage .sr-t th{text-align:left;font-weight:500;opacity:.7;padding:.45em .5em;border-bottom:1px solid rgba(128,128,128,.4);white-space:nowrap;cursor:pointer;user-select:none}
+#clawSeerrRequestsPage .sr-t th.sr-ns{cursor:default}
+#clawSeerrRequestsPage .sr-t td{padding:.42em .5em;border-bottom:1px solid rgba(128,128,128,.15);vertical-align:middle}
+#clawSeerrRequestsPage .sr-t select{font:inherit;color:inherit;background:rgba(0,0,0,.3);border:1px solid rgba(128,128,128,.4);border-radius:.25em;padding:.2em .4em;max-width:16em}
+#clawSeerrRequestsPage .sr-pill{display:inline-block;font-size:.8em;padding:.08em .5em;border-radius:.3em;background:rgba(128,128,128,.22);white-space:nowrap}
+#clawSeerrRequestsPage .sr-pill.ok{background:rgba(82,181,75,.2);color:#9ad895}
+#clawSeerrRequestsPage .sr-pill.pending{background:rgba(224,160,48,.2);color:#e0a030}
+#clawSeerrRequestsPage .sr-pill.req{background:rgba(80,140,224,.2);color:#8cb4f0}
+#clawSeerrRequestsPage .sr-pill.bad{background:rgba(224,80,80,.2);color:#f0a0a0}
+#clawSeerrRequestsPage .sr-about td{padding:.25em 1.4em .25em 0;vertical-align:top}#clawSeerrRequestsPage .sr-about td:first-child{opacity:.7;white-space:nowrap}
+#clawSeerrRequestsPage .sr-libs,#clawSeerrRequestsPage .sr-allow{display:grid;grid-template-columns:repeat(auto-fill,minmax(16em,1fr));gap:.2em 1.2em;margin:.4em 0 1em}
+#clawSeerrRequestsPage .sr-empty{opacity:.6;padding:1em .3em}
+#clawSeerrRequestsPage .sr-bar{display:flex;gap:.6em;align-items:center;flex-wrap:wrap;margin-bottom:.7em}
+#clawSeerrRequestsPage .sr-off{background:rgba(224,80,80,.1);border:1px solid rgba(224,80,80,.4);border-radius:.35em;padding:.6em .9em;margin:0 0 1em;display:none}
+#clawSeerrRequestsPage .sr-off.sr-on{display:block}
+</style>
+  <div data-role="content">
+    <div class="content-primary">
+      <div class="sectionTitleContainer flex align-items-center">
+        <h2 class="sectionTitle"><i class="md-icon" style="vertical-align:-.15em">add_to_queue</i> Seerr Requests</h2>
+      </div>
+      <p class="secondaryText">Adds <b>Request this now</b> to the item menu on trailers and on movies or shows that are not already in this library. Status is checked in Seerr first. Requests are sent as the matched Seerr user; quotas and approvals stay in Seerr.</p>
+      <div class="sr-off" id="srOffBanner">Seerr Requests is switched off: the menu entry is hidden and new requests are refused. Activity and settings are kept. Switch it on in the <b>General</b> tab.</div>
+
+      <div class="sr-tabs" role="tablist">
+        <button type="button" class="sr-tab sr-on" data-tab="settings" role="tab">Settings</button>
+        <button type="button" class="sr-tab" data-tab="activity" role="tab">Activity</button>
+        <button type="button" class="sr-tab" data-tab="general" role="tab">General</button>
+      </div>
+
+      <div class="sr-panel sr-on" data-panel="settings">
+        <form class="sr-settings-form" novalidate>
+          <h3 class="sr-h">Seerr</h3>
+          <div class="sr-row"><label class="sr-lab" for="srUrl">Seerr URL</label>
+            <input is="emby-input" type="text" id="srUrl" class="sr-in" placeholder="http://192.168.1.237:5055" autocomplete="off" /></div>
+          <div class="sr-row"><label class="sr-lab" for="srKey">API key</label>
+            <div class="sr-key-wrap">
+              <input is="emby-input" type="password" id="srKey" class="sr-in" autocomplete="new-password" placeholder="Saved key is hidden" />
+            </div>
+            <div class="fieldDescription">The key is stored on the server, never shown in full, and never written to the Emby log. Leave this box as-is to keep the current key. Quotas and approvals stay in Seerr.</div></div>
+          <div class="sr-row">
+            <button type="button" class="sr-btn" id="srTest">Test connection</button>
+            <span class="sr-msg" id="srTestMsg"></span>
+          </div>
+
+          <h3 class="sr-h">Who can see &quot;Request this now&quot;</h3>
+          <div class="sr-row"><label class="sr-lab" for="srVis">Users</label>
+            <select is="emby-select" id="srVis" class="sr-in">
+              <option value="all">Everyone</option>
+              <option value="admins">Administrators only</option>
+              <option value="allowlist">A specific list of users</option>
+            </select></div>
+          <div id="srAllowWrap" class="sr-row" hidden>
+            <div class="fieldDescription">Checked users see the menu. Unmatched users still get a clear message and are never sent as the Seerr admin.</div>
+            <div class="sr-allow" id="srAllow"></div>
+          </div>
+          <div class="sr-row">
+            <div class="checkboxContainer checkboxContainer-withDescription"><label><input is="emby-checkbox" type="checkbox" id="srAllLibs" /><span>Every library and the Trailers channel</span></label>
+              <div class="fieldDescription checkboxFieldDescription">Off = only the libraries and channels you tick below.</div></div>
+            <div class="sr-libs" id="srLibs"></div>
+          </div>
+
+          <h3 class="sr-h">User mapping</h3>
+          <p class="secondaryText">Seerr users are matched automatically by the Emby/Jellyfin user id stored in Seerr. A manual override here always wins. There is no admin fallback.</p>
+          <div class="sr-msg" id="srPeopleMsg"></div>
+          <table class="sr-t sr-map-t">
+            <thead><tr>
+              <th data-col="emby">Emby user</th>
+              <th data-col="seerr">Seerr user</th>
+              <th data-col="how">Match</th>
+            </tr></thead>
+            <tbody id="srMapBody"><tr><td colspan="3" class="sr-empty">Loading users…</td></tr></tbody>
+          </table>
+
+          <div style="margin-top:1.2em">
+            <button is="emby-button" type="submit" class="raised button-submit"><span>Save</span></button>
+            <span class="sr-msg" id="srSaveMsg"></span>
+          </div>
+        </form>
+      </div>
+
+      <div class="sr-panel" data-panel="activity">
+        <div class="sr-bar">
+          <input type="text" class="sr-in" id="srActFilter" placeholder="Filter activity" style="max-width:20em" />
+        </div>
+        <table class="sr-t sr-act-t">
+          <thead><tr>
+            <th data-col="when">When</th>
+            <th data-col="who">Who</th>
+            <th data-col="seerr">Seerr user</th>
+            <th data-col="title">Title</th>
+            <th data-col="type">Type</th>
+            <th data-col="seasons">Seasons</th>
+            <th data-col="result">Result</th>
+            <th data-col="detail">Detail</th>
+          </tr></thead>
+          <tbody id="srActBody"><tr><td colspan="8" class="sr-empty">No requests yet.</td></tr></tbody>
+        </table>
+      </div>
+
+      <div class="sr-panel" data-panel="general">
+        <form class="sr-general-form">
+          <h3 class="sr-h">General</h3>
+          <div class="checkboxContainer checkboxContainer-withDescription"><label><input is="emby-checkbox" type="checkbox" id="srEnabled" /><span>Enable plugin</span></label>
+            <div class="fieldDescription checkboxFieldDescription">Off = the item-menu entry is hidden and new requests are refused. Activity and settings are kept and come back when you switch it on again.</div></div>
+          <button is="emby-button" type="submit" class="raised button-submit"><span>Save</span></button>
+          <span class="sr-msg" id="srGeneralMsg"></span>
+          <h3 class="sr-h">About</h3>
+          <table class="sr-about"><tbody>
+            <tr><td>Version</td><td class="sr-version">&ndash;</td></tr>
+            <tr><td>Script</td><td class="sr-script">&ndash;</td></tr>
+            <tr><td>Source</td><td><a is="emby-linkbutton" class="button-link" style="color:#52b54b" href="https://github.com/mouseware/emby-plugins" target="_blank" rel="noopener">github.com/mouseware/emby-plugins</a></td></tr>
+          </tbody></table>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,8 @@
+refs/
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.dll
+!refs/.gitkeep

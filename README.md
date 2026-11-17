@@ -1,12 +1,13 @@
 # Claw Emby plugins
 
-Five plugins for Emby Server, one per subfolder:
+Six plugins for Emby Server, one per subfolder:
 
 - **Claw Guard**: bans IP addresses after failed sign-ins, nonexistent or instant-ban usernames, or repeated 401/403 API calls. Bans are enforced through Emby's own Remote IP filter. It has a live log, ban management, escalation rules, a whitelist, optional GeoLite2 country lookup, and an import from Emby's existing logs.
 - **Claw IPTV Channel Mapper**: a spreadsheet-style editor for IPTV channels (number, name, group, logo, guide mapping, enabled), with undo, snapshots and bulk actions. 1.4 adds Export/Import of the whole mapping as one .zip (mapper.json plus a logos/ folder), with a preview (Merge or Replace, All channels or Matching only) before anything is applied.
 - **Claw Default Chapters**: generates "Chapter 1, 2 …" interval chapters for movies that have few or no chapters, from the item menu or in bulk (Found movies), with revert.
 - **Claw Custom Item UI**: item-page link tweaks, VLC path links, optional replacement of trailers for movies you already own, a rearrangeable admin dashboard, and Activity/Alerts tables on the dashboard.
 - **Media Integrity**: finds bit rot, missing and unreadable files by comparing each library file's MD5 with a stored baseline. It has a resumable, low-priority full scan (scheduled task), background hashing of new items, "Verify integrity" in the item menu, a live **Check now** on any file, folder or library, search across all files, per-file history, and an import of the old `get-all-hashes.ps1` database. 1.0.5 skips Emby metadata, artwork and `.old` backups by default (subtitles and media stay hashed), and a file-list refresh drops skipped rows from tracking without touching the files on disk. 1.0.6 adds a sortable File type column with a type filter to the file tables. 1.0.7 finds where missing files moved: **Find moved files** confirms candidates by MD5 and **Migrate** moves the record and its history to the new path; **Relink** points one missing file at a path you enter, and scans flag likely moves on missing rows.
+- **Seerr Requests**: adds **Request this now** to the item menu on trailers and on movies or shows that are not already in the library. Status is checked in Seerr first (Available / Requested / Pending / Declined, plus a TV season picker). Requests are sent server-side as the matched Seerr user (auto-matched on the stored Emby/Jellyfin id, with manual overrides, and never as the Seerr admin). Settings include the Seerr URL, a masked API key, Test connection, a user-mapping table and visibility rules, plus an Activity log.
 
 All data tables have resizable columns. The widths are saved per table in the browser.
 
@@ -16,6 +17,7 @@ Every plugin has a **General** tab like Custom Item UI: an **Enable plugin** swi
 - **IPTV Channel Mapper**: Save and Import are blocked and the Channel Name Guide provider returns no channels or programs. Export still works.
 - **Default Chapters**: the item-menu entries disappear, Generate is refused and refreshes no longer re-apply interval chapters. Revert still works.
 - **Media Integrity**: the full scan, background hashing, file-list refresh and manual checks stop, and the item-menu entry disappears. Queued work waits until it is switched on again.
+- **Seerr Requests**: **Request this now** disappears from the item menu and new requests are refused. Settings, mappings and activity are kept.
 
 | Project | Folder | Version | Output DLL |
 |---------|--------|---------|------------|
@@ -24,6 +26,7 @@ Every plugin has a **General** tab like Custom Item UI: an **Enable plugin** swi
 | Claw Guard | `Claw.Emby.Guard` | 1.2.0.0 | `Claw.Emby.Guard\bin\Release\Claw.Emby.Guard.dll` |
 | Claw Default Chapters | `Claw.Emby.DefaultChapters` | 1.2.0.0 | `Claw.Emby.DefaultChapters\bin\Release\Claw.Emby.DefaultChapters.dll` |
 | Media Integrity | `Claw.Emby.MediaIntegrity` | 1.0.8.0 | `Claw.Emby.MediaIntegrity\bin\Release\Claw.Emby.MediaIntegrity.dll` |
+| Seerr Requests | `Claw.Emby.SeerrRequests` | 1.0.0.0 | `Claw.Emby.SeerrRequests\bin\Release\Claw.Emby.SeerrRequests.dll` |
 
 Each project builds on its own. Its `refs\` folder holds copies of the Emby SDK DLLs (`MediaBrowser.Common.dll`, `MediaBrowser.Controller.dll`, `MediaBrowser.Model.dll`), and the csproj HintPaths point there through `$(EmbyServerPath)`, which defaults to `refs`.
 
@@ -61,6 +64,16 @@ The screenshots use made-up sample data: documentation IP ranges, fake users and
 |---|---|
 | ![Dashboard Activity/Alerts tables](docs/screenshots/custom-item-ui/dashboard-tables.png)<br/>Dashboard Activity/Alerts tables | ![Settings (tabs)](docs/screenshots/custom-item-ui/settings.png)<br/>Settings (tabs) |
 
+### Seerr Requests
+
+| | |
+|---|---|
+| ![Settings: URL, masked key, Test connection, user mapping](docs/screenshots/seerr-requests/settings.png)<br/>Settings: URL, masked key, Test connection, user mapping | ![User mapping (auto and manual)](docs/screenshots/seerr-requests/users.png)<br/>User mapping (auto and manual) |
+| ![Visibility: allowlist and libraries](docs/screenshots/seerr-requests/visibility.png)<br/>Visibility: allowlist and libraries | ![Activity (who, what, when, result)](docs/screenshots/seerr-requests/activity.png)<br/>Activity (who, what, when, result) |
+| ![General tab: Enable switch and About](docs/screenshots/seerr-requests/general.png)<br/>General tab: Enable switch and About | !["Request this now" in the item menu](docs/screenshots/seerr-requests/item-menu.png)<br/>"Request this now" in the item menu |
+| ![Already available in Seerr](docs/screenshots/seerr-requests/status-available.png)<br/>Already available in Seerr | ![A request already pending approval](docs/screenshots/seerr-requests/status-pending.png)<br/>A request already pending approval |
+| ![Unmatched user: no admin fallback](docs/screenshots/seerr-requests/unmatched.png)<br/>Unmatched user: no admin fallback | ![TV season picker](docs/screenshots/seerr-requests/season-picker.png)<br/>TV season picker |
+
 ### Media Integrity
 
 | | |
@@ -85,10 +98,10 @@ The screenshots use made-up sample data: documentation IP ranges, fake users and
 
 Requires **Emby Server 4.10.1 or newer** (built against the 4.10.1 SDK, .NET 8).
 
-1. Download the DLLs you want from the [latest release](../../releases/latest), or download `claw-emby-plugins-<tag>.zip` with all five.
+1. Download the DLLs you want from the [latest release](../../releases/latest), or download `claw-emby-plugins-<tag>.zip` with all six.
 2. Stop Emby Server, including the tray app.
 3. Copy the `.dll` files into Emby's plugins folder. This is the `plugins` folder in Emby's data folder: `%APPDATA%\Emby-Server\plugins` for a Windows user install, or `/var/lib/emby/plugins` for the Linux packages. Overwrite older versions.
-4. Start Emby Server. The plugins appear under **Dashboard → Plugins**, Guard (shield) and Media Integrity (health_and_safety) also get main-menu entries. Hard-refresh the browser (Ctrl+F5) so it doesn't use cached pages.
+4. Start Emby Server. The plugins appear under **Dashboard → Plugins**, Guard (shield) and Media Integrity (health_and_safety) also get main-menu entries. Seerr Requests adds **Request this now** to the item menu. Hard-refresh the browser (Ctrl+F5) so it doesn't use cached pages.
 
 **Guard takes over Emby's Remote IP filter.** On first start it switches *Settings → Network → Remote IP filter* to **blacklist** mode and manages its own entries there. Entries you added yourself are kept. If the filter is an allow-list (whitelist mode) with entries, Guard does not change it and shows "Not enforcing" instead. LAN, loopback and private addresses are never banned. Turning Guard's master switch off removes its entries. Read `Claw.Emby.Guard/README.md` before installing.
 
@@ -135,6 +148,7 @@ while (Get-Process EmbyServer, embytray -ErrorAction SilentlyContinue) { Start-S
 Copy-Item 'E:\Apps\Emby-plugins\Claw.Emby.CustomItemUI\bin\Release\Claw.Emby.CustomItemUI.dll' "$env:APPDATA\Emby-Server\plugins\" -Force
 #   or ...\Claw.Emby.IptvMapper\bin\Release\Claw.Emby.IptvMapper.dll
 #   or ...\Claw.Emby.Guard\bin\Release\Claw.Emby.Guard.dll  (Guard takes over Settings > Network > Remote IP filter; read Claw.Emby.Guard\README.md first)
+#   or ...\Claw.Emby.SeerrRequests\bin\Release\Claw.Emby.SeerrRequests.dll
 
 # 4. Start Emby again
 Start-Process "$env:APPDATA\Emby-Server\system\EmbyServer.exe"
@@ -152,7 +166,8 @@ Get-ChildItem "$env:APPDATA\Emby-Server\plugins\Claw*.dll" | Select-Object Name,
 
 - Guard: `cd Claw.Emby.Guard\tests\Claw.Emby.Guard.Tests; dotnet run` runs the offline engine tests. The UI tests (`tests\web`, Puppeteer + Chrome) were run on the build box.
 - Media Integrity: `cd Claw.Emby.MediaIntegrity\tests\Claw.Emby.MediaIntegrity.Tests; dotnet run` runs the engine, import and manual-queue tests. Set `LEGACY_DB` (and `VERIFY_DIR`) to also test against a temporary copy of a real legacy database. The UI tests are in `tests\web` (`test-integrity.js`, `test-inject.js`) and use fake data only.
+- Seerr Requests: `cd Claw.Emby.SeerrRequests\tests\Claw.Emby.SeerrRequests.Tests; dotnet run` runs the mock-Seerr unit tests (user matching, eligibility, status mapping, API-key masking). The UI tests are in `tests\web` (`test-settings.js`, `test-menu.js`) and use fake data only.
 
 ## Resizable table columns
 
-Every data table in these plugins (Guard, IPTV Channel Mapper, Default Chapters Changed/Found, Custom Item UI dashboard Activity/Alerts) uses the same small resizer, which is copied into each plugin's JS between the `Claw column resize` markers. Keep those copies identical. To resize, drag a header's right edge; widths are saved per table in localStorage under `claw.<plugin>.cols.<table>`; double-click resets. Shared resize test helper: `tests\web` in each plugin (Default Chapters: `test-colresize.js`).
+Every data table in these plugins (Guard, IPTV Channel Mapper, Default Chapters Changed/Found, Custom Item UI dashboard Activity/Alerts, Seerr Requests mapping and Activity) uses the same small resizer, which is copied into each plugin's JS between the `Claw column resize` markers. Keep those copies identical. To resize, drag a header's right edge; widths are saved per table in localStorage under `claw.<plugin>.cols.<table>`; double-click resets. Shared resize test helper: `tests\web` in each plugin (Default Chapters: `test-colresize.js`).
