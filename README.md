@@ -26,7 +26,7 @@ Every plugin has a **General** tab like Custom Item UI: an **Enable plugin** swi
 | Claw Guard | `Claw.Emby.Guard` | 1.2.0.0 | `Claw.Emby.Guard\bin\Release\Claw.Emby.Guard.dll` |
 | Claw Default Chapters | `Claw.Emby.DefaultChapters` | 1.2.0.0 | `Claw.Emby.DefaultChapters\bin\Release\Claw.Emby.DefaultChapters.dll` |
 | Media Integrity | `Claw.Emby.MediaIntegrity` | 1.0.8.0 | `Claw.Emby.MediaIntegrity\bin\Release\Claw.Emby.MediaIntegrity.dll` |
-| Seerr Requests | `Claw.Emby.SeerrRequests` | 1.0.0.0 | `Claw.Emby.SeerrRequests\bin\Release\Claw.Emby.SeerrRequests.dll` |
+| Seerr Requests | `Claw.Emby.SeerrRequests` | 1.0.1.0 | `Claw.Emby.SeerrRequests\bin\Release\Claw.Emby.SeerrRequests.dll` |
 
 Each project builds on its own. Its `refs\` folder holds copies of the Emby SDK DLLs (`MediaBrowser.Common.dll`, `MediaBrowser.Controller.dll`, `MediaBrowser.Model.dll`), and the csproj HintPaths point there through `$(EmbyServerPath)`, which defaults to `refs`.
 

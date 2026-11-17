@@ -9,10 +9,14 @@ Adds **Request this now** to the item "…" menu on trailers and on movies or sh
 - **Matching:** a manual override in Settings always wins. Otherwise the plugin auto-matches on the Emby/Jellyfin user id stored in Seerr (GUID, dash and case insensitive). Matching an admin account is allowed only when that Emby user really is that Seerr account. Unmatched users see: "Your Emby account is not linked to a Seerr user. Ask an administrator to add a mapping under Seerr Requests → Settings. Requests are never sent as the Seerr admin."
 - **Settings:** Seerr URL (default `http://192.168.1.237:5055`; the public address is `https://request.christopherlaw.com`), a masked API key that is never shown in full and never written to the Emby log, **Test connection**, a user-mapping table, and visibility rules (everyone, administrators, or an allowlist of users, plus optional library / Trailers-channel limits).
 - **Activity:** a log of who requested what, when, and the result (newest first, last 500). Filterable; columns are resizable.
-- **General:** an **Enable plugin** switch and About (version 1.0.0.0, injected script `claw-seerr-requests.js`, GitHub link). Switching the plugin off hides **Request this now** and refuses new requests. Existing settings, mappings and activity are kept.
+- **General:** an **Enable plugin** switch and About (version 1.0.1.0, injected script `claw-seerr-requests.js`, GitHub link). Switching the plugin off hides **Request this now** and refuses new requests. Existing settings, mappings and activity are kept.
 - **Test connection** calls Seerr's public `GET /api/v1/status` (no key). When a key is saved, it also checks `GET /api/v1/auth/me` as that key, still without logging it.
 
 Dashboard → Plugins → Seerr Requests (or the add_to_queue menu icon). The item-menu entry is added by a small script written into Emby's `dashboard-ui` folder, the same way Default Chapters and Media Integrity do.
+
+## Changes
+
+- **1.0.1:** The settings page now registers its controller as `__plugin/ClawSeerrRequests.js` (it was missing `data-controller`, so Emby served the HTML but never loaded the JS). The item-menu dialog uses a higher z-index and does not rely on the CSS `inset` property, so it shows on iOS Safari. If Seerr has no API key yet, the dialog says "Seerr isn't set up yet" instead of appearing to do nothing.
 
 ## Settings stored on the server
 

@@ -12,7 +12,7 @@ const FAKE = {
     AllowedUserNames: [],
     AllowedLibraryIds: [],
     UserMaps: [],
-    Version: "1.0.0.0",
+    Version: "1.0.1.0",
     Script: "claw-seerr-requests.js"
   },
   people: {

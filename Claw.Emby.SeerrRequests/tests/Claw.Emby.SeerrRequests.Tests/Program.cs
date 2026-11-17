@@ -134,6 +134,7 @@ class Program
         cfg = Cfg(c => c.Enabled = false);
         Ok(!Eligibility.MenuVisible(cfg, Trailer(), "u1", "Alex", false), "menu hidden when the plugin is off");
         Ok(Eligibility.UnmatchedMessage.IndexOf("never sent as the Seerr admin", StringComparison.OrdinalIgnoreCase) >= 0, "unmatched message mentions no admin fallback");
+Ok(Eligibility.NotConfiguredMessage.IndexOf("isn't set up yet", StringComparison.OrdinalIgnoreCase) >= 0, "not-configured message is clear");
     }
 
     static void Match()

@@ -63,7 +63,7 @@
     if (document.getElementById("claw-sr-css")) return;
     var s = document.createElement("style"); s.id = "claw-sr-css";
     s.textContent =
-      ".claw-sr-modal{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10001;display:flex;align-items:center;justify-content:center}" +
+      ".claw-sr-modal{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.55);z-index:2147483000;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;-webkit-overflow-scrolling:touch}" +
       ".claw-sr-dlg{background:#202020;color:#eee;border-radius:.5em;padding:1.2em 1.4em;max-width:28em;width:92vw;box-shadow:0 1em 3em rgba(0,0,0,.6)}" +
       ".claw-sr-dlg h3{margin:.1em 0 .35em;font-size:1.15em}.claw-sr-dlg .sub{opacity:.7;margin:0 0 .8em;font-size:.92em}" +
       ".claw-sr-pill{display:inline-block;font-size:.8em;padding:.08em .5em;border-radius:.3em;background:rgba(128,128,128,.22);margin-left:.4em}" +
@@ -188,8 +188,16 @@
       return [{ name: "Request this now", id: CMD, icon: "add_to_queue" }];
     },
     executeCommand: function (command, items) {
-      if (command !== CMD) return Promise.reject("nocommands");
-      return openRequest(items);
+      var id = command && typeof command === "object" ? (command.id || command.Id) : command;
+      if (id !== CMD) return Promise.reject("nocommands");
+      if (items && items.length == null && (items.Id || items.id)) items = [items];
+      return openRequest(items).then(null, function (err) {
+        return errorText(err).then(function (t) {
+          var item = items && items[0];
+          renderDialog({ Title: item && item.Name, CanRequest: false, Message: t || "Couldn't open the request dialog.", _itemId: item && item.Id });
+          return { command: CMD, error: t };
+        });
+      });
     }
   };
 

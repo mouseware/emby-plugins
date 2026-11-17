@@ -6,7 +6,7 @@ const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m); c ? P++ : F++; 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ROOT = process.env.NEW || path.resolve(__dirname, "../..");
 
-const inject = fs.readFileSync(path.join(ROOT, "Inject/claw-seerr-requests.js"), "utf8").replace(/__PLUGIN_VERSION__/g, "1.0.0.0");
+const inject = fs.readFileSync(path.join(ROOT, "Inject/claw-seerr-requests.js"), "utf8").replace(/__PLUGIN_VERSION__/g, "1.0.1.0");
 
 const statuses = {
   trailerOwned: { Title: "The Sample Club", Year: 1999, MediaType: "movie", Status: "Available", CanRequest: false, Visible: true, Message: "This title is already available in Seerr.", Seasons: [] },
@@ -17,7 +17,8 @@ const statuses = {
     { SeasonNumber: 1, Name: "Season 1", Status: "Available", CanRequest: false },
     { SeasonNumber: 2, Name: "Season 2", Status: "None", CanRequest: true },
     { SeasonNumber: 3, Name: "Season 3", Status: "Pending", CanRequest: false }
-  ]}
+  ]},
+  unconfigured: { Title: "Blade Sample", Year: 1982, MediaType: "movie", Status: "None", CanRequest: false, Visible: true, Message: "Seerr isn't set up yet. An administrator needs to set the Seerr URL and API key under Seerr Requests \u2192 Settings.", Seasons: [] }
 };
 
 const html = `<!doctype html>
@@ -39,7 +40,7 @@ window.__posted = [];
 window.ApiClient = {
   getUrl: function(p,q){ var u="/emby/"+p; if(q){ u+="?"+Object.keys(q).map(function(k){return k+"="+encodeURIComponent(q[k]);}).join("&"); } return u; },
   getJSON: function(u){
-    if (u.indexOf("Info")>=0) return Promise.resolve({ Enabled:true, CanRequest:true, Version:"1.0.0.0", MenuName:"Request this now" });
+    if (u.indexOf("Info")>=0) return Promise.resolve({ Enabled:true, CanRequest:true, Version:"1.0.1.0", MenuName:"Request this now" });
     var title = (u.match(/Id=([^&]+)/)||[])[1] || "";
     title = decodeURIComponent(title);
     var map = window.__statusMap || {};
@@ -76,7 +77,7 @@ fs.writeFileSync(file, html);
   const person = { Id: "p1", Name: "Someone", Type: "Person" };
   const series = { Id: "s1", Name: "Chemistry Set", Type: "Series", LocationType: "Virtual" };
 
-  ok(await p.evaluate(() => !!(window.__clawSeerrRequests && window.__clawSeerrRequests.version === "1.0.0.0")), "inject loaded with plugin version");
+  ok(await p.evaluate(() => !!(window.__clawSeerrRequests && window.__clawSeerrRequests.version === "1.0.1.0")), "inject loaded with plugin version");
   const c1 = await cmds(trailer);
   ok(c1.length === 1 && c1[0].name === "Request this now" && c1[0].id === "claw-seerr-request", "trailer shows Request this now");
   const c2 = await cmds(owned);
@@ -154,7 +155,47 @@ fs.writeFileSync(file, html);
   ok(posted.length === 1 && (posted[0].url || "").indexOf("Request") >= 0, "Request posts to the plugin endpoint");
   ok((posted[0].url || "").indexOf("Seasons=2") >= 0 || JSON.stringify(posted[0]).indexOf("2") >= 0, "posted seasons include 2");
 
+  await p.evaluate(() => { var m = document.querySelector(".claw-sr-modal"); if (m) m.remove(); });
+  await p.evaluate(() => window.__clawSeerrRequests.renderDialog(Object.assign({ _itemId: "t-setup" }, window.__statusMap.unconfigured)));
+  await sleep(150);
+  const setup = await p.$eval(".claw-sr-msg", e => e.textContent);
+  ok(setup.indexOf("isn't set up yet") >= 0, "unconfigured dialog says Seerr isn't set up yet");
+  ok(await p.$eval(".claw-sr-send", e => e.disabled) === true, "Request is disabled when Seerr isn't set up");
+  const z = await p.$eval(".claw-sr-modal", e => parseInt(getComputedStyle(e).zIndex, 10));
+  ok(z >= 100000, "dialog z-index sits above Emby action sheets");
+
+  await p.evaluate(() => { var m = document.querySelector(".claw-sr-modal"); if (m) m.remove(); });
+  await p.evaluate(() => window.__clawSeerrRequests.source.executeCommand({ id: "claw-seerr-request" }, [{ Id: "unconfigured", Name: "Blade Sample", Type: "Movie", LocationType: "Virtual" }]));
+  await sleep(200);
+  ok(!!(await p.$(".claw-sr-dlg")), "executeCommand with a command object opens the dialog");
+  const viaCmd = await p.$eval(".claw-sr-msg", e => e.textContent);
+  ok(viaCmd.indexOf("isn't set up yet") >= 0, "command-object path shows the setup message");
+
   ok(!p.errs.length, "no page errors " + p.errs.join("|"));
+
+  const p2 = await b.newPage();
+  p2.errs = [];
+  p2.on("pageerror", e => p2.errs.push(e.message));
+  p2.setDefaultTimeout(8000);
+  await p2.setUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1");
+  await p2.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+  await p2.goto("file://" + file);
+  await sleep(300);
+  await p2.evaluate(() => window.__clawSeerrRequests.renderDialog(Object.assign({ _itemId: "t-setup" }, window.__statusMap.unconfigured)));
+  await sleep(150);
+  const mob = await p2.evaluate(() => {
+    var dlg = document.querySelector(".claw-sr-dlg");
+    var modal = document.querySelector(".claw-sr-modal");
+    var r = dlg.getBoundingClientRect();
+    var cs = getComputedStyle(modal);
+    return { text: document.querySelector(".claw-sr-msg").textContent, w: r.width, h: r.height, z: parseInt(cs.zIndex, 10) };
+  });
+  ok(mob.text.indexOf("isn't set up yet") >= 0, "iPhone viewport: unconfigured message is shown");
+  ok(mob.w > 100 && mob.h > 80, "iPhone viewport: dialog has a visible size");
+  ok(mob.z >= 100000, "iPhone viewport: dialog z-index is high");
+  ok(!p2.errs.length, "no page errors on iPhone viewport " + p2.errs.join("|"));
+  await p2.close();
+
   await b.close();
   console.log(P + " passed, " + F + " failed");
   process.exit(F ? 1 : 0);

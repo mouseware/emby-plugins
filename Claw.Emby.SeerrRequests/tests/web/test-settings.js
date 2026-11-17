@@ -8,6 +8,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ROOT = process.env.NEW || path.resolve(__dirname, "../..");
 
 (async () => {
+  const pageHtml = fs.readFileSync(path.join(ROOT, "Web/config.html"), "utf8");
+  ok(pageHtml.indexOf("data-controller=\"__plugin/ClawSeerrRequests.js\"") >= 0, "settings page registers data-controller __plugin/ClawSeerrRequests.js");
+  ok(!/data-require="[^"]*emby-linkbutton/.test(pageHtml), "data-require does not list emby-linkbutton (matches working plugins)");
+
   const file = build(ROOT, "new");
   const b = await puppeteer.launch({ executablePath: "/usr/bin/google-chrome", args: ["--no-sandbox", "--disable-gpu", "--allow-file-access-from-files"] });
   const p = await b.newPage();
@@ -47,7 +51,7 @@ const ROOT = process.env.NEW || path.resolve(__dirname, "../..");
   await p.$eval('.sr-tab[data-tab=general]', e => e.click());
   ok(await p.$eval(".sr-panel.sr-on", e => e.getAttribute("data-panel")) === "general", "General tab shows the general panel");
   ok(await p.$eval("#srEnabled", e => e.checked) === true, "Enable plugin is on");
-  ok(await p.$eval(".sr-version", e => e.textContent) === "1.0.0.0", "About shows version 1.0.0.0");
+  ok(await p.$eval(".sr-version", e => e.textContent) === "1.0.1.0", "About shows version 1.0.1.0");
   ok((await p.$eval(".sr-script", e => e.textContent)).indexOf("claw-seerr-requests.js") >= 0, "About mentions the inject script");
   ok((await p.$eval('.sr-about a', e => e.getAttribute("href")||"")).indexOf("github.com/mouseware/emby-plugins") >= 0, "About links to the GitHub repo");
 

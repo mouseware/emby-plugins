@@ -9,7 +9,7 @@ namespace Claw.Emby.SeerrRequests.Core
             "Your Emby account is not linked to a Seerr user. Ask an administrator to add a mapping under Seerr Requests → Settings. Requests are never sent as the Seerr admin.";
 
         public const string DisabledMessage = "Seerr Requests is switched off.";
-        public const string NotConfiguredMessage = "Seerr is not configured. An administrator needs to set the Seerr URL and API key.";
+        public const string NotConfiguredMessage = "Seerr isn't set up yet. An administrator needs to set the Seerr URL and API key under Seerr Requests → Settings.";
         public const string NoPermissionMessage = "You do not have permission to request titles.";
         public const string NotEligibleMessage = "\"Request this now\" is only shown on trailers and on movies or shows that are not already in this library.";
         public const string LibraryMessage = "This library is not enabled for Seerr requests.";
